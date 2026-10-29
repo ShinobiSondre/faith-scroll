@@ -44,7 +44,7 @@ object VideoCheck {
     /** Checks these videos in order, in the background (replaces any earlier list). */
     @Synchronized fun queue(ctx: Context, videos: List<Video>) {
         appCtx = ctx.applicationContext
-        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v3.json"); runCatching { load() }; publish() }
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v5.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
         if (todo.isEmpty()) return
         job?.cancel()
@@ -93,6 +93,12 @@ object VideoCheck {
             Lang.no && Lang.alsoEnglish && spoken == "en" ->
                 t != null && Transcripts.inAppLanguage(v.id)?.let { it.translated || it.lang == "no" } == true
             else -> false
+        }
+        // Strict Norwegian: if YouTube's automatic captions exist they decide; a Norwegian guess from the
+        // title is double-checked against the captions' own text when there are any.
+        if (ok && spoken == "no" && how == "title/description" && t != null) {
+            val fromCaptions = LangFilter.detect(t.cues.take(60).joinToString(" ") { it.text })
+            if (fromCaptions != null && fromCaptions != "no") return reject(v, "title looks Norwegian but captions are '$fromCaptions'")
         }
         if (!ok) return reject(v, "spoken '$spoken' ($how) isn't the app language")
         if (spoken == "no") appCtx?.let { Discovery.rewardChannel(it, v.id) } // a Norwegian channel: keep it as a source

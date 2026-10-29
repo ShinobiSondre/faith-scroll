@@ -86,9 +86,12 @@ You get the video title, channel, description, and the transcript around the pau
 
     private const val OVH = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions"
 
-    /** Tries the free services in turn (then the phone's own model, if downloaded). Returns (answer, source). */
+    /** Uses only what's chosen in Me → AI: the online services, or the phone's own model. Returns (answer, source). */
     suspend fun ask(ctx: Context, context: String, turns: List<Turn>): Pair<String, String> = withContext(Dispatchers.IO) {
-        if (preferOffline(ctx) && OfflineAi.ready(ctx)) {
+        if (preferOffline(ctx)) {
+            if (!OfflineAi.ready(ctx)) throw IllegalStateException(com.faithscroll.app.util.tr(
+                "The phone model isn't downloaded yet – download it in Me → AI, or choose Online.",
+                "Telefonmodellen er ikke lastet ned ennå – last den ned under Meg → AI, eller velg På nett."))
             return@withContext OfflineAi.ask(ctx, context, turns) to "offline"
         }
         val providers: List<Pair<String, () -> String>> = listOf(
@@ -106,7 +109,6 @@ You get the video title, channel, description, and the transcript around the pau
             if (e is RateLimited) limited = if (limited == null || e.seconds < limited!!.seconds) e else limited
             last = e
         }
-        if (OfflineAi.ready(ctx)) return@withContext OfflineAi.ask(ctx, context, turns) to "offline"
         throw limited ?: last ?: IllegalStateException("No AI available")
     }
 }

@@ -278,7 +278,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     state, verifiedFeed, social, bottomInset,
                     suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null,
                     twoPane = twoPane,
-                    onOpenVideo = { v -> openVideo(v, feedVideos) },
+                    onOpenVideo = { v -> openVideo(v, verifiedFeed) },
                     onBeStill = { beStill = true }
                 )
             }

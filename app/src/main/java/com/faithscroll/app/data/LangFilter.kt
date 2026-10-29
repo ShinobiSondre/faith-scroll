@@ -96,7 +96,7 @@ object LangFilter {
 
     // Words that only (or mostly) Norwegian uses – tells it apart from Danish/Swedish.
     private val norwegianOnly = Regex(
-        "\\b(hva|hvem|hvorfor|bønn|bønner|preken|vitnesbyrd|kirka|ikkje|kva|korleis|eg|frelst|tilgivelse|hjerte|kjærlighet|kjærleik|herren|ånd|ånden|nåde|også|veldig|møte|gudstjeneste|menigheten|lovsang|andakt|fortelling|livet mitt|jeg|mitt|forandret|forandra|helbredet)\\b",
+        "\\b(hva|hvem|hvorfor|bønn|bønner|preken|vitnesbyrd|kirka|ikkje|kva|korleis|frelst|tilgivelse|hjerte|kjærlighet|kjærleik|herren|ånd|ånden|nåde|også|veldig|møte|gudstjeneste|menigheten|lovsang|andakt|fortelling|livet mitt|jeg|mitt|forandret|forandra|helbredet)\\b",
         RegexOption.IGNORE_CASE
     )
 
@@ -107,9 +107,10 @@ object LangFilter {
         val eng = english.findAll(clean).count()
         val guess = detect(clean)
         return when {
-            guess == "no" -> "no"
-            guess in setOf("da", "sv") && nor >= 2 -> "no"
-            guess == null && nor >= 2 && nor > eng / 2 -> "no"
+            // Norwegian only when the text clearly is: the detector says so and it isn't mostly English words.
+            guess == "no" && nor >= 1 && nor >= eng / 2 -> "no"
+            guess in setOf("da", "sv") && nor >= 2 && nor >= eng -> "no"
+            guess == null && nor >= 2 && nor > eng -> "no"
             guess == "en" || (guess == null && eng >= 3 && nor == 0) -> "en"
             romance.findAll(clean).count() >= 2 -> "es"
             else -> guess
