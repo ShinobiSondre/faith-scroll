@@ -45,6 +45,7 @@ object Taste {
     private val kindScore = mutableMapOf<String, Float>()
     var videoBias = 0f; private set // >0 wants more videos in the feed
     private var onboarded = false
+    private val muted = mutableSetOf<String>() // channels swiped away
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("taste", Context.MODE_PRIVATE)
 
@@ -61,6 +62,7 @@ object Taste {
             }
         }
         readMap("themes", themeScore); readMap("channels", channelScore); readMap("kinds", kindScore)
+        muted += p.getStringSet("muted", emptySet()).orEmpty()
     }
 
     private fun save(ctx: Context) {
@@ -71,6 +73,7 @@ object Taste {
             .putString("themes", toJson(themeScore))
             .putString("channels", toJson(channelScore))
             .putString("kinds", toJson(kindScore))
+            .putStringSet("muted", muted.toSet())
             .apply()
     }
 
@@ -108,6 +111,7 @@ object Taste {
     }
 
     fun reset(ctx: Context) {
+        muted.clear()
         load(ctx)
         themeScore.clear(); channelScore.clear(); kindScore.clear(); videoBias = 0f; onboarded = false
         save(ctx)
@@ -206,6 +210,29 @@ object Taste {
         videoBias = (videoBias + 0.2f).coerceIn(-3f, 3f)
         save(ctx)
     }
+
+    /** Swipe right: more like this – its channel, its kind (short/sermon/story) and its topics. */
+    fun videoMore(ctx: Context, v: Video) {
+        load(ctx)
+        muted -= v.channel
+        bump(channelScore, v.channel, 2.5f)
+        bump(kindScore, v.kind, 1f)
+        topicsOf(v.title).forEach { bump(themeScore, it, 1.2f) }
+        videoBias = (videoBias + 0.3f).coerceIn(-3f, 3f)
+        save(ctx)
+    }
+
+    /** Swipe left: not this – the channel disappears from the feed, its kind and topics come less often. */
+    fun videoLess(ctx: Context, v: Video) {
+        load(ctx)
+        muted += v.channel
+        channelScore[v.channel] = MIN
+        bump(kindScore, v.kind, -0.8f)
+        topicsOf(v.title).forEach { bump(themeScore, it, -0.8f) }
+        save(ctx)
+    }
+
+    fun isMuted(ctx: Context, channel: String): Boolean { load(ctx); return channel in muted }
 
     // ---------- Ranking ----------
 

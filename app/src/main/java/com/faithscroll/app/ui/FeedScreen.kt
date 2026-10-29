@@ -215,7 +215,24 @@ fun FeedScreen(
                                 bottomInset = bottomInset
                             )
                         }
-                        is FeedItem.VideoItem -> VideoCard(
+                        is FeedItem.VideoItem -> SwipeToRate(
+                            enabled = pager.settledPage == page,
+                            onMore = {
+                                Taste.videoMore(ctx, item.video)
+                                Discovery.reward(ctx, item.video.id, 2f) // a discovered channel becomes a source
+                            },
+                            onLess = {
+                                Taste.videoLess(ctx, item.video)
+                                Seen.mark(ctx, item.video.id)
+                                // Swap out upcoming videos from that channel, then move on.
+                                for (i in page + 1 until items.size) {
+                                    val n = items[i]
+                                    if (n is FeedItem.VideoItem && n.video.channel == item.video.channel) items[i] = engine.next()
+                                }
+                                if (page + 1 >= items.size) items.add(engine.next())
+                                scope.launch { pager.animateScrollToPage(page + 1) }
+                            }
+                        ) { VideoCard(
                             video = item.video,
                             reason = item.reason,
                             onShared = { Taste.videoAction(ctx, item.video, Taste.Action.SHARE) },
@@ -229,7 +246,7 @@ fun FeedScreen(
                             },
                             onExpand = { Taste.videoAction(ctx, item.video, Taste.Action.EXPAND); onOpenVideo(item.video) },
                             bottomInset = bottomInset
-                        )
+                        ) }
                         is FeedItem.PinItem -> {
                             val pn = item.pin
                             PinCard(

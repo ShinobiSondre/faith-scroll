@@ -85,7 +85,7 @@ class FeedEngine(
     }
 
     private fun pickVideo(all: List<Video>): FeedItem? {
-        val usable = all.filter { it.id !in LangFilter.blocked.value }
+        val usable = all.filter { it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) }
         val notShown = usable.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); usable }
         val pool = Seen.freshFirst(ctx, notShown, { it.id })
         if (pool.isEmpty()) return null
