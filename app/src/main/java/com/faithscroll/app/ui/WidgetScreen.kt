@@ -68,7 +68,14 @@ import com.faithscroll.app.widget.VerseWidgetProvider
 import kotlin.math.roundToInt
 
 @Composable
-fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit = {}, onPersonalize: () -> Unit) {
+fun WidgetScreen(
+    state: AppState,
+    bottomInset: Dp,
+    onSourcesChanged: () -> Unit = {},
+    onBeStill: () -> Unit = {},
+    onNeedNotifications: () -> Unit = {},
+    onPersonalize: () -> Unit
+) {
     sourcesChanged = onSourcesChanged
     val ctx = LocalContext.current
     var opacity by remember { mutableFloatStateOf(Prefs.widgetOpacity(ctx).toFloat()) }
@@ -112,6 +119,8 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
             }
         }
 
+        Spacer(Modifier.height(16.dp))
+        PrayerCard(onBeStill, onNeedNotifications)
         Spacer(Modifier.height(16.dp))
         LanguageCard()
         Spacer(Modifier.height(16.dp))
@@ -228,6 +237,50 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
 }
 
 private var sourcesChanged: () -> Unit = {}
+
+/** Prayer reminders (2–3 a day, adjustable times) and the Be still space. */
+@Composable
+private fun PrayerCard(onBeStill: () -> Unit, onNeedNotifications: () -> Unit) {
+    val ctx = LocalContext.current
+    var count by remember { mutableStateOf(com.faithscroll.app.prayer.Reminders.count(ctx)) }
+    var times by remember { mutableStateOf((0..2).map { com.faithscroll.app.prayer.Reminders.rawTime(ctx, it) }) }
+    fun setCount(n: Int) {
+        count = n; com.faithscroll.app.prayer.Reminders.setCount(ctx, n)
+        com.faithscroll.app.prayer.Reminders.setAsked(ctx)
+        if (n > 0) onNeedNotifications()
+    }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text("🙏 " + tr("Prayer", "Bønn"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(tr("Reminders to pause and pray, and a quiet place to be still with God.", "Påminnelser om å stoppe opp og be, og et stille sted å være hos Gud."),
+            color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(tr("Off", "Av"), count == 0) { setCount(0) }
+            Chip(tr("2 a day", "2 om dagen"), count == 2) { setCount(2) }
+            Chip(tr("3 a day", "3 om dagen"), count == 3) { setCount(3) }
+        }
+        if (count > 0) {
+            Spacer(Modifier.height(10.dp))
+            val slots = if (count == 2) listOf(0, 2) else listOf(0, 1, 2)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                slots.forEach { slot ->
+                    val m = times[slot]
+                    Chip("%02d:%02d".format(m / 60, m % 60), false) {
+                        android.app.TimePickerDialog(ctx, { _, h, min ->
+                            com.faithscroll.app.prayer.Reminders.setTime(ctx, slot, h * 60 + min)
+                            times = (0..2).map { com.faithscroll.app.prayer.Reminders.rawTime(ctx, it) }
+                        }, m / 60, m % 60, true).show()
+                    }
+                }
+            }
+            Text(tr("Tap a time to change it.", "Trykk på et klokkeslett for å endre det."), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = onBeStill, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)) {
+            Text(tr("Be still with God", "Vær stille hos Gud"), fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
 
 /** App language: follows the phone, or English / Norsk. Restarts the screen to apply. */
 @Composable

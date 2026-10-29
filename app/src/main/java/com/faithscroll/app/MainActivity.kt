@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
         startRef.value = intent?.getStringExtra(EXTRA_REF)
         val streak = Prefs.recordOpen(this)
         Updater.start(this)
+        com.faithscroll.app.prayer.Reminders.schedule(this)
         com.faithscroll.app.data.StreamResolver.setup(this)
         setContent {
             val appCtx = applicationContext
@@ -129,6 +130,12 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var widgetVerse by remember { mutableStateOf<Verse?>(null) }
     var onboarding by remember { mutableStateOf(!Taste.isOnboarded(ctx)) }
     var tasteVersion by remember { mutableIntStateOf(0) }
+    var beStill by remember { mutableStateOf(false) }
+    var askReminders by remember { mutableStateOf(false) }
+    // Android 13+ needs permission to show the prayer reminders.
+    val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { }
 
     // A tap on the home-screen widget opens that verse.
     LaunchedEffect(openFeedSignal, startRef) {
@@ -203,12 +210,18 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                             state, feedVideos, social, bottomInset,
                             suspended = player != null || widgetVerse != null || onboarding,
                             twoPane = twoPane,
-                            onOpenVideo = { v -> openVideo(v, feedVideos) }
+                            onOpenVideo = { v -> openVideo(v, feedVideos) },
+                            onBeStill = { beStill = true }
                         )
                     }
                     1 -> WatchScreen(library, bottomInset, openVideo)
                     2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
-                    else -> WidgetScreen(state, bottomInset, onSourcesChanged = { socialVersion++ }) { onboarding = true }
+                    else -> WidgetScreen(
+                        state, bottomInset, onSourcesChanged = { socialVersion++ }, onBeStill = { beStill = true },
+                        onNeedNotifications = {
+                            if (android.os.Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    ) { onboarding = true }
                 }
             }
         }
@@ -228,7 +241,42 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
 
         player?.let { (v, q) -> PlayerScreen(v, q, state) { player = null } }
 
-        if (onboarding) OnboardingScreen { onboarding = false; tasteVersion++; tab = 0 }
+        if (onboarding) OnboardingScreen {
+            onboarding = false; tasteVersion++; tab = 0
+            if (!com.faithscroll.app.prayer.Reminders.asked(ctx)) askReminders = true
+        }
+
+        if (beStill) com.faithscroll.app.prayer.BeStillScreen(onClose = { beStill = false })
+
+        // One-time invitation to turn on prayer reminders.
+        if (askReminders) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { askReminders = false; com.faithscroll.app.prayer.Reminders.setAsked(ctx) },
+                containerColor = com.faithscroll.app.ui.Plum,
+                title = { Text(com.faithscroll.app.util.tr("Prayer reminders?", "Bønnepåminnelser?"), color = Color.White) },
+                text = {
+                    Text(
+                        com.faithscroll.app.util.tr(
+                            "A gentle nudge to pause and pray: morning, midday and evening. You can change the times in Me.",
+                            "Et vennlig dytt om å stoppe opp og be: morgen, midt på dagen og kveld. Du kan endre tidene under Meg."
+                        ), color = Color.White.copy(alpha = 0.8f)
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        com.faithscroll.app.prayer.Reminders.setCount(ctx, 3)
+                        com.faithscroll.app.prayer.Reminders.setAsked(ctx)
+                        askReminders = false
+                        if (android.os.Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }) { Text(com.faithscroll.app.util.tr("Yes, remind me", "Ja, minn meg på det"), color = com.faithscroll.app.ui.Gold) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { askReminders = false; com.faithscroll.app.prayer.Reminders.setAsked(ctx) }) {
+                        Text(com.faithscroll.app.util.tr("Not now", "Ikke nå"), color = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            )
+        }
 
         reading?.let { v -> ChapterSheet(v) { reading = null } }
 

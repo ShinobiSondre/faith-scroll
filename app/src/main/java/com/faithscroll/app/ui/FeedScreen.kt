@@ -109,7 +109,8 @@ fun FeedScreen(
     bottomInset: androidx.compose.ui.unit.Dp,
     suspended: Boolean = false,
     twoPane: Boolean = false,
-    onOpenVideo: (Video) -> Unit = {}
+    onOpenVideo: (Video) -> Unit = {},
+    onBeStill: () -> Unit = {}
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -239,7 +240,7 @@ fun FeedScreen(
                     }
                 }
             }
-            FeedHeader(state)
+            FeedHeader(state, onBeStill)
         }
     }
 
@@ -262,13 +263,20 @@ fun FeedScreen(
 }
 
 @Composable
-private fun FeedHeader(state: AppState) {
+private fun FeedHeader(state: AppState, onBeStill: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("FaithScroll", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif)
         Spacer(Modifier.weight(1f))
+        // Quiet time with God
+        Text(
+            "🙏 " + tr("Be still", "Vær stille"), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f))
+                .clickable(onClick = onBeStill).padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+        Spacer(Modifier.width(8.dp))
         Row(
             Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f)).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
