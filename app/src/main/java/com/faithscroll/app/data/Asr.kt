@@ -168,12 +168,19 @@ object Asr {
         f
     }
 
-    private suspend fun transcribe(ctx: Context, videoId: String, live: Live, fromMs: Long, maxMs: Long) {
+    /** Transcribes a local audio file (used by the device tests to check the whole engine). */
+    internal suspend fun transcribeFile(ctx: Context, id: String, file: File): Live {
+        val live = live(id)
+        transcribe(ctx, id, live, 0, Long.MAX_VALUE, file)
+        return live
+    }
+
+    private suspend fun transcribe(ctx: Context, videoId: String, live: Live, fromMs: Long, maxMs: Long, localFile: File? = null) {
         if (!modelReady(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading speech model") }
         val m = model(ctx)
         Diag.log("asr", "$videoId: model ready, transcribing from ${fromMs / 1000}s")
         live.state.value = State.LOADING_AUDIO
-        val file = audioFile(ctx, videoId) ?: run { live.state.value = State.FAILED; return }
+        val file = localFile ?: audioFile(ctx, videoId) ?: run { live.state.value = State.FAILED; return }
         live.state.value = State.LISTENING
 
         val ex = MediaExtractor()

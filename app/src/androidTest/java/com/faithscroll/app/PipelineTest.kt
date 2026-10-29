@@ -110,6 +110,26 @@ class PipelineTest {
             "state=${live.state.value} error=${live.error} cues=${cues.size} sample='${cues.take(3).joinToString(" / ") { it.text }}' :: ${diagTail()}")
     }
 
+    /** The speech engine itself, on a known English recording (independent of YouTube). */
+    @Test fun e2_speechEngineOnSample() = runBlocking {
+        val f = java.io.File(ctx.cacheDir, "sample.wav")
+        val ok = runCatching {
+            okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder()
+                .url("https://raw.githubusercontent.com/alphacep/vosk-api/master/python/example/test.wav").build())
+                .execute().use { r -> f.writeBytes(r.body!!.bytes()) }
+        }
+        if (ok.isFailure) { report("5b speech engine (sample)", false, "download: ${ok.exceptionOrNull()}"); return@runBlocking }
+        val live = runCatching { Asr.transcribeFile(ctx, "sample", f) }
+        val cues = live.getOrNull()?.cues?.value.orEmpty()
+        report("5b speech engine (sample)", cues.isNotEmpty(),
+            "state=${live.getOrNull()?.state?.value} error=${live.getOrNull()?.error ?: live.exceptionOrNull()} lines=${cues.size} text='${cues.joinToString(" / ") { it.text }.take(200)}' :: ${diagTail(4)}")
+        // And the same lines in Norwegian, as the subtitles would show them
+        Lang.setMode(ctx, Lang.Mode.NO)
+        val no = cues.take(2).map { Transcripts.translateLine(it.text) }
+        Lang.setMode(ctx, Lang.Mode.EN)
+        report("5c subtitles in Norwegian", no.isNotEmpty() && no.zip(cues).any { (a, b) -> a != b.text }, no.joinToString(" / "))
+    }
+
     @Test fun f_translate() = runBlocking {
         Lang.setMode(ctx, Lang.Mode.NO)
         val out = runCatching { Transcripts.translateLine("God loves you and he is always with you.") }
