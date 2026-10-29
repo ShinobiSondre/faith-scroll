@@ -54,6 +54,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import com.faithscroll.app.data.Taste
+import com.faithscroll.app.data.Prefetcher
 import com.faithscroll.app.data.Video
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
