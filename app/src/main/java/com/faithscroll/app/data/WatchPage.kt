@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 object WatchPage {
     /** [plain] = from YouTube's Android-app answer: its caption links download without any token. */
     data class Track(val baseUrl: String, val lang: String, val kind: String, val name: String, val plain: Boolean = false)
-    data class Info(val tracks: List<Track>, val title: String, val description: String, val channelId: String = "", val channel: String = "")
+    data class Info(val tracks: List<Track>, val title: String, val description: String, val channelId: String = "", val channel: String = "", val webTracks: List<Track> = emptyList())
 
     private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     // Keeps YouTube's visitor cookies between the page, player and caption requests (like a browser session).
@@ -68,6 +68,7 @@ object WatchPage {
         val html = runCatching {
             http.newCall(
                 Request.Builder().url("https://www.youtube.com/watch?v=$videoId")
+                    .header("User-Agent", UA) // the full website, whose caption links accept a token
                     .header("Accept-Language", "en-US")
                     .header("Cookie", "SOCS=CAI") // skip the cookie-consent page
                     .build()
@@ -84,7 +85,9 @@ object WatchPage {
         Diag.log("page", "$videoId: android=${status.ifBlank { "-" }}${ps?.optString("reason")?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""}, " +
             "tracks=${tracks.joinToString { it.lang + (if (it.kind == "asr") "*" else "") + (if (it.plain) "" else "(web)") }.ifBlank { "none" }}")
         val vd = android?.optJSONObject("videoDetails") ?: page?.optJSONObject("videoDetails")
-        Info(tracks, vd?.optString("title").orEmpty(), vd?.optString("shortDescription").orEmpty(), vd?.optString("channelId").orEmpty(), vd?.optString("author").orEmpty()).also { cache[videoId] = it }
+        val web = page?.let { tracksOf(it, false) }.orEmpty()
+        Info(tracks, vd?.optString("title").orEmpty(), vd?.optString("shortDescription").orEmpty(), vd?.optString("channelId").orEmpty(), vd?.optString("author").orEmpty(), web)
+            .also { cache[videoId] = it }
     }
 
     /** The spoken language: YouTube's automatic captions are made from the audio. */
@@ -99,9 +102,15 @@ object WatchPage {
             }.getOrNull().orEmpty()
             val cues = if (body.trimStart().startsWith("{")) parseJson3(body) else parseXml(body)
             if (cues.isNotEmpty()) return@withContext cues
-            Diag.log("page", "$videoId: android caption link gave ${body.length} chars (${track.lang}${tlang?.let { " → $it" } ?: ""})")
+            Diag.log("page", "$videoId: android caption link gave ${body.length} chars (${track.lang}${if ("exp=xpe" in url) ", locked" else ""}): ${body.take(90).replace("\n", " ")}")
         }
-        val base = track.baseUrl.replace(Regex("&fmt=[^&]*"), "") + "&fmt=json3" + (tlang?.let { "&tlang=$it" } ?: "")
+        // The website's link for the same track, with a freshly made proof-of-origin token.
+        val webTrack = if (!track.plain) track else cache[videoId]?.webTracks?.let { w ->
+            w.firstOrNull { it.lang == track.lang && it.kind == track.kind } ?: w.firstOrNull { it.lang == track.lang }
+        }
+        if (webTrack == null) { Diag.log("page", "$videoId: no website caption link to try (${cache[videoId]?.webTracks?.size ?: 0} web tracks)"); return@withContext null }
+        val base = webTrack.baseUrl.replace(Regex("&fmt=[^&]*"), "").replace(Regex("&c=[^&]*"), "").replace(Regex("&(pot|potc)=[^&]*"), "") +
+            "&fmt=json3" + (tlang?.let { "&tlang=$it" } ?: "")
         val tok = runCatching { PoTokenProviderImpl.getWebClientPoToken(videoId) }
             .onFailure { Diag.err("page", "token", it) }.getOrNull()
         val pot = tok?.playerRequestPoToken
@@ -110,14 +119,20 @@ object WatchPage {
             tok?.streamingDataPoToken?.let { "$base&pot=$it&potc=1&c=WEB" },
             base
         ).distinct()
+        var last = ""
         for (u in urls) {
             val body = runCatching {
-                http.newCall(Request.Builder().url(u).header("User-Agent", UA).header("Cookie", "SOCS=CAI").build())
-                    .execute().use { it.body?.string() }
-            }.getOrNull()
-            if (body != null && body.contains("\"events\"")) return@withContext parseJson3(body)
+                http.newCall(Request.Builder().url(u).header("User-Agent", UA).header("Referer", "https://www.youtube.com/watch?v=$videoId")
+                    .header("Origin", "https://www.youtube.com").build())
+                    .execute().use { "${it.code} " + it.body?.string().orEmpty() }
+            }.getOrNull().orEmpty()
+            if (body.contains("\"events\"")) {
+                Diag.log("page", "$videoId: captions via website link${if ("pot=" in u) " + token" else ""}")
+                return@withContext parseJson3(body.substringAfter(' '))
+            }
+            last = body
         }
-        Diag.log("page", "$videoId: caption download refused (${track.lang}/${track.kind.ifBlank { "manual" }}${tlang?.let { " → $it" } ?: ""}, token=${pot != null})")
+        Diag.log("page", "$videoId: caption download refused (${track.lang}/${track.kind.ifBlank { "manual" }}${tlang?.let { " → $it" } ?: ""}, token=${pot != null}, xpe=${"exp=xpe" in webTrack.baseUrl}): ${last.take(90).replace("\n", " ")}")
         null
     }
 
