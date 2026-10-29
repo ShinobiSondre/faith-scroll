@@ -6,12 +6,22 @@ import android.content.Context
 import com.faithscroll.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.faithscroll.app.util.Lang
 import org.json.JSONArray
 import java.io.File
 
-data class Verse(val ref: String, val text: String, val theme: String) {
+data class Verse(
+    val ref: String, // stable English key, e.g. "John 3:16" (used for saving and the widget)
+    val text: String, // in the app language
+    val theme: String,
+    val label: String = ref, // reference as shown, e.g. "Johannes 3,16" in Norwegian
+    val noBook: Int = -1, val noChapter: Int = 0, val noFrom: Int = 0, val noTo: Int = 0
+) {
     /** "John 3:16" -> "John 3" (used to load the whole chapter). */
     val chapterRef: String get() = ref.substringBefore(":")
+
+    /** Chapter as shown: "John 3" / "Johannes 3". */
+    val chapterLabel: String get() = if (noBook >= 0) label.substringBefore(",") else chapterRef
 
     /** Verse numbers this card covers, e.g. "4-7" -> 4..7. */
     val verseRange: IntRange
@@ -28,9 +38,15 @@ data class Verse(val ref: String, val text: String, val theme: String) {
 
 object VerseRepository {
     @Volatile private var cache: List<Verse>? = null
+    @Volatile private var cacheNo = false
 
-    fun all(ctx: Context): List<Verse> =
-        cache ?: synchronized(this) { cache ?: load(ctx).also { cache = it } }
+    fun all(ctx: Context): List<Verse> {
+        if (cache != null && cacheNo == Lang.no) return cache!!
+        return synchronized(this) {
+            if (cache == null || cacheNo != Lang.no) { cache = load(ctx); cacheNo = Lang.no }
+            cache!!
+        }
+    }
 
     fun byRef(ctx: Context, ref: String?): Verse? = ref?.let { r -> all(ctx).firstOrNull { it.ref == r } }
 
@@ -46,7 +62,21 @@ object VerseRepository {
         val base = parse(ctx.assets.open("verses.json").bufferedReader().use { it.readText() })
         val extraFile = File(ctx.filesDir, "remote_verses.json")
         val extra = if (extraFile.exists()) runCatching { parse(extraFile.readText()) }.getOrDefault(emptyList()) else emptyList()
-        return (base + extra).distinctBy { it.ref }
+        val all = (base + extra).distinctBy { it.ref }
+        return if (Lang.no) toNorwegian(ctx, all) else all
+    }
+
+    /** Swaps in the Norwegian 1930 text and references. Verses we can't map reliably are left out. */
+    private fun toNorwegian(ctx: Context, list: List<Verse>): List<Verse> {
+        val mapped = runCatching { org.json.JSONObject(ctx.assets.open("verses_no.json").bufferedReader().use { it.readText() }) }.getOrNull()
+        return list.mapNotNull { v ->
+            mapped?.optJSONObject(v.ref)?.let { o ->
+                v.copy(text = o.getString("text"), label = o.getString("label"),
+                    noBook = o.getInt("book"), noChapter = o.getInt("chapter"), noFrom = o.getInt("from"), noTo = o.getInt("to"))
+            } ?: BibleNo.lookup(ctx, v.ref)?.let { (text, label, pos) ->
+                v.copy(text = text, label = label, noBook = pos[0], noChapter = pos[1], noFrom = pos[2], noTo = pos[3])
+            }
+        }.ifEmpty { list }
     }
 
     private fun parse(json: String): List<Verse> {

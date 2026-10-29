@@ -148,7 +148,7 @@ fun WidgetScreen(
                 Text("“${preview.text}”", color = textColor, fontFamily = FontFamily.Serif, fontSize = 16.sp, lineHeight = 22.sp, maxLines = 5)
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("— ${preview.ref}", color = if (lightText) Gold else Color(0xFF8A5A00), fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("— ${preview.label}", color = if (lightText) Gold else Color(0xFF8A5A00), fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
                     Icon(Icons.Filled.Refresh, null, tint = textColor, modifier = Modifier.size(20.dp))
                 }
             }
@@ -229,7 +229,7 @@ fun WidgetScreen(
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            tr("Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.", "Bibeltekst: King James Version (fri bruk). Videoene strømmes fra YouTube-kanaler med vitnesbyrd og bibelundervisning."),
+            tr("Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.", "Bibeltekst: Bibelen 1930, Det Norske Bibelselskap (fri bruk). Videoene strømmes fra YouTube-kanaler med vitnesbyrd og bibelundervisning."),
             color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp
         )
     }
@@ -301,7 +301,7 @@ private fun LanguageCard() {
             Chip("Norsk", mode == Lang.Mode.NO) { pick(Lang.Mode.NO) }
         }
         Text(
-            tr("Bible verses are in English (King James Version).", "Bibelversene er på engelsk (King James Version)."),
+            tr("Bible verses: King James Version.", "Bibelvers: Bibelen 1930 (Det Norske Bibelselskap)."),
             color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
         )
     }

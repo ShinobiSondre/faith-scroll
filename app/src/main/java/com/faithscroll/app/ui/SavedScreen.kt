@@ -130,7 +130,7 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
                         Text("“${v.text}”", color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, lineHeight = 24.sp)
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("— ${v.ref}", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("— ${v.label}", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             IconButton(onClick = { onRead(v) }) { Icon(Icons.AutoMirrored.Filled.MenuBook, tr("Read chapter", "Les kapittelet"), tint = Color.White) }
                             IconButton(onClick = { Share.verse(ctx, v, Palettes.argb(v.theme)) }) { Icon(Icons.Filled.Share, tr("Share", "Del"), tint = Color.White) }
                             IconButton(onClick = { state.toggleSave(v.ref) }) { Icon(Icons.Filled.Bookmark, tr("Remove", "Fjern"), tint = Gold) }

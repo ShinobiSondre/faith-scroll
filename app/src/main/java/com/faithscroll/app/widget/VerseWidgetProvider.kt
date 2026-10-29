@@ -55,12 +55,15 @@ class VerseWidgetProvider : AppWidgetProvider() {
             ids(ctx).forEach { mgr.updateAppWidget(it, build(ctx, v)) }
         }
 
-        fun build(ctx: Context, verse: Verse): RemoteViews {
+        fun build(ctx: Context, verse0: Verse): RemoteViews {
+            com.faithscroll.app.util.Lang.init(ctx)
+            // The stored verse may be from before a language switch; show it in the current language.
+            val verse = VerseRepository.byRef(ctx, verse0.ref) ?: verse0
             val lightText = Prefs.widgetLightText(ctx)
             val layout = if (lightText) R.layout.widget_verse_light_text else R.layout.widget_verse_dark_text
             val rv = RemoteViews(ctx.packageName, layout)
             rv.setTextViewText(R.id.widget_verse, "“${verse.text}”")
-            rv.setTextViewText(R.id.widget_ref, "— ${verse.ref}")
+            rv.setTextViewText(R.id.widget_ref, "— ${verse.label}")
             rv.setInt(R.id.widget_bg, "setImageAlpha", Prefs.widgetOpacity(ctx) * 255 / 100)
 
             val open = Intent(ctx, MainActivity::class.java).apply {

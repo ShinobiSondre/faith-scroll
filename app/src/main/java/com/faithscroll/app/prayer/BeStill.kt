@@ -187,7 +187,7 @@ fun BeStillScreen(onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val prompts = remember {
         listOf(
-            tr("Be still, and know that I am God.", "Vær stille, og kjenn at jeg er Gud.") to tr("Psalm 46:10", "Salme 46,11"),
+            tr("Be still, and know that I am God.", "Hold op og kjenn at jeg er Gud!") to tr("Psalm 46:10", "Salme 46,11"),
             tr("He is here with you, right now.", "Han er her hos deg, akkurat nå.") to "",
             tr("Tell Him what's on your heart.", "Fortell Ham hva som ligger på hjertet ditt.") to "",
             tr("Thank Him for one thing today.", "Takk Ham for én ting i dag.") to "",

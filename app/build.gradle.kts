@@ -72,5 +72,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // On-device language detection (offline), so videos match the app language
     implementation("com.google.mlkit:language-id:17.0.6")
+    // On-device translation for subtitles
+    implementation("com.google.mlkit:translate:17.0.3")
+    // Google sign-in to read your YouTube subscriptions
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 }

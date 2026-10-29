@@ -19,13 +19,14 @@ import android.text.TextPaint
 import androidx.core.content.FileProvider
 import com.faithscroll.app.data.Message
 import com.faithscroll.app.data.Verse
+import com.faithscroll.app.data.BibleNo
 import com.faithscroll.app.data.Video
 import java.io.File
 
 object Share {
 
     fun verse(ctx: Context, verse: Verse, colors: IntArray) {
-        val text = "“${verse.text}”\n— ${verse.ref} (KJV)"
+        val text = "“${verse.text}”\n— ${verse.label} (" + (if (verse.noBook >= 0) BibleNo.NAME else "KJV") + ")"
         val uri = runCatching { renderImage(ctx, verse, colors) }.getOrNull()
         val intent = Intent(Intent.ACTION_SEND).apply {
             if (uri != null) {
@@ -111,7 +112,7 @@ object Share {
             textAlign = Paint.Align.CENTER
             letterSpacing = 0.06f
         }
-        c.drawText("— ${verse.ref}", w / 2f, top + layout.height + 90f, refPaint)
+        c.drawText("— ${verse.label}", w / 2f, top + layout.height + 90f, refPaint)
 
         val foot = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0x99FFFFFF.toInt()

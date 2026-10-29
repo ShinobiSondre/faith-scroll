@@ -499,7 +499,7 @@ private fun VerseCard(
             )
             Spacer(Modifier.height(22.dp))
             Text(
-                "— ${verse.ref}",
+                "— ${verse.label}",
                 color = Gold,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -532,7 +532,7 @@ private fun VerseCard(
             ) {
                 Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(tr("Read ${verse.chapterRef}", "Les ${verse.chapterRef}"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(tr("Read ${verse.chapterLabel}", "Les ${verse.chapterLabel}"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
 

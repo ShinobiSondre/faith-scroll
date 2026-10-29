@@ -47,6 +47,7 @@ import com.faithscroll.app.data.Verse
 @Composable
 fun ChapterSheet(verse: Verse, onDismiss: () -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var chapter by remember { mutableStateOf<Chapter?>(null) }
     var loading by remember { mutableStateOf(true) }
     var attempt by remember { mutableIntStateOf(0) }
@@ -54,17 +55,21 @@ fun ChapterSheet(verse: Verse, onDismiss: () -> Unit) {
 
     LaunchedEffect(attempt) {
         loading = true
-        chapter = BibleApi.chapter(verse.chapterRef)
+        chapter = if (verse.noBook >= 0) {
+            com.faithscroll.app.data.BibleNo.chapter(ctx, verse.noBook, verse.noChapter)?.let { vs ->
+                Chapter(verse.chapterLabel, vs.mapIndexed { i, t -> com.faithscroll.app.data.ChapterVerse(i + 1, t) })
+            }
+        } else BibleApi.chapter(verse.chapterRef)
         loading = false
-        val first = verse.verseRange.first
+        val first = if (verse.noBook >= 0) verse.noFrom else verse.verseRange.first
         val idx = chapter?.verses?.indexOfFirst { it.number == first } ?: -1
         if (idx > 1) list.animateScrollToItem(idx - 1)
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).padding(horizontal = 22.dp)) {
-            Text(verse.chapterRef, color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
-            Text(tr("King James Version · read it in context", "King James Version · les det i sammenheng"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(verse.chapterLabel, color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+            Text(if (verse.noBook >= 0) "${com.faithscroll.app.data.BibleNo.NAME} · les det i sammenheng" else tr("King James Version · read it in context", "King James Version · les det i sammenheng"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
             Spacer(Modifier.height(14.dp))
             when {
                 loading -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
@@ -76,7 +81,7 @@ fun ChapterSheet(verse: Verse, onDismiss: () -> Unit) {
                 }
                 else -> LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(chapter!!.verses, key = { it.number }) { v ->
-                        val highlight = v.number in verse.verseRange
+                        val highlight = if (verse.noBook >= 0) v.number in verse.noFrom..verse.noTo else v.number in verse.verseRange
                         Text(
                             buildAnnotatedString {
                                 withStyle(SpanStyle(color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)) { append("${v.number}  ") }
