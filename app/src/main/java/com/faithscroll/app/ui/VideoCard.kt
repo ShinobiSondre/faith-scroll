@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -39,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -85,12 +88,20 @@ fun VideoCard(
 ) {
     val ctx = LocalContext.current
     var paused by remember(video.id) { mutableStateOf(false) }
+    var controls by remember(video.id) { mutableStateOf(false) }
+    var controlsTouch by remember(video.id) { mutableIntStateOf(0) }
     var muted by remember { mutableStateOf(false) }
     var fill by remember(video.id) { mutableStateOf<Boolean?>(null) } // null = automatic
     val playback = remember(video.id) { PlaybackState() }
     var embedPlaying by remember(video.id) { mutableStateOf(false) }
     var embedFailed by remember(video.id) { mutableStateOf(false) }
-    LaunchedEffect(isActive) { if (!isActive) paused = false }
+    // Autoplay: every card starts playing when it comes on screen.
+    LaunchedEffect(isActive) { paused = false; controls = false }
+
+    // Controls fade away 2.5 s after the last touch while the video is playing.
+    LaunchedEffect(controls, controlsTouch, paused) {
+        if (controls && !paused) { kotlinx.coroutines.delay(2500); controls = false }
+    }
 
     // Prepare the stream URL as soon as the card exists, so it starts instantly when swiped to.
     LaunchedEffect(video.id) { StreamResolver.resolve(video.id) }
@@ -100,6 +111,7 @@ fun VideoCard(
     val cfg = androidx.compose.ui.platform.LocalConfiguration.current
     val screenLandscape = cfg.screenWidthDp > cfg.screenHeightDp
     val useFill = fill ?: (playback.portrait != screenLandscape)
+    val showControls = isActive && !embedFailed && (controls || paused)
     val showingVideo = (playback.ready && !playback.failed) || embedPlaying
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -132,7 +144,8 @@ fun VideoCard(
         Box(
             Modifier.fillMaxSize().pointerInput(video.id) {
                 detectTapGestures(
-                    onTap = { paused = !paused },
+                    // First touch shows the controls; touching again hides them.
+                    onTap = { controls = !controls; controlsTouch++ },
                     onDoubleTap = { fill = !useFill }
                 )
             }
@@ -141,16 +154,21 @@ fun VideoCard(
         if (isActive && !paused && !embedFailed && (playback.buffering && !embedPlaying)) {
             CircularProgressIndicator(color = Gold, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center).size(44.dp))
         }
+        // Play / pause button: hidden while playing, shown when you touch the video (or it's paused).
         AnimatedVisibility(
-            visible = paused,
-            enter = fadeIn(tween(150)) + scaleIn(initialScale = 1.4f),
-            exit = fadeOut(tween(150)) + scaleOut(targetScale = 0.8f),
+            visible = showControls,
+            enter = fadeIn(tween(150)) + scaleIn(initialScale = 1.3f),
+            exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.85f),
             modifier = Modifier.align(Alignment.Center)
         ) {
             Box(
-                Modifier.size(84.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
+                Modifier.size(84.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
+                    .clickable { paused = !paused; controlsTouch++ },
                 contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(52.dp)) }
+            ) {
+                Icon(if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause, if (paused) "Play" else "Pause",
+                    tint = Color.White, modifier = Modifier.size(52.dp))
+            }
         }
         if (embedFailed) {
             Text("This video can't play right now. Swipe for the next one.",
@@ -194,15 +212,21 @@ fun VideoCard(
             if (onExpand != null) RailButton(Icons.Filled.OpenInFull, "Full", false, Color.White) { paused = true; onExpand() }
         }
 
-        // Progress bar (drag to seek)
+        // Progress: a thin line while playing; the full seek bar appears with the controls.
         if (isActive && playback.duration > 0 && !playback.failed) {
-            SeekBar(playback, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset).fillMaxWidth())
+            if (showControls) {
+                SeekBar(playback, { controlsTouch++ }, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset).fillMaxWidth())
+            } else {
+                val frac = (playback.position.toFloat() / playback.duration).coerceIn(0f, 1f)
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = bottomInset).fillMaxWidth().height(2.dp).background(Color.White.copy(alpha = 0.2f)))
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = bottomInset).fillMaxWidth(frac).height(2.dp).background(Gold))
+            }
         }
     }
 }
 
 @Composable
-private fun SeekBar(p: PlaybackState, modifier: Modifier) {
+private fun SeekBar(p: PlaybackState, onInteract: () -> Unit, modifier: Modifier) {
     var dragging by remember { mutableStateOf<Float?>(null) }
     val frac = dragging ?: (if (p.duration > 0) p.position.toFloat() / p.duration else 0f)
     Column(modifier.padding(horizontal = 8.dp)) {
@@ -215,7 +239,7 @@ private fun SeekBar(p: PlaybackState, modifier: Modifier) {
         }
         Slider(
             value = frac.coerceIn(0f, 1f),
-            onValueChange = { dragging = it },
+            onValueChange = { dragging = it; onInteract() },
             onValueChangeFinished = { dragging?.let { p.seekTo((it * p.duration).toLong()) }; dragging = null },
             colors = SliderDefaults.colors(
                 thumbColor = if (dragging != null) Gold else Color.White.copy(alpha = 0.9f),
