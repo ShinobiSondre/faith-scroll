@@ -18,8 +18,7 @@ android {
         versionCode = runNumber
         versionName = "1.0.$runNumber"
         buildConfigField("String", "CONTENT_REPO", "\"$contentRepo\"")
-        // 64-bit ARM: every modern phone. Leaving out other CPU types keeps the download much smaller.
-        ndk { abiFilters += listOf("arm64-v8a") }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -33,6 +32,8 @@ android {
 
     buildTypes {
         release {
+            // 64-bit ARM: every modern phone. Leaving out other CPU types keeps the download much smaller.
+            ndk { abiFilters += listOf("arm64-v8a") }
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
         }
@@ -44,6 +45,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            all { it.testLogging { showStandardStreams = true; events("passed", "failed", "skipped") } }
+        }
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -82,4 +89,11 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.47")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
+
+    // Diagnostic tests (run in the cloud build against real videos and the real AI)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
 }

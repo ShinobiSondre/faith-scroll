@@ -132,8 +132,11 @@ object Asr {
 
     fun stop(videoId: String) { lives[videoId]?.job?.cancel() }
 
-    private suspend fun audioFile(ctx: Context, videoId: String): File? = withContext(Dispatchers.IO) {
-        val dir = File(ctx.cacheDir, "asr").apply { mkdirs() }
+    private suspend fun audioFile(ctx: Context, videoId: String): File? =
+        downloadAudio(videoId, File(ctx.cacheDir, "asr").apply { mkdirs() })
+
+    /** Downloads a video's audio track into [dir] (also used by the diagnostic tests). */
+    suspend fun downloadAudio(videoId: String, dir: File): File? = withContext(Dispatchers.IO) {
         val f = File(dir, "$videoId.m4a")
         if (f.exists() && f.length() > 10_000) return@withContext f
         val r = StreamResolver.resolve(videoId) ?: return@withContext null
