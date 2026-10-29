@@ -1,5 +1,7 @@
 package com.faithscroll.app.data
 
+import com.faithscroll.app.util.tr
+
 import android.content.Context
 import com.faithscroll.app.BuildConfig
 import kotlinx.coroutines.Dispatchers

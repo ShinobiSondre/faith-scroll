@@ -134,7 +134,7 @@ object SocialRepository {
             }
         }
         val allBoards = (userBoards(ctx) + boards).distinct()
-        val allSubs = (userSubs(ctx) + subs).distinctBy { it.lowercase() }
+        val allSubs = (userSubs(ctx) + subs + Discovery.discoveredSubs(ctx)).distinctBy { it.lowercase() }
         val (perBoard, perSub) = coroutineScope {
             val a = allBoards.map { b -> async { fetchBoard(b) } }
             val b = allSubs.map { r -> async { fetchSubreddit(r) } }

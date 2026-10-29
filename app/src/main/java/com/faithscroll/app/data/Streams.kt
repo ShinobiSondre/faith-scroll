@@ -156,6 +156,8 @@ object StreamResolver {
     @OptIn(UnstableApi::class)
     fun cacheSizeMb(): Long = (media?.cacheSpace ?: 0L) / (1024 * 1024)
 
+    fun ensureInit() = init()
+
     private fun init() {
         if (initialised) return
         synchronized(this) {

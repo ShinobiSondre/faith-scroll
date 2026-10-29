@@ -1,5 +1,7 @@
 package com.faithscroll.app
 
+import com.faithscroll.app.util.tr
+
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -140,6 +142,12 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         if (VerseWidgetProvider.hasWidgets(ctx)) VerseWidgetProvider.refresh(ctx)
     }
     LaunchedEffect(socialVersion) { social = SocialRepository.load(ctx) }
+    // Always looking for something new: fresh searches every launch, new subreddits now and then.
+    var discovered by remember { mutableStateOf<List<Video>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        discovered = com.faithscroll.app.data.Discovery.search(ctx)
+        com.faithscroll.app.data.Discovery.maybeFindSubreddits(ctx)
+    }
 
     // Phone upright: tabs at the bottom. Turned sideways, unfolded or tablet: a rail on the side.
     val cfg = LocalConfiguration.current
@@ -154,15 +162,16 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     )
 
     // Mostly videos: shorts, testimonies and sermons take turns.
-    val feedVideos = remember(library, social) {
+    val feedVideos = remember(library, social, discovered) {
         val l = library
         val clips = social?.clips.orEmpty()
-        if (l == null && clips.isEmpty()) return@remember emptyList<Video>()
+        if (l == null && clips.isEmpty() && discovered.isEmpty()) return@remember emptyList<Video>()
         val shorts = l?.shorts.orEmpty(); val stories = l?.stories.orEmpty(); val sermons = l?.sermons.orEmpty()
         val out = mutableListOf<Video>()
-        for (i in 0 until maxOf(stories.size, sermons.size, shorts.size, clips.size)) {
+        for (i in 0 until maxOf(stories.size, sermons.size, shorts.size, clips.size, discovered.size)) {
             shorts.getOrNull(i)?.let(out::add)
             clips.getOrNull(i)?.let(out::add)
+            discovered.getOrNull(i)?.let(out::add)
             stories.getOrNull(i)?.let(out::add)
             sermons.getOrNull(i)?.let(out::add)
         }

@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.webkit.WebChromeClient

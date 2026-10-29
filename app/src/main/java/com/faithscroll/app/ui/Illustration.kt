@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Typeface

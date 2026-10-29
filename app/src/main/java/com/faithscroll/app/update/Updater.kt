@@ -1,5 +1,7 @@
 package com.faithscroll.app.update
 
+import com.faithscroll.app.util.tr
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri

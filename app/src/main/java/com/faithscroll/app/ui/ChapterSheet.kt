@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

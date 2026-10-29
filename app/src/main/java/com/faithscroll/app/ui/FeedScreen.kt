@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -74,6 +76,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import com.faithscroll.app.data.Encouragement
 import com.faithscroll.app.data.FeedEngine
+import com.faithscroll.app.data.Seen
+import com.faithscroll.app.data.Discovery
 import com.faithscroll.app.data.Prefetcher
 import com.faithscroll.app.data.MessageRepository
 import com.faithscroll.app.data.SocialLibrary
@@ -136,8 +140,12 @@ fun FeedScreen(
                 val dwell = System.currentTimeMillis() - since
                 when (val it = items.getOrNull(lastPage)) {
                     is FeedItem.MessageItem -> Taste.messageSeen(ctx, it.message, dwell)
-                    is FeedItem.VideoItem -> Taste.videoSeen(ctx, it.video, dwell)
-                    is FeedItem.PinItem -> Taste.pinSeen(ctx, it.pin, dwell)
+                    is FeedItem.VideoItem -> {
+                        Taste.videoSeen(ctx, it.video, dwell)
+                        if (dwell > 2000) Seen.mark(ctx, it.video.id)
+                        if (dwell > 20_000) Discovery.reward(ctx, it.video.id, if (dwell > 60_000) 1f else 0.5f)
+                    }
+                    is FeedItem.PinItem -> { Taste.pinSeen(ctx, it.pin, dwell); Seen.mark(ctx, it.pin.id) }
                     is FeedItem.TikTokItem -> Unit
                     null -> Unit
                 }
@@ -199,7 +207,7 @@ fun FeedScreen(
                             preload = page == pager.settledPage + 1 && !suspended,
                             saved = state.isVideoSaved(item.video.id),
                             onSave = {
-                                if (!state.isVideoSaved(item.video.id)) Taste.videoAction(ctx, item.video, Taste.Action.SAVE)
+                                if (!state.isVideoSaved(item.video.id)) { Taste.videoAction(ctx, item.video, Taste.Action.SAVE); Discovery.reward(ctx, item.video.id, 2f) }
                                 state.toggleVideo(item.video)
                             },
                             onExpand = { Taste.videoAction(ctx, item.video, Taste.Action.EXPAND); onOpenVideo(item.video) },

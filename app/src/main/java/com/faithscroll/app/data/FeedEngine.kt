@@ -1,5 +1,7 @@
 package com.faithscroll.app.data
 
+import com.faithscroll.app.util.tr
+
 import android.content.Context
 import kotlin.random.Random
 
@@ -30,6 +32,8 @@ class FeedEngine(
     private var sinceMessage = 0
     private var produced = 0
     private val explore = 0.25
+    private val knownChannels = setOf("I Am Second", "700 Club Testimonies", "BibleProject", "Desiring God", "Elevation Church",
+        "In Touch Ministries", "Gospel in Life", "Jesus Shorts", "Christian Daily Devotional", "Our Daily Bread")
 
     fun next(): FeedItem {
         produced++
@@ -51,7 +55,7 @@ class FeedEngine(
     private fun pickIllustration(): FeedItem {
         val pins = social()?.pins.orEmpty()
         if (pins.isEmpty() || rnd.nextDouble() < 0.2) return pickMessage()
-        val pool = pins.filter { it.id !in shownPins }.ifEmpty { shownPins.clear(); pins }
+        val pool = Seen.freshFirst(ctx, pins.filter { it.id !in shownPins }.ifEmpty { shownPins.clear(); pins }, { it.id })
         val random = rnd.nextDouble() < explore
         val pin = if (random) pool.random(rnd) else Taste.weightedPick(pool, { p ->
             Taste.topicsOf(p.title).maxOfOrNull { Taste.themeWeight(ctx, it) } ?: 0f
@@ -81,12 +85,13 @@ class FeedEngine(
     }
 
     private fun pickVideo(all: List<Video>): FeedItem? {
-        val pool = all.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); all }
+        val notShown = all.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); all }
+        val pool = Seen.freshFirst(ctx, notShown, { it.id })
         if (pool.isEmpty()) return null
         val random = rnd.nextDouble() < explore
         // Newer uploads get a small boost (feeds come newest-first per channel).
         val v = if (random) pool.random(rnd) else Taste.weightedPick(pool, { vid ->
-            Taste.scoreVideo(ctx, vid) - 0.01f * all.indexOf(vid)
+            Taste.scoreVideo(ctx, vid) - 0.01f * all.indexOf(vid) + (if (vid.channel !in knownChannels) 0.3f else 0f)
         }, rnd = rnd)!!
         shownVideos += v.id
         val reason = when {

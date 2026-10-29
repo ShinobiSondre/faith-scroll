@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -90,7 +92,12 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
         var since = System.currentTimeMillis()
         snapshotFlow { pager.settledPage }.collect { page ->
             if (page != last) {
-                list.getOrNull(last)?.let { Taste.videoSeen(ctx, it, System.currentTimeMillis() - since) }
+                list.getOrNull(last)?.let {
+                    val d = System.currentTimeMillis() - since
+                    Taste.videoSeen(ctx, it, d)
+                    if (d > 2000) com.faithscroll.app.data.Seen.mark(ctx, it.id)
+                    if (d > 20_000) com.faithscroll.app.data.Discovery.reward(ctx, it.id, if (d > 60_000) 1f else 0.5f)
+                }
                 last = page; since = System.currentTimeMillis()
             }
         }

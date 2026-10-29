@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+
 import android.annotation.SuppressLint
 import android.graphics.Color as AColor
 import android.webkit.JavascriptInterface

@@ -1,5 +1,7 @@
 package com.faithscroll.app.update
 
+import com.faithscroll.app.util.tr
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat

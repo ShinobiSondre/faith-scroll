@@ -1,5 +1,7 @@
 package com.faithscroll.app.util
 
+import com.faithscroll.app.util.tr
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent

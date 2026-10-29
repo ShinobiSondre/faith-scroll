@@ -1,5 +1,8 @@
 package com.faithscroll.app.ui
 
+import com.faithscroll.app.util.tr
+import com.faithscroll.app.util.Lang
+
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.widget.Toast
@@ -322,6 +325,11 @@ private fun SourcesCard() {
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
         ) { Text(if (busy) tr("Adding…", "Legger til …") else tr("Add to my feed", "Legg til i feeden")) }
         if (boards.isNotEmpty() || tiktoks.isNotEmpty() || subs.isNotEmpty()) Spacer(Modifier.height(12.dp))
+        val found = remember { com.faithscroll.app.data.Discovery.channels(ctx) }
+        if (found.isNotEmpty()) {
+            Text(tr("Discovered for you", "Oppdaget for deg"), color = Gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+            found.forEach { (id, name) -> SourceRow("YouTube · $name") { com.faithscroll.app.data.Discovery.removeChannel(ctx, id); sourcesChanged() } }
+        }
         subs.forEach { r ->
             SourceRow("Reddit · r/$r") { SocialRepository.removeSub(ctx, r); subs = SocialRepository.userSubs(ctx); sourcesChanged() }
         }
