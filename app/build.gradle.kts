@@ -19,7 +19,6 @@ android {
         versionName = "1.0.$runNumber"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CONTENT_REPO", "\"$contentRepo\"")
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -92,8 +91,6 @@ dependencies {
     implementation("com.google.mlkit:language-id:17.0.6")
     // On-device translation for subtitles
     implementation("com.google.mlkit:translate:17.0.3")
-    // Google sign-in to read your YouTube subscriptions
-    implementation("com.google.android.gms:play-services-auth:21.2.0")
     // Offline speech recognition: makes subtitles for videos without captions
     implementation("com.alphacephei:vosk-android:0.3.47")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
@@ -108,7 +105,4 @@ dependencies {
     // Diagnostic tests (run in the cloud build against real videos and the real AI)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:core:1.6.1")
 }

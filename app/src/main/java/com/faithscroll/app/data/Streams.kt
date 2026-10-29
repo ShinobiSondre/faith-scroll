@@ -244,8 +244,12 @@ object StreamResolver {
      */
     fun preferredAudio(r: ResolvedStream): List<StreamOption> {
         val want = if (com.faithscroll.app.util.Lang.no) "no" else "en"
-        return r.audios.filter { it.lang == want }.ifEmpty { r.audios.filter { it.original } }
-            .ifEmpty { r.audios.filter { it.lang == "en" } }.ifEmpty { r.audios }
+        // With many dubbed tracks, pick by language: the app's, then English. Only if no track has a
+        // language at all (a normal single-language video) take whatever there is.
+        val langs = r.audios.map { it.lang }.filter { it.isNotBlank() }.toSet()
+        return r.audios.filter { it.lang == want }.ifEmpty { r.audios.filter { it.lang == "en" } }
+            .ifEmpty { if (langs.size <= 1) r.audios else r.audios.filter { it.lang.isBlank() } }
+            .ifEmpty { r.audios }
     }
 
     fun choose(r: ResolvedStream, target: Int): Choice {

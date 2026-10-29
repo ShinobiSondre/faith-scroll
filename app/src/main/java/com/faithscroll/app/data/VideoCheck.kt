@@ -48,34 +48,33 @@ object VideoCheck {
         job?.cancel()
         job = scope.launch {
             checking.value = true
-            for (v in todo) {
-                if (!isActive) break
-                if (known(v.id)) continue
-                val ok = runCatching { check(v) }.getOrElse { Diag.err("check", "${v.id} failed", it); false }
-                // Don't remember "no captions" verdicts until captions have worked at least once on this phone
-                // (otherwise a temporary problem would hide videos for a whole day).
-                if (ok || CaptionGrabber.successes > 0 || !softReject) results[v.id] = Result(ok, mode(), System.currentTimeMillis())
-                softReject = false
-                publish(); save()
+            // Three at a time: each check is one page load + one caption download (about a second).
+            val gate = kotlinx.coroutines.sync.Semaphore(3)
+            kotlinx.coroutines.coroutineScope {
+                for (v in todo) {
+                    if (!isActive) break
+                    if (known(v.id)) continue
+                    gate.acquire()
+                    launch {
+                        try {
+                            // null = couldn't tell (offline / page unreadable): no verdict saved, checked again next time.
+                            val ok = runCatching { check(v) }.getOrElse { Diag.err("check", "${v.id} failed", it); null }
+                            if (ok != null) results[v.id] = Result(ok, mode(), System.currentTimeMillis())
+                            publish(); save()
+                        } finally { gate.release() }
+                    }
+                }
             }
             checking.value = false
         }
     }
 
-    private suspend fun check(v: Video): Boolean {
+    private suspend fun check(v: Video): Boolean? {
         val t = Transcripts.original(v.id)
         if (t == null) {
-            if (CaptionGrabber.working) return reject(v, "no working captions")
-            // Captions aren't working on this phone at all: decide by the language of the original
-            // audio track if YouTube says it, otherwise by the title + description text.
-            // Unknown still means out.
-            val r = StreamResolver.resolve(v.id)
-            val lang = r?.spoken?.takeIf { it.isNotBlank() }
-                ?: LangFilter.detect("${v.title}. ${r?.description.orEmpty().take(800)}")
-                ?: ""
-            val ok = lang == "en" || (Lang.no && lang == "no")
-            return if (ok) { Diag.log("check", "${v.id}: OK by language of title/description/audio: $lang (captions unavailable)"); true }
-            else reject(v, "captions unavailable, language '${lang.ifBlank { "?" }}'")
+            // Can't read YouTube's page at all (e.g. offline): don't remember a verdict, try again later.
+            if (WatchPage.info(v.id) == null) { reject(v, "page unreadable (will retry)"); return null }
+            return reject(v, "no working captions")
         }
         val sample = t.cues.take(60).joinToString(" ") { it.text }
         // Spoken language: YouTube's automatic captions; double-checked against what the captions actually say.
@@ -95,10 +94,7 @@ object VideoCheck {
         return true
     }
 
-    @Volatile private var softReject = false
-
     private fun reject(v: Video, why: String): Boolean {
-        softReject = why.startsWith("no working captions") || why.startsWith("captions unavailable")
         Diag.log("check", "${v.id}: left out – $why (${v.title.take(40)})")
         return false
     }

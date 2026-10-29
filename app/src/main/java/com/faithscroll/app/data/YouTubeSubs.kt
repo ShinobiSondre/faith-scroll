@@ -11,7 +11,7 @@ import org.json.JSONObject
 import java.util.zip.ZipInputStream
 
 /** A channel you're subscribed to on YouTube. Favourites show up in your feed. */
-data class SubChannel(val id: String, val title: String, val favourite: Boolean)
+data class SubChannel(val id: String, val title: String, val favourite: Boolean, val christian: Boolean = false)
 
 /**
  * Your YouTube subscriptions, from Google sign-in (YouTube Data API, read-only) or a Google
@@ -22,11 +22,11 @@ object YouTubeSubs {
 
     fun all(ctx: Context): List<SubChannel> = runCatching {
         val a = JSONArray(prefs(ctx).getString("list", "[]"))
-        (0 until a.length()).map { a.getJSONObject(it).let { o -> SubChannel(o.getString("id"), o.optString("title"), o.optBoolean("fav")) } }
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> SubChannel(o.getString("id"), o.optString("title"), o.optBoolean("fav"), o.optBoolean("xn")) } }
     }.getOrDefault(emptyList())
 
     private fun save(ctx: Context, l: List<SubChannel>) = prefs(ctx).edit().putString(
-        "list", JSONArray().apply { l.forEach { put(JSONObject().put("id", it.id).put("title", it.title).put("fav", it.favourite)) } }.toString()
+        "list", JSONArray().apply { l.forEach { put(JSONObject().put("id", it.id).put("title", it.title).put("fav", it.favourite).put("xn", it.christian)) } }.toString()
     ).apply()
 
     fun favourites(ctx: Context): List<SubChannel> = all(ctx).filter { it.favourite }
@@ -46,6 +46,28 @@ object YouTubeSubs {
         save(ctx, found.distinctBy { it.first }.map { (id, t) -> old[id]?.copy(title = t) ?: SubChannel(id, t, false) }
             .sortedBy { it.title.lowercase() })
         favNames = null
+    }
+
+    /**
+     * Signed-in import: reads your subscriptions from YouTube, finds the Christian ones and makes
+     * those favourites (only for channels that are new to the app; earlier choices are kept).
+     */
+    suspend fun importFromAccount(ctx: Context, onProgress: (String) -> Unit = {}): Pair<Int, Int> {
+        onProgress(com.faithscroll.app.util.tr("Reading your subscriptions…", "Leser abonnementene dine …"))
+        val found = YouTubeAccount.subscriptions()
+        if (found.isEmpty()) error(com.faithscroll.app.util.tr("No subscriptions found on this account", "Fant ingen abonnementer på denne kontoen"))
+        val christian = YouTubeAccount.christianChannels(found) { n ->
+            onProgress(com.faithscroll.app.util.tr("Finding Christian channels… $n/${found.size}", "Finner kristne kanaler … $n/${found.size}"))
+        }
+        val old = all(ctx).associateBy { it.id }
+        save(ctx, found.distinctBy { it.first }.map { (id, t) ->
+            val x = id in christian
+            old[id]?.copy(title = t, christian = x) ?: SubChannel(id, t, favourite = x, christian = x)
+        }.sortedWith(compareBy({ !it.christian }, { it.title.lowercase() })))
+        favNames = null
+        YouTubeSubsCheck.favouriteNames = favourites(ctx).map { it.title }.toSet()
+        Diag.log("youtube", "imported ${found.size} channels, ${christian.size} Christian")
+        return found.size to christian.size
     }
 
     fun clear(ctx: Context) { save(ctx, emptyList()); favNames = null }

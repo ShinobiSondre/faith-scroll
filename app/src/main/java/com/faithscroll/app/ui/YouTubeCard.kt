@@ -3,7 +3,6 @@ package com.faithscroll.app.ui
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,14 +39,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.faithscroll.app.data.YouTubeAccount
 import com.faithscroll.app.data.YouTubeSubs
 import com.faithscroll.app.util.tr
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.launch
-
-private const val YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 
 /** Connect YouTube: pick subscribed channels whose new videos should be favourites in your feed. */
 @Composable
@@ -67,20 +62,23 @@ fun YouTubeCard(onChanged: () -> Unit) {
         picking = true
     }
 
-    fun fetch(token: String?) {
-        if (token.isNullOrBlank()) { busy = false; return }
-        scope.launch {
-            runCatching { YouTubeSubs.fetchWithToken(ctx, token) }
-                .onSuccess { afterImport(it) }
-                .onFailure { com.faithscroll.app.data.Diag.err("youtube", "reading subscriptions failed", it); setupHelp = it.message }
-            busy = false
-        }
-    }
+    var status by remember { mutableStateOf<String?>(null) }
+    var login by remember { mutableStateOf(false) }
+    var signedIn by remember { mutableStateOf(YouTubeAccount.signedIn()) }
 
-    val signIn = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
-        val token = runCatching { activity?.let { Identity.getAuthorizationClient(it).getAuthorizationResultFromIntent(res.data).accessToken } }.getOrNull()
-        if (token == null) { busy = false; com.faithscroll.app.data.Diag.log("youtube", "sign-in returned no token (resultCode=${res.resultCode})") }
-        fetch(token)
+    fun readAccount() {
+        busy = true
+        scope.launch {
+            runCatching { YouTubeSubs.importFromAccount(ctx) { status = it } }
+                .onSuccess { (n, x) ->
+                    subs = YouTubeSubs.all(ctx)
+                    Toast.makeText(ctx, tr("Found $n channels – $x look Christian and were added as favourites.",
+                        "Fant $n kanaler – $x ser kristne ut og ble lagt til som favoritter."), Toast.LENGTH_LONG).show()
+                    picking = true
+                }
+                .onFailure { com.faithscroll.app.data.Diag.err("youtube", "reading subscriptions failed", it); setupHelp = it.message ?: it.toString() }
+            status = null; busy = false
+        }
     }
 
     val takeout = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -103,26 +101,24 @@ fun YouTubeCard(onChanged: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Button(
-            onClick = {
-                val act = activity ?: return@Button
-                busy = true
-                val req = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(YT_SCOPE))).build()
-                Identity.getAuthorizationClient(act).authorize(req)
-                    .addOnSuccessListener { r ->
-                        val pi = r.pendingIntent
-                        if (r.hasResolution() && pi != null) signIn.launch(IntentSenderRequest.Builder(pi.intentSender).build())
-                        else fetch(r.accessToken)
-                    }
-                    .addOnFailureListener { e -> busy = false; com.faithscroll.app.data.Diag.err("youtube", "Google sign-in failed", e); setupHelp = e.message ?: e.toString() }
-            },
+            onClick = { if (YouTubeAccount.signedIn()) readAccount() else login = true },
             enabled = !busy,
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink),
             modifier = Modifier.fillMaxWidth()
-        ) { Text(if (busy) tr("Connecting…", "Kobler til …") else tr("Sign in with Google", "Logg inn med Google")) }
+        ) {
+            Text(when {
+                busy -> status ?: tr("Connecting…", "Kobler til …")
+                signedIn -> tr("Refresh my subscriptions", "Oppdater abonnementene mine")
+                else -> tr("Sign in with Google", "Logg inn med Google")
+            })
+        }
         OutlinedButton(
             onClick = { takeout.launch(arrayOf("text/*", "text/csv", "text/comma-separated-values", "application/zip", "application/octet-stream")) },
             enabled = !busy, modifier = Modifier.fillMaxWidth()
         ) { Text(tr("Import from Google Takeout", "Importer fra Google Takeout"), color = Gold) }
+        if (signedIn) TextButton(onClick = { YouTubeAccount.signOut(); signedIn = false }, enabled = !busy) {
+            Text(tr("Sign out of YouTube", "Logg ut av YouTube"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+        }
 
         if (subs.isNotEmpty()) {
             val favs = subs.count { it.favourite }
@@ -145,6 +141,9 @@ fun YouTubeCard(onChanged: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { YouTubeSubs.setAllFavourite(ctx, true); subs = YouTubeSubs.all(ctx) }) { Text(tr("All", "Alle"), color = Gold) }
                         TextButton(onClick = { YouTubeSubs.setAllFavourite(ctx, false); subs = YouTubeSubs.all(ctx) }) { Text(tr("None", "Ingen"), color = Gold) }
+                        if (subs.any { it.christian }) TextButton(onClick = {
+                            subs.forEach { YouTubeSubs.setFavourite(ctx, it.id, it.christian) }; subs = YouTubeSubs.all(ctx)
+                        }) { Text(tr("Christian ✝", "Kristne ✝"), color = Gold) }
                     }
                     LazyColumn(Modifier.heightIn(max = 420.dp)) {
                         items(subs, key = { it.id }) { c ->
@@ -159,7 +158,7 @@ fun YouTubeCard(onChanged: () -> Unit) {
                                     onCheckedChange = { YouTubeSubs.setFavourite(ctx, c.id, it); subs = YouTubeSubs.all(ctx) },
                                     colors = CheckboxDefaults.colors(checkedColor = Gold, checkmarkColor = Ink)
                                 )
-                                Text(c.title, color = Color.White, fontSize = 15.sp)
+                                Text(c.title + if (c.christian) "  ✝" else "", color = Color.White, fontSize = 15.sp)
                             }
                         }
                     }
@@ -169,15 +168,21 @@ fun YouTubeCard(onChanged: () -> Unit) {
         )
     }
 
+    if (login) YouTubeLoginDialog { ok ->
+        login = false
+        signedIn = YouTubeAccount.signedIn()
+        if (ok || signedIn) readAccount()
+    }
+
     setupHelp?.let { msg ->
         AlertDialog(
             onDismissRequest = { setupHelp = null },
             containerColor = Plum,
-            title = { Text(tr("Google sign-in isn't set up yet", "Google-innlogging er ikke satt opp ennå"), color = Color.White) },
+            title = { Text(tr("Couldn't read your subscriptions", "Klarte ikke å lese abonnementene dine"), color = Color.White) },
             text = {
                 Text(
-                    tr("FaithScroll must be registered once in a Google Cloud project before Google lets it read your subscriptions. Until then, use \"Import from Google Takeout\" (takeout.google.com → select only YouTube → subscriptions).",
-                        "FaithScroll må registreres én gang i et Google Cloud-prosjekt før Google lar den lese abonnementene dine. Til da kan du bruke «Importer fra Google Takeout» (takeout.google.com → velg bare YouTube → abonnementer).") +
+                    tr("Try signing in again. If Google won't allow the sign-in, use \"Import from Google Takeout\" (takeout.google.com → select only YouTube → subscriptions).",
+                        "Prøv å logge inn igjen. Hvis Google ikke tillater innloggingen, bruk «Importer fra Google Takeout» (takeout.google.com → velg bare YouTube → abonnementer).") +
                         "\n\n($msg)",
                     color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp
                 )
