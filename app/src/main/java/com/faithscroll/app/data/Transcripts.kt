@@ -7,6 +7,7 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -104,6 +105,19 @@ object Transcripts {
     }
 
     /** Transcript text around a moment, from YouTube captions or the phone's own transcript. */
+    /**
+     * Transcribes only the 90 seconds before [atMs] on the phone (for videos without captions):
+     * just that slice of audio is downloaded and recognised, so an answer comes quickly.
+     */
+    suspend fun transcribeWindow(ctx: android.content.Context, videoId: String, atMs: Long): String {
+        val from = (atMs - 90_000).coerceAtLeast(0)
+        Asr.ensure(ctx, videoId, from, atMs + 5_000)
+        kotlinx.coroutines.withTimeoutOrNull(24_000) {
+            Asr.cues(videoId).first { cues -> cues.any { it.end >= atMs - 4_000 } }
+        }
+        return Asr.cues(videoId).value.filter { it.end >= from && it.start <= atMs + 10_000 }.joinToString(" ") { it.text }
+    }
+
     suspend fun textAround(videoId: String, atMs: Long): String {
         original(videoId, urgent = true)?.let { return window(it, atMs) }
         val cues = Asr.cues(videoId).value

@@ -147,6 +147,19 @@ fun FeedScreen(
         }
     }
 
+    // Back from full screen on another video: the feed moves to that video (it continues from the same second).
+    val returnTo by com.faithscroll.app.data.PlaybackMemory.returnTo.collectAsState()
+    LaunchedEffect(returnTo, suspended) {
+        val v = returnTo ?: return@LaunchedEffect
+        if (suspended) return@LaunchedEffect
+        com.faithscroll.app.data.PlaybackMemory.returnTo.value = null
+        val cur = items.getOrNull(pager.currentPage)
+        if (cur is FeedItem.VideoItem && cur.video.id == v.id) return@LaunchedEffect
+        val target = pager.currentPage + 1
+        items.add(target.coerceAtMost(items.size), FeedItem.VideoItem(v, null))
+        pager.scrollToPage(target)
+    }
+
     // Learn from time spent on each card.
     LaunchedEffect(pager) {
         var lastPage = pager.settledPage

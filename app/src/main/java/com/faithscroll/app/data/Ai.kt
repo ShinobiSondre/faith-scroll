@@ -137,7 +137,7 @@ object AskSessions {
         s.busy.value = true; s.error.value = null
         s.turns.value = s.turns.value + Ai.Turn(true, question)
         s.job = scope.launch {
-            val context = s.context ?: buildContext(video, s.atMs).also { s.context = it }
+            val context = s.context ?: buildContext(app, video, s.atMs).also { s.context = it }
             while (true) {
                 val r = runCatching { Ai.ask(app, context, s.turns.value) }
                 val e = r.exceptionOrNull()
@@ -154,13 +154,25 @@ object AskSessions {
         }
     }
 
-    private suspend fun buildContext(video: Video, atMs: Long): String {
+    private suspend fun buildContext(appCtx: Context, video: Video, atMs: Long): String {
         val t0 = System.currentTimeMillis()
-        // YouTube captions are usually cached already (fetched ahead); otherwise this takes ~1–2 s.
-        val words = runCatching { kotlinx.coroutines.withTimeoutOrNull(10_000) { Transcripts.textAround(video.id, atMs) } }.getOrNull().orEmpty()
-        Diag.log("ai", "${video.id}: transcript ready in ${(System.currentTimeMillis() - t0) / 1000.0} s")
-        val desc = StreamResolver.cached(video.id)?.description.orEmpty().take(700)
-        Diag.log("ai", "${video.id}: asking with ${words.length} chars of transcript, ${desc.length} of description")
+        // Title + description from YouTube (one quick request, usually already cached).
+        val info = runCatching { kotlinx.coroutines.withTimeoutOrNull(5_000) { WatchPage.info(video.id) } }.getOrNull()
+        val desc = (info?.description?.takeIf { it.isNotBlank() } ?: StreamResolver.cached(video.id)?.description).orEmpty().take(1200)
+        // Only ~5 minutes around the pause: 4 min before, 1 min after. YouTube captions are instant.
+        var source = "YouTube captions"
+        var words = runCatching { kotlinx.coroutines.withTimeoutOrNull(6_000) { Transcripts.original(video.id, urgent = true) } }.getOrNull()
+            ?.let { Transcripts.window(it, atMs, beforeMs = 240_000, afterMs = 60_000) }.orEmpty()
+        if (words.isBlank()) {
+            // No captions: transcribe just the 90 seconds before the pause on the phone (English speech).
+            val lang = info?.let { WatchPage.spoken(it) }?.takeIf { it.isNotBlank() }
+                ?: LangFilter.spokenFromText(video.title + "\n" + desc)
+            if (lang == null || lang == "en") {
+                source = "phone transcription"
+                words = runCatching { kotlinx.coroutines.withTimeoutOrNull(25_000) { Transcripts.transcribeWindow(appCtx, video.id, atMs) } }.getOrNull().orEmpty()
+            }
+        }
+        Diag.log("ai", "${video.id}: ${words.length} chars of transcript ($source), ${desc.length} of description in ${(System.currentTimeMillis() - t0) / 1000.0} s")
         val mm = atMs / 60000; val ss = (atMs / 1000) % 60
         return buildString {
             append("Video: \"${video.title}\" by ${video.channel}\n")

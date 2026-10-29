@@ -74,11 +74,13 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () -> Unit) {
+fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onLeaveAt: (Video) -> Unit = {}, onCloseRaw: () -> Unit) {
     val ctx = LocalContext.current
     val activity = remember(ctx) { ctx.findActivity() }
     val list = remember(start, queue) { if (queue.any { it.id == start.id }) queue else listOf(start) + queue }
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.id == start.id }.coerceAtLeast(0)) { list.size }
+    // Closing tells the feed which video you ended on (it continues there, from the same second).
+    val onClose: () -> Unit = { list.getOrNull(pager.settledPage)?.let(onLeaveAt); onCloseRaw() }
     var landscape by remember { mutableStateOf(false) }
     var playing by remember { mutableStateOf(true) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()

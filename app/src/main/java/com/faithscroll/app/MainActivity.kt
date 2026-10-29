@@ -176,7 +176,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var social by remember { mutableStateOf<SocialLibrary?>(null) }
     var socialVersion by remember { mutableIntStateOf(0) }
     var player by remember { mutableStateOf<Pair<Video, List<Video>>?>(null) }
-    val openVideo: (Video, List<Video>) -> Unit = { v, q -> player = v to q }
+    var playerFromFeed by remember { mutableStateOf(false) }
+    val openVideo: (Video, List<Video>) -> Unit = { v, q -> playerFromFeed = false; player = v to q }
     var reading by remember { mutableStateOf<Verse?>(null) }
     var widgetVerse by remember { mutableStateOf<Verse?>(null) }
     var onboarding by remember { mutableStateOf(!Taste.isOnboarded(ctx)) }
@@ -278,7 +279,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     state, verifiedFeed, social, bottomInset,
                     suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null,
                     twoPane = twoPane,
-                    onOpenVideo = { v -> openVideo(v, verifiedFeed) },
+                    onOpenVideo = { v -> openVideo(v, verifiedFeed); playerFromFeed = true },
                     onBeStill = { beStill = true }
                 )
             }
@@ -322,7 +323,9 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
 
         widgetVerse?.let { v -> VerseOverlay(v, state, onRead = { reading = it }) { widgetVerse = null } }
 
-        player?.let { (v, q) -> PlayerScreen(v, q, state) { player = null } }
+        player?.let { (v, q) ->
+            PlayerScreen(v, q, state, onLeaveAt = { if (playerFromFeed) com.faithscroll.app.data.PlaybackMemory.returnTo.value = it }) { player = null }
+        }
 
         if (onboarding) OnboardingScreen {
             onboarding = false; tasteVersion++; tab = 0

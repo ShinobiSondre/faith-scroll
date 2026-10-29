@@ -126,8 +126,18 @@ fun VideoCard(
     val cardScope = androidx.compose.runtime.rememberCoroutineScope()
     // When the app's own player fails, continue in YouTube's player from the same second.
     LaunchedEffect(playback.failed) { if (playback.failed) { embedStart = (playback.position / 1000).toInt(); com.faithscroll.app.data.Diag.log("play", "${video.id}: own player failed at ${embedStart}s → YouTube player") } }
+    // Coming from / going to full screen: continue from the same second.
+    LaunchedEffect(isActive, playback.ready, suspended) {
+        if (isActive && playback.ready && !suspended) com.faithscroll.app.data.PlaybackMemory.take(video.id)?.let { playback.seekTo(it) }
+    }
+    if (immersive) androidx.compose.runtime.DisposableEffect(video.id) {
+        onDispose { com.faithscroll.app.data.PlaybackMemory.put(video.id, if (playback.failed) embedPos else playback.position) }
+    }
     // Autoplay: every card starts playing when it comes on screen.
     LaunchedEffect(isActive) { paused = false; controls = false }
+    // Back from full screen: keep playing here.
+    var pausedForFull by remember(video.id) { mutableStateOf(false) }
+    LaunchedEffect(suspended) { if (!suspended && pausedForFull) { pausedForFull = false; paused = false } }
 
     // Controls fade away 2.5 s after the last touch while the video is playing.
     LaunchedEffect(controls, controlsTouch, paused) {
@@ -293,7 +303,10 @@ fun VideoCard(
                 tr("Subtitles", "Tekst"), CaptionSettings.on, if (CaptionSettings.on) Gold else Color.White
             ) { CaptionSettings.toggle(ctx) }
             if (onRotate != null) RailButton(Icons.Filled.ScreenRotation, tr("Rotate", "Roter"), landscape, Color.White, onRotate)
-            if (onExpand != null) RailButton(Icons.Filled.OpenInFull, tr("Full", "Full"), false, Color.White) { paused = true; onExpand() }
+            if (onExpand != null) RailButton(Icons.Filled.OpenInFull, tr("Full", "Full"), false, Color.White) {
+                com.faithscroll.app.data.PlaybackMemory.put(video.id, if (playback.failed) embedPos else playback.position)
+                paused = true; pausedForFull = true; onExpand()
+            }
         }
 
         // Expanded details
