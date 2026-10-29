@@ -230,14 +230,15 @@ private fun SourcesCard() {
     var busy by remember { mutableStateOf(false) }
     var boards by remember { mutableStateOf(SocialRepository.userBoards(ctx)) }
     var tiktoks by remember { mutableStateOf(SocialRepository.userTikToks(ctx)) }
+    var subs by remember { mutableStateOf(SocialRepository.userSubs(ctx)) }
 
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
         Text("Your sources", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Text("Paste a Pinterest board or a TikTok link and it shows up in your feed.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Text("Paste a Pinterest board, a subreddit (like r/TrueChristian) or a TikTok link and it shows up in your feed.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
         Spacer(Modifier.height(12.dp))
         androidx.compose.material3.OutlinedTextField(
             value = link, onValueChange = { link = it }, singleLine = true,
-            placeholder = { Text("pinterest.com/… or tiktok.com/@…/video/…") },
+            placeholder = { Text("r/… · pinterest.com/… · tiktok.com/…") },
             modifier = Modifier.fillMaxWidth(),
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Gold, cursorColor = Gold, focusedTextColor = Color.White, unfocusedTextColor = Color.White
@@ -252,16 +253,19 @@ private fun SourcesCard() {
                     busy = false
                     if (added != null) {
                         link = ""
-                        boards = SocialRepository.userBoards(ctx); tiktoks = SocialRepository.userTikToks(ctx)
+                        boards = SocialRepository.userBoards(ctx); tiktoks = SocialRepository.userTikToks(ctx); subs = SocialRepository.userSubs(ctx)
                         Toast.makeText(ctx, "Added $added", Toast.LENGTH_SHORT).show()
                         sourcesChanged()
-                    } else Toast.makeText(ctx, "That link isn't a Pinterest board or TikTok video.", Toast.LENGTH_LONG).show()
+                    } else Toast.makeText(ctx, "That isn't a subreddit, Pinterest board or TikTok link.", Toast.LENGTH_LONG).show()
                 }
             },
             enabled = link.isNotBlank() && !busy,
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
         ) { Text(if (busy) "Adding…" else "Add to my feed") }
-        if (boards.isNotEmpty() || tiktoks.isNotEmpty()) Spacer(Modifier.height(12.dp))
+        if (boards.isNotEmpty() || tiktoks.isNotEmpty() || subs.isNotEmpty()) Spacer(Modifier.height(12.dp))
+        subs.forEach { r ->
+            SourceRow("Reddit · r/$r") { SocialRepository.removeSub(ctx, r); subs = SocialRepository.userSubs(ctx); sourcesChanged() }
+        }
         boards.forEach { b ->
             SourceRow("Pinterest · $b") { SocialRepository.removeBoard(ctx, b); boards = SocialRepository.userBoards(ctx); sourcesChanged() }
         }

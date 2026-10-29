@@ -80,7 +80,14 @@ object StreamResolver {
     fun cached(id: String): ResolvedStream? =
         cache[id]?.takeIf { System.currentTimeMillis() - it.first < TTL }?.second
 
+    /** Videos that already have a direct stream (Reddit) skip the lookup. */
+    private val direct = ConcurrentHashMap<String, String>()
+    fun registerDirect(id: String, url: String) { if (url.isNotBlank()) direct[id] = url }
+
     suspend fun resolve(id: String): ResolvedStream? {
+        direct[id]?.let { u ->
+            return if (u.contains(".m3u8")) ResolvedStream(null, null, null, u) else ResolvedStream(null, null, u, null)
+        }
         cached(id)?.let { return it }
         val lock = locks.getOrPut(id) { Mutex() }
         return lock.withLock {

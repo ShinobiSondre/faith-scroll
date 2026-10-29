@@ -32,13 +32,15 @@ object Prefs {
             val a = JSONArray(raw)
             (0 until a.length()).map { i ->
                 val o = a.getJSONObject(i)
-                Video(o.getString("id"), o.optString("title"), o.optString("channel"), o.optString("kind", Video.KIND_STORY))
+                Video(o.getString("id"), o.optString("title"), o.optString("channel"), o.optString("kind", Video.KIND_STORY),
+                    o.optString("direct"), o.optString("thumb"), o.optString("link"))
             }
         }.getOrDefault(emptyList())
     }
     fun setSavedVideos(ctx: Context, list: List<Video>) {
         val a = JSONArray()
-        list.forEach { a.put(JSONObject().put("id", it.id).put("title", it.title).put("channel", it.channel).put("kind", it.kind)) }
+        list.forEach { a.put(JSONObject().put("id", it.id).put("title", it.title).put("channel", it.channel).put("kind", it.kind)
+            .put("direct", it.direct).put("thumb", it.thumb).put("link", it.link)) }
         p(ctx).edit().putString("saved_videos", a.toString()).apply()
     }
 

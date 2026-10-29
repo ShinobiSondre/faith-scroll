@@ -13,14 +13,22 @@ import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
 
-data class Video(val id: String, val title: String, val channel: String, val kind: String = KIND_STORY) {
+data class Video(
+    val id: String,
+    val title: String,
+    val channel: String,
+    val kind: String = KIND_STORY,
+    val direct: String = "", // a direct stream (e.g. Reddit video); empty for YouTube
+    val thumb: String = "",
+    val link: String = ""
+) {
     companion object {
         const val KIND_STORY = "story"
         const val KIND_SERMON = "sermon"
         const val KIND_SHORT = "short"
     }
-    val thumbnail: String get() = "https://i.ytimg.com/vi/$id/hqdefault.jpg"
-    val url: String get() = "https://www.youtube.com/watch?v=$id"
+    val thumbnail: String get() = thumb.ifBlank { "https://i.ytimg.com/vi/$id/hqdefault.jpg" }
+    val url: String get() = link.ifBlank { "https://www.youtube.com/watch?v=$id" }
     val mobileUrl: String get() = "https://m.youtube.com/watch?v=$id"
 }
 
@@ -116,11 +124,15 @@ object VideoRepository {
 
     fun Video.toJson(): JSONObject =
         JSONObject().put("id", id).put("title", title).put("channel", channel).put("kind", kind)
+            .put("direct", direct).put("thumb", thumb).put("link", link)
 
     fun parseVideos(a: JSONArray): List<Video> = (0 until a.length()).mapNotNull { i ->
         val o = a.optJSONObject(i) ?: return@mapNotNull null
         val id = o.optString("id")
-        if (id.isBlank()) null else Video(id, o.optString("title"), o.optString("channel"), o.optString("kind", Video.KIND_STORY))
+        if (id.isBlank()) null else Video(
+            id, o.optString("title"), o.optString("channel"), o.optString("kind", Video.KIND_STORY),
+            o.optString("direct"), o.optString("thumb"), o.optString("link")
+        )
     }
 
     private fun fetchChannel(channelId: String, name: String, kind: String): List<Video> {

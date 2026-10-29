@@ -167,7 +167,12 @@ fun VideoCard(
                 Spacer(Modifier.height(8.dp))
             }
             Text(
-                if (video.kind == Video.KIND_SERMON) "SERMON" else "REAL STORIES OF FAITH",
+                when {
+                    video.kind == Video.KIND_SERMON -> "SERMON"
+                    video.channel.startsWith("r/") -> "FROM REDDIT"
+                    video.kind == Video.KIND_SHORT -> "SHORT"
+                    else -> "REAL STORIES OF FAITH"
+                },
                 color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
             )
             Spacer(Modifier.height(6.dp))

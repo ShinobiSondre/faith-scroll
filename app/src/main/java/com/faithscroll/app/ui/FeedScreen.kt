@@ -311,7 +311,7 @@ private fun SidePanel(
                 }
                 is FeedItem.PinItem -> {
                     val pn = current.pin
-                    Text("FROM PINTEREST", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text(if (pn.board.startsWith("r/")) "FROM REDDIT" else "FROM PINTEREST", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.height(8.dp))
                     if (pn.title.isNotBlank()) Text(pn.title, color = Color.White, fontSize = 20.sp, lineHeight = 26.sp, fontFamily = FontFamily.Serif)
                     Text(pn.board, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)

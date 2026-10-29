@@ -103,7 +103,7 @@ fun PinCard(
 
         Column(Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 26.dp)) {
             reason?.let { ReasonTag(it); Spacer(Modifier.height(8.dp)) }
-            Text("via Pinterest · ${pin.board.substringBefore("/")}", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text(if (pin.board.startsWith("r/")) "via Reddit · ${pin.board}" else "via Pinterest · ${pin.board.substringBefore("/")}", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
             if (pin.title.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(pin.title, color = Color.White, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)

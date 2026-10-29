@@ -152,15 +152,19 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     )
 
     // Mostly videos: shorts, testimonies and sermons take turns.
-    val feedVideos = remember(library) {
-        val l = library ?: return@remember emptyList<Video>()
+    val feedVideos = remember(library, social) {
+        val l = library
+        val clips = social?.clips.orEmpty()
+        if (l == null && clips.isEmpty()) return@remember emptyList<Video>()
+        val shorts = l?.shorts.orEmpty(); val stories = l?.stories.orEmpty(); val sermons = l?.sermons.orEmpty()
         val out = mutableListOf<Video>()
-        for (i in 0 until maxOf(l.stories.size, l.sermons.size, l.shorts.size)) {
-            l.shorts.getOrNull(i)?.let(out::add)
-            l.stories.getOrNull(i)?.let(out::add)
-            l.sermons.getOrNull(i)?.let(out::add)
+        for (i in 0 until maxOf(stories.size, sermons.size, shorts.size, clips.size)) {
+            shorts.getOrNull(i)?.let(out::add)
+            clips.getOrNull(i)?.let(out::add)
+            stories.getOrNull(i)?.let(out::add)
+            sermons.getOrNull(i)?.let(out::add)
         }
-        out
+        out.distinctBy { it.id }
     }
 
     Box(Modifier.fillMaxSize().background(Ink)) {
