@@ -64,8 +64,7 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var input by remember { mutableStateOf("") }
-    var hasKey by remember { mutableStateOf(Ai.key(ctx).isNotBlank()) }
-    var keyInput by remember { mutableStateOf("") }
+    var wait by remember { mutableStateOf(0) } // seconds until the free AI accepts the next question
     var context by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
 
@@ -75,8 +74,7 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
         busy = true; error = null
         turns += Ai.Turn(true, question)
         val ctxText = context ?: run {
-            val t = runCatching { Transcripts.original(video.id) }.getOrNull()
-            val words = t?.let { Transcripts.window(it, atMs) }.orEmpty()
+            val words = runCatching { Transcripts.textAround(video.id, atMs) }.getOrDefault("")
             val mm = atMs / 60000; val ss = (atMs / 1000) % 60
             buildString {
                 append("Video: \"${video.title}\" by ${video.channel}\n")
@@ -84,14 +82,24 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
                 append(if (words.isNotBlank()) "Transcript around this moment:\n\"$words\"" else "No transcript is available for this video.")
             }.also { context = it }
         }
-        runCatching { Ai.ask(ctx, ctxText, turns.toList()) }
-            .onSuccess { turns += Ai.Turn(false, it) }
-            .onFailure { error = it.message ?: tr("Something went wrong.", "Noe gikk galt."); turns.removeAt(turns.size - 1) }
+        while (true) {
+            val res = runCatching { Ai.ask(ctxText, turns.toList()) }
+            val e = res.exceptionOrNull()
+            if (e is Ai.RateLimited) {
+                // Free tier: one question every ~30 s. Wait, then ask automatically.
+                wait = e.seconds
+                while (wait > 0) { kotlinx.coroutines.delay(1000); wait-- }
+                continue
+            }
+            res.onSuccess { turns += Ai.Turn(false, it) }
+                .onFailure { error = it.message ?: tr("Something went wrong.", "Noe gikk galt."); turns.removeAt(turns.size - 1) }
+            break
+        }
         busy = false
         list.animateScrollToItem(maxOf(0, turns.size))
     }
 
-    LaunchedEffect(hasKey) { if (hasKey && turns.isEmpty()) send(first) }
+    LaunchedEffect(Unit) { if (turns.isEmpty()) send(first) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 20.dp).imePadding()) {
@@ -99,27 +107,6 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
             Text(video.title, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1)
             Spacer(Modifier.height(12.dp))
 
-            if (!hasKey) {
-                Text(
-                    tr(
-                        "This uses Claude, Anthropic's AI. Add your own Anthropic API key once (console.anthropic.com → API keys). It's stored only on this phone; each question costs a fraction of a cent.",
-                        "Dette bruker Claude, Anthropics KI. Legg inn din egen Anthropic API-nøkkel én gang (console.anthropic.com → API keys). Den lagres bare på denne telefonen; hvert spørsmål koster en brøkdel av en cent."
-                    ), color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = keyInput, onValueChange = { keyInput = it }, singleLine = true,
-                    placeholder = { Text("sk-ant-…") }, modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, cursorColor = Gold, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
-                )
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = { Ai.setKey(ctx, keyInput); hasKey = keyInput.isNotBlank() },
-                    enabled = keyInput.length > 20,
-                    colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
-                ) { Text(tr("Save key and ask", "Lagre nøkkel og spør")) }
-                return@Column
-            }
 
             LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(turns) { t ->
@@ -136,20 +123,16 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Gold, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text(tr("Thinking…", "Tenker …"), color = Color.White.copy(alpha = 0.7f))
+                        Text(
+                            if (wait > 0) tr("The free AI allows one question every 30 seconds. Asking in $wait s…", "Den gratis KI-en tillater ett spørsmål hvert 30. sekund. Spør om $wait s …")
+                            else tr("Thinking…", "Tenker …"),
+                            color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp
+                        )
                     }
                 }
                 error?.let { e ->
                     item {
                         Text(tr("Couldn't get an answer: ", "Fikk ikke svar: ") + e, color = HeartRed, fontSize = 13.sp)
-                        if (e.contains("auth", true) || e.contains("key", true)) {
-                            Text(tr("Change API key", "Bytt API-nøkkel"), color = Gold, fontSize = 13.sp,
-                                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp))
-                                    .background(Color.White.copy(alpha = 0.08f))
-                                    .clickable { Ai.setKey(ctx, ""); hasKey = false; error = null; turns.clear() }
-                                    .padding(8.dp)
-                            )
-                        }
                     }
                 }
             }

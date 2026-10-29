@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.withPermit
 object Prefetcher {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = HashMap<String, Job>()
+    private val asrJobs = HashMap<String, Job>()
     private val gate = Semaphore(2) // at most two downloads at once, so the playing video keeps priority
 
     @Synchronized
@@ -33,6 +34,15 @@ object Prefetcher {
         videos.forEach { v ->
             if (jobs[v.id]?.isActive == true) return@forEach
             jobs[v.id] = scope.launch { gate.withPermit { StreamResolver.preload(app, v.id) } }
+        }
+
+        // Subtitles: if the next video has no usable YouTube captions, transcribe its first 90 s now.
+        val captionsOn = app.getSharedPreferences("captions", Context.MODE_PRIVATE).getBoolean("on", true)
+        videos.firstOrNull()?.takeIf { captionsOn && it.direct.isBlank() }?.let { next ->
+            if (asrJobs[next.id]?.isActive != true) asrJobs[next.id] = scope.launch {
+                if (Transcripts.original(next.id) == null) Asr.ensure(app, next.id, 0, maxMs = 90_000)
+                else Transcripts.inAppLanguage(next.id) // translate YouTube captions ahead too
+            }
         }
 
         // Images are small: warm the next several thumbnails and illustrations.

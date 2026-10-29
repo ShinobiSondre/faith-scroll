@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.faithscroll.app.data.Transcript
 import com.faithscroll.app.data.Transcripts
+import com.faithscroll.app.data.Asr
+import com.faithscroll.app.util.tr
+import androidx.compose.runtime.collectAsState
 
 /** Subtitles on/off, remembered between videos and launches. */
 object CaptionSettings {
@@ -30,7 +33,7 @@ object CaptionSettings {
     fun load(ctx: Context) {
         if (loaded) return
         loaded = true
-        on = ctx.getSharedPreferences("captions", Context.MODE_PRIVATE).getBoolean("on", false)
+        on = ctx.getSharedPreferences("captions", Context.MODE_PRIVATE).getBoolean("on", true) // on by default
     }
 
     fun toggle(ctx: Context) {
@@ -40,28 +43,51 @@ object CaptionSettings {
 }
 
 /**
- * Live subtitles in the app language: the video's captions, synced to playback and translated
- * on the phone when the video speaks another language.
+ * Live subtitles in the app language. Uses the video's own captions when YouTube provides them;
+ * otherwise the phone listens and writes its own (see Asr), translated line by line.
  */
 @Composable
 fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modifier) {
-    var transcript by remember(videoId) { mutableStateOf<Transcript?>(null) }
-    var missing by remember(videoId) { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var youtube by remember(videoId) { mutableStateOf<Transcript?>(null) }
+    var useAsr by remember(videoId) { mutableStateOf(false) }
     LaunchedEffect(videoId) {
-        val t = Transcripts.inAppLanguage(videoId) { partial -> transcript = partial }
-        if (t == null) missing = true else transcript = t
+        val t = Transcripts.inAppLanguage(videoId) { partial -> youtube = partial }
+        if (t == null) useAsr = true else youtube = t
     }
-    val line = transcript?.let { Transcripts.cueAt(it, positionMs) }
+
+    var line: String? = null
+    var status: String? = null
+    if (youtube != null) {
+        line = Transcripts.cueAt(youtube!!, positionMs)
+    } else if (useAsr) {
+        // Keep the phone's transcript running from where you're watching.
+        LaunchedEffect(videoId, positionMs / 5000) { Asr.ensure(ctx, videoId, positionMs) }
+        val live = remember(videoId) { Asr.live(videoId) }
+        val cues by live.cues.collectAsState()
+        val state by live.state.collectAsState()
+        val progress by Asr.modelProgress.collectAsState()
+        val raw = cues.lastOrNull { it.start <= positionMs && positionMs <= it.end + 900 }?.text
+        var shown by remember(videoId) { mutableStateOf<Pair<String, String>?>(null) }
+        LaunchedEffect(raw) { if (raw != null) shown = raw to Transcripts.translateLine(raw) }
+        line = shown?.takeIf { it.first == raw }?.second ?: raw
+        if (line == null) status = when (state) {
+            Asr.State.DOWNLOADING_MODEL -> tr("Getting subtitles ready (one-time download ${(progress * 100).toInt()} %)…", "Gjør klar undertekster (engangsnedlasting ${(progress * 100).toInt()} %) …")
+            Asr.State.LOADING_AUDIO, Asr.State.IDLE -> tr("Preparing subtitles…", "Lager undertekster …")
+            Asr.State.FAILED -> tr("No subtitles for this video", "Ingen undertekster for denne videoen")
+            else -> null
+        }
+    }
+
     if (line != null) {
         Text(
             line,
             color = Color.White, fontSize = 17.sp, lineHeight = 23.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
             modifier = modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 10.dp, vertical = 5.dp)
         )
-    } else if (missing) {
+    } else if (status != null) {
         Text(
-            com.faithscroll.app.util.tr("No subtitles for this video", "Ingen undertekster for denne videoen"),
-            color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp,
+            status, color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp,
             modifier = modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.4f)).padding(horizontal = 8.dp, vertical = 3.dp)
         )
     }

@@ -35,7 +35,9 @@ object Transcripts {
                 .thenByDescending { !it.auto }
                 .thenByDescending { base(it.lang) == "en" }
         ).first()
-        val body = Http.get(track.url, 15_000) ?: return@withContext null
+        // YouTube sometimes refuses caption downloads outside its own player (empty reply).
+        // Then the phone makes its own transcript instead (see Asr).
+        val body = Http.get(track.url, 15_000)?.takeIf { it.contains("-->") } ?: return@withContext null
         val cues = parseVtt(body, track.auto)
         if (cues.isEmpty()) return@withContext null
         Transcript(base(track.lang), cues, false).also { cache["o|$videoId"] = it }
@@ -65,6 +67,33 @@ object Transcripts {
         } finally {
             translator.close()
         }
+    }
+
+    // ---- Line-by-line translation (for live transcripts) ----
+    private val translators = ConcurrentHashMap<String, com.google.mlkit.nl.translate.Translator>()
+    private val lineCache = ConcurrentHashMap<String, String>()
+
+    /** Translates one subtitle line into the app language (on the phone; the language pack downloads once). */
+    suspend fun translateLine(text: String, fromLang: String = "en"): String = withContext(Dispatchers.IO) {
+        val want = target()
+        if (fromLang == want) return@withContext text
+        lineCache["$want|$text"]?.let { return@withContext it }
+        val src = TranslateLanguage.fromLanguageTag(fromLang) ?: return@withContext text
+        val dst = TranslateLanguage.fromLanguageTag(want) ?: return@withContext text
+        val tr = translators.getOrPut("$src>$dst") {
+            Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(src).setTargetLanguage(dst).build())
+        }
+        runCatching {
+            Tasks.await(tr.downloadModelIfNeeded(DownloadConditions.Builder().build()), 3, TimeUnit.MINUTES)
+            Tasks.await(tr.translate(text), 10, TimeUnit.SECONDS)
+        }.getOrNull()?.also { lineCache["$want|$text"] = it } ?: text
+    }
+
+    /** Transcript text around a moment, from YouTube captions or the phone's own transcript. */
+    suspend fun textAround(videoId: String, atMs: Long): String {
+        original(videoId)?.let { return window(it, atMs) }
+        val cues = Asr.cues(videoId).value
+        return cues.filter { it.end >= atMs - 90_000 && it.start <= atMs + 10_000 }.joinToString(" ") { it.text }
     }
 
     /** The words around a moment (for "What do they mean here?"). */

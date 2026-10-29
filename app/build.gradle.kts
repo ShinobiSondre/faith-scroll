@@ -18,6 +18,8 @@ android {
         versionCode = runNumber
         versionName = "1.0.$runNumber"
         buildConfigField("String", "CONTENT_REPO", "\"$contentRepo\"")
+        // 64-bit and 32-bit ARM cover practically every phone; skipping emulator CPUs keeps the APK smaller.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -76,5 +78,8 @@ dependencies {
     implementation("com.google.mlkit:translate:17.0.3")
     // Google sign-in to read your YouTube subscriptions
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+    // Offline speech recognition: makes subtitles for videos without captions
+    implementation("com.alphacephei:vosk-android:0.3.47")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 }
