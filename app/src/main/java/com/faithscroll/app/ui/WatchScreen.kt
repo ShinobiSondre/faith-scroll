@@ -50,7 +50,8 @@ import com.faithscroll.app.data.VideoLibrary
 /** Browse sermons and testimonies; everything plays in the in-app player. */
 @Composable
 fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Video>) -> Unit) {
-    var filter by rememberSaveable { mutableStateOf("Sermons") }
+    var filter by rememberSaveable { mutableStateOf("For you") }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Column(Modifier.fillMaxSize().background(Ink).statusBarsPadding()) {
         Text("Watch", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
@@ -64,12 +65,17 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
         }
 
         val channels = remember(library) { (library.sermons + library.stories).map { it.channel }.distinct() }
-        val chips = listOf("Sermons", "Stories") + channels
+        val chips = listOf("For you", "Sermons", "Stories") + channels
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(chips) { c -> FilterChip(c, c == filter) { filter = c } }
         }
         val list = remember(library, filter) {
             when (filter) {
+                "For you" -> {
+                    // Ranked by your taste with a dash of randomness, so it never feels stale.
+                    val r = kotlin.random.Random(System.currentTimeMillis() / 600_000)
+                    library.all.sortedByDescending { com.faithscroll.app.data.Taste.scoreVideo(ctx, it) + r.nextFloat() * 1.5f }
+                }
                 "Sermons" -> library.sermons
                 "Stories" -> library.stories
                 else -> library.all.filter { it.channel == filter }

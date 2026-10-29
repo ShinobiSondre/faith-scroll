@@ -69,7 +69,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import com.faithscroll.app.data.Encouragement
+import com.faithscroll.app.data.FeedEngine
+import com.faithscroll.app.data.FeedItem
+import com.faithscroll.app.data.Taste
 import com.faithscroll.app.data.Verse
 import com.faithscroll.app.data.Video
 import com.faithscroll.app.util.Share
@@ -80,11 +86,6 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
-
-private sealed interface FeedItem {
-    data class VerseItem(val verse: Verse) : FeedItem
-    data class VideoItem(val video: Video) : FeedItem
-}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -98,29 +99,37 @@ fun FeedScreen(
     onOpenVideo: (Video) -> Unit = {},
     onReadChapter: (Verse) -> Unit
 ) {
-    val order = remember(verses, startRef) {
-        val shuffled = verses.shuffled()
-        val first = shuffled.firstOrNull { it.ref == startRef }
-        if (first != null) listOf(first) + (shuffled - first) else shuffled
-    }
-    val pager = rememberPagerState(pageCount = { 100_000 })
+    val ctx = LocalContext.current
+    val latestVideos by rememberUpdatedState(videos)
+    val engine = remember(verses, startRef) { FeedEngine(ctx, verses, { latestVideos }, startRef) }
+    val items = remember(engine) { mutableStateListOf<FeedItem>().apply { repeat(6) { add(engine.next()) } } }
+    val pager = rememberPagerState(pageCount = { items.size })
 
-    // Videos join the feed a couple of pages ahead, so the card you're looking at never changes under you.
-    var videoStart by remember { mutableIntStateOf(Int.MAX_VALUE) }
-    LaunchedEffect(videos.isNotEmpty()) {
-        if (videos.isNotEmpty() && videoStart == Int.MAX_VALUE) videoStart = pager.currentPage + 2
+    // Keep a few cards ready ahead; each batch reflects what you've just engaged with.
+    LaunchedEffect(pager.currentPage, items.size) {
+        if (pager.currentPage >= items.size - 4) repeat(6) { items.add(engine.next()) }
     }
 
-    fun itemAt(page: Int): FeedItem {
-        if (videos.isNotEmpty() && page >= videoStart && (page - videoStart) % 3 == 2) {
-            return FeedItem.VideoItem(videos[((page - videoStart) / 3) % videos.size])
+    // Learn from time spent on each card.
+    LaunchedEffect(pager) {
+        var lastPage = pager.settledPage
+        var since = System.currentTimeMillis()
+        snapshotFlow { pager.settledPage }.collect { page ->
+            if (page != lastPage) {
+                val dwell = System.currentTimeMillis() - since
+                when (val it = items.getOrNull(lastPage)) {
+                    is FeedItem.VerseItem -> Taste.verseSeen(ctx, it.verse, dwell)
+                    is FeedItem.VideoItem -> Taste.videoSeen(ctx, it.video, dwell)
+                    null -> Unit
+                }
+                lastPage = page
+                since = System.currentTimeMillis()
+            }
         }
-        val skip = if (page >= videoStart && videos.isNotEmpty()) (page - videoStart + 1) / 3 else 0
-        return FeedItem.VerseItem(order[(page - skip) % order.size])
     }
 
     Box(Modifier.fillMaxSize().background(Ink)) {
-        if (order.isNotEmpty()) {
+        if (items.isNotEmpty()) {
             VerticalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
@@ -128,7 +137,7 @@ fun FeedScreen(
                 key = { it }
             ) { page ->
                 val offset = pageOffset(pager, page)
-                val item = itemAt(page)
+                val item = items[page]
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -142,21 +151,37 @@ fun FeedScreen(
                     when (item) {
                         is FeedItem.VerseItem -> VerseCard(
                             verse = item.verse,
+                            reason = item.reason,
                             isCurrent = pager.currentPage == page,
                             saved = item.verse.ref in state.saved,
                             liked = item.verse.ref in state.liked,
-                            onLike = { state.toggleLike(item.verse.ref) },
-                            onDoubleTapLike = { state.like(item.verse.ref) },
-                            onSave = { state.toggleSave(item.verse.ref) },
-                            onRead = { onReadChapter(item.verse) },
+                            onLike = {
+                                if (item.verse.ref !in state.liked) Taste.verseAction(ctx, item.verse, Taste.Action.LIKE)
+                                state.toggleLike(item.verse.ref)
+                            },
+                            onDoubleTapLike = {
+                                if (item.verse.ref !in state.liked) Taste.verseAction(ctx, item.verse, Taste.Action.LIKE)
+                                state.like(item.verse.ref)
+                            },
+                            onSave = {
+                                if (item.verse.ref !in state.saved) Taste.verseAction(ctx, item.verse, Taste.Action.SAVE)
+                                state.toggleSave(item.verse.ref)
+                            },
+                            onShared = { Taste.verseAction(ctx, item.verse, Taste.Action.SHARE) },
+                            onRead = { Taste.verseAction(ctx, item.verse, Taste.Action.READ); onReadChapter(item.verse) },
                             bottomInset = bottomInset
                         )
                         is FeedItem.VideoItem -> VideoCard(
                             video = item.video,
+                            reason = item.reason,
+                            onShared = { Taste.videoAction(ctx, item.video, Taste.Action.SHARE) },
                             isActive = pager.settledPage == page && !suspended,
                             saved = state.isVideoSaved(item.video.id),
-                            onSave = { state.toggleVideo(item.video) },
-                            onExpand = { onOpenVideo(item.video) },
+                            onSave = {
+                                if (!state.isVideoSaved(item.video.id)) Taste.videoAction(ctx, item.video, Taste.Action.SAVE)
+                                state.toggleVideo(item.video)
+                            },
+                            onExpand = { Taste.videoAction(ctx, item.video, Taste.Action.EXPAND); onOpenVideo(item.video) },
                             bottomInset = bottomInset
                         )
                     }
@@ -190,12 +215,14 @@ private fun pageOffset(pager: PagerState, page: Int): Float =
 @Composable
 private fun VerseCard(
     verse: Verse,
+    reason: String?,
     isCurrent: Boolean,
     saved: Boolean,
     liked: Boolean,
     onLike: () -> Unit,
     onDoubleTapLike: () -> Unit,
     onSave: () -> Unit,
+    onShared: () -> Unit,
     onRead: () -> Unit,
     bottomInset: androidx.compose.ui.unit.Dp
 ) {
@@ -265,6 +292,10 @@ private fun VerseCard(
         Column(
             Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 20.dp)
         ) {
+            if (reason != null) {
+                ReasonTag(reason)
+                Spacer(Modifier.height(8.dp))
+            }
             Text(Encouragement.forVerse(verse), color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp)
             Spacer(Modifier.height(10.dp))
             Row(
@@ -289,11 +320,26 @@ private fun VerseCard(
         ) {
             RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) "Amen" else "Like", liked, if (liked) HeartRed else Color.White, onLike)
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
-            RailButton(Icons.Filled.Share, "Share", false, Color.White) { Share.verse(ctx, verse, Palettes.argb(verse.theme)) }
+            RailButton(Icons.Filled.Share, "Share", false, Color.White) { onShared(); Share.verse(ctx, verse, Palettes.argb(verse.theme)) }
         }
 
         burstAt?.let { pos -> HeartBurst(pos, burstKey) }
     }
+}
+
+/** Small tag telling you why a card is in your feed. */
+@Composable
+fun ReasonTag(text: String) {
+    Text(
+        "✦ $text",
+        color = Gold,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = 0.28f))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    )
 }
 
 @Composable

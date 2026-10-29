@@ -53,12 +53,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.faithscroll.app.data.Prefs
+import com.faithscroll.app.data.Taste
+import androidx.compose.material.icons.filled.AutoAwesome
 import com.faithscroll.app.data.VerseRepository
 import com.faithscroll.app.widget.VerseWidgetProvider
 import kotlin.math.roundToInt
 
 @Composable
-fun WidgetScreen(state: AppState, bottomInset: Dp) {
+fun WidgetScreen(state: AppState, bottomInset: Dp, onPersonalize: () -> Unit) {
     val ctx = LocalContext.current
     var opacity by remember { mutableFloatStateOf(Prefs.widgetOpacity(ctx).toFloat()) }
     var lightText by remember { mutableStateOf(Prefs.widgetLightText(ctx)) }
@@ -72,8 +74,38 @@ fun WidgetScreen(state: AppState, bottomInset: Dp) {
         Modifier.fillMaxSize().background(Ink).statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = bottomInset + 24.dp)
     ) {
-        Text("Home screen widget", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+        Text("Me", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(16.dp))
+
+        // Personalization
+        val tops = remember { Taste.topThemes(ctx, 4).mapNotNull { Taste.themeLabels[it] } }
+        val fav = remember { Taste.favouriteChannel(ctx) }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = Gold, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("Your For You feed", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (tops.isEmpty()) "FaithScroll learns from what you linger on, like, save and watch."
+                else "Lately you're drawn to ${tops.joinToString(", ")}" + (fav?.let { ", and you enjoy $it" } ?: "") + ".",
+                color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("Retake questions", false) { onPersonalize() }
+                Chip("Start fresh", false) {
+                    Taste.reset(ctx)
+                    Toast.makeText(ctx, "Cleared. Answer a few questions to start again.", Toast.LENGTH_SHORT).show()
+                    onPersonalize()
+                }
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+        Text("Home screen widget", color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
 
         // Live preview over a mock wallpaper so transparency is visible
         Box(

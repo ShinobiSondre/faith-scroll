@@ -71,6 +71,8 @@ import com.faithscroll.app.data.StreamResolver
 @Composable
 fun VideoCard(
     video: Video,
+    reason: String? = null,
+    onShared: () -> Unit = {},
     isActive: Boolean,
     saved: Boolean,
     onSave: () -> Unit,
@@ -156,6 +158,10 @@ fun VideoCard(
         Column(
             Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 30.dp)
         ) {
+            if (reason != null) {
+                ReasonTag(reason)
+                Spacer(Modifier.height(8.dp))
+            }
             Text(
                 if (video.kind == Video.KIND_SERMON) "SERMON" else "REAL STORIES OF FAITH",
                 color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
@@ -172,7 +178,7 @@ fun VideoCard(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
-            RailButton(Icons.Filled.Share, "Share", false, Color.White) { Share.video(ctx, video) }
+            RailButton(Icons.Filled.Share, "Share", false, Color.White) { onShared(); Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) "Muted" else "Sound", false, Color.White) { muted = !muted }
             if (onRotate != null) RailButton(Icons.Filled.ScreenRotation, "Rotate", landscape, Color.White, onRotate)
             if (onExpand != null) RailButton(Icons.Filled.OpenInFull, "Full", false, Color.White) { paused = true; onExpand() }

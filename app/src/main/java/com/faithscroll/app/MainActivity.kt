@@ -48,6 +48,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.faithscroll.app.data.Prefs
+import com.faithscroll.app.data.Taste
+import com.faithscroll.app.ui.OnboardingScreen
+import androidx.compose.material.icons.filled.Person
 import com.faithscroll.app.data.Verse
 import com.faithscroll.app.data.VerseRepository
 import com.faithscroll.app.data.Video
@@ -106,6 +109,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var player by remember { mutableStateOf<Pair<Video, List<Video>>?>(null) }
     val openVideo: (Video, List<Video>) -> Unit = { v, q -> player = v to q }
     var reading by remember { mutableStateOf<Verse?>(null) }
+    var onboarding by remember { mutableStateOf(!Taste.isOnboarded(ctx)) }
+    var tasteVersion by remember { mutableIntStateOf(0) }
     LaunchedEffect(openFeedSignal) { if (openFeedSignal > 0) { player = null; tab = 0 } }
 
     LaunchedEffect(Unit) {
@@ -125,7 +130,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             label = "tabs"
         ) { t ->
             when (t) {
-                0 -> key(startRef) {
+                0 -> key(startRef, tasteVersion) {
                     // Testimonies and sermons take turns between the verses.
                     val feedVideos = remember(library) {
                         val l = library ?: return@remember emptyList<Video>()
@@ -145,7 +150,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                 }
                 1 -> WatchScreen(library, bottomInset, openVideo)
                 2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
-                else -> WidgetScreen(state, bottomInset)
+                else -> WidgetScreen(state, bottomInset) { onboarding = true }
             }
         }
 
@@ -158,10 +163,12 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             NavItem(Icons.Filled.Home, "Feed", tab == 0, Modifier.weight(1f)) { tab = 0 }
             NavItem(Icons.Filled.PlayCircle, "Watch", tab == 1, Modifier.weight(1f)) { tab = 1 }
             NavItem(Icons.Filled.Bookmarks, "Saved", tab == 2, Modifier.weight(1f)) { tab = 2 }
-            NavItem(Icons.Filled.Widgets, "Widget", tab == 3, Modifier.weight(1f)) { tab = 3 }
+            NavItem(Icons.Filled.Person, "Me", tab == 3, Modifier.weight(1f)) { tab = 3 }
         }
 
         player?.let { (v, q) -> PlayerScreen(v, q, state) { player = null } }
+
+        if (onboarding) OnboardingScreen { onboarding = false; tasteVersion++; tab = 0 }
 
         reading?.let { v -> ChapterSheet(v) { reading = null } }
 

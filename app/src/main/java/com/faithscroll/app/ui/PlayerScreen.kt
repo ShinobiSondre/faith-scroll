@@ -53,7 +53,10 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
+import com.faithscroll.app.data.Taste
 import com.faithscroll.app.data.Video
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -75,6 +78,22 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
     var landscape by remember { mutableStateOf(false) }
 
     BackHandler { if (landscape) landscape = false else onClose() }
+
+    // Learn from how long each video is watched.
+    LaunchedEffect(pager) {
+        var last = pager.settledPage
+        var since = System.currentTimeMillis()
+        snapshotFlow { pager.settledPage }.collect { page ->
+            if (page != last) {
+                list.getOrNull(last)?.let { Taste.videoSeen(ctx, it, System.currentTimeMillis() - since) }
+                last = page; since = System.currentTimeMillis()
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        val opened = System.currentTimeMillis()
+        onDispose { list.getOrNull(pager.settledPage)?.let { Taste.videoSeen(ctx, it, System.currentTimeMillis() - opened) } }
+    }
 
     // Immersive: hide the status and navigation bars while watching.
     DisposableEffect(Unit) {
@@ -108,7 +127,11 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
                 video = v,
                 isActive = pager.settledPage == page,
                 saved = state.isVideoSaved(v.id),
-                onSave = { state.toggleVideo(v) },
+                onSave = {
+                    if (!state.isVideoSaved(v.id)) Taste.videoAction(ctx, v, Taste.Action.SAVE)
+                    state.toggleVideo(v)
+                },
+                onShared = { Taste.videoAction(ctx, v, Taste.Action.SHARE) },
                 bottomInset = 12.dp,
                 loop = false,
                 onRotate = { landscape = !landscape },
