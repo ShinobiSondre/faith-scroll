@@ -12,6 +12,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -95,7 +96,9 @@ fun VideoCard(
     onRotate: (() -> Unit)? = null,
     landscape: Boolean = false,
     preload: Boolean = false, // the next card: player ready & paused so it starts instantly
-    suspended: Boolean = false // another tab / screen is on top: pause, but keep the place
+    suspended: Boolean = false, // another tab / screen is on top: pause, but keep the place
+    immersive: Boolean = false, // full screen: nothing but the video while it plays; everything returns on pause
+    onPausedChange: (Boolean) -> Unit = {}
 ) {
     val ctx = LocalContext.current
     var paused by remember(video.id) { mutableStateOf(false) }
@@ -144,6 +147,10 @@ fun VideoCard(
     val screenLandscape = cfg.screenWidthDp > cfg.screenHeightDp
     val useFill = fill ?: (playback.portrait != screenLandscape)
     val showControls = isActive && !embedFailed && (controls || paused)
+    // Full screen: all buttons, text and the progress line fade out while playing.
+    val uiAlpha by androidx.compose.animation.core.animateFloatAsState(if (immersive && !paused) 0f else 1f, tween(250), label = "ui")
+    val uiMod = Modifier.graphicsLayer { alpha = uiAlpha }
+    LaunchedEffect(paused, isActive) { if (isActive) onPausedChange(paused) }
     val showingVideo = (playback.ready && !playback.failed) || embedPlaying
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -181,7 +188,7 @@ fun VideoCard(
             Modifier.fillMaxSize().pointerInput(video.id) {
                 detectTapGestures(
                     // First touch shows the controls; touching again hides them.
-                    onTap = { controls = !controls; controlsTouch++ },
+                    onTap = { if (immersive) paused = !paused else { controls = !controls; controlsTouch++ } },
                     onDoubleTap = { fill = !useFill }
                 )
             }
@@ -205,7 +212,7 @@ fun VideoCard(
 
         // Play / pause button: hidden while playing, shown when you touch the video (or it's paused).
         AnimatedVisibility(
-            visible = showControls,
+            visible = showControls && !(immersive && !paused),
             enter = fadeIn(tween(150)) + scaleIn(initialScale = 1.3f),
             exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.85f),
             modifier = Modifier.align(Alignment.Center)
@@ -224,7 +231,7 @@ fun VideoCard(
                 color = Color.White, fontSize = 15.sp, modifier = Modifier.align(Alignment.Center).padding(32.dp))
         }
 
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f))))
+        if (uiAlpha > 0f) Box(Modifier.fillMaxSize().then(uiMod).background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f))))
 
         // Subtitles (live, in the app language)
         if (isActive && isYouTube && CaptionSettings.on && hasCaptions == true && !playback.failed) {
@@ -235,8 +242,8 @@ fun VideoCard(
         }
 
         // Caption: tap to see the full title, description and a link to the original page
-        Column(
-            Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 44.dp)
+        if (uiAlpha > 0f) Column(
+            Modifier.align(Alignment.BottomStart).then(uiMod).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 44.dp)
                 .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { expanded = true }
         ) {
             if (reason != null) {
@@ -259,8 +266,8 @@ fun VideoCard(
             Text(tr("more", "mer"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        Column(
-            Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = bottomInset + 44.dp),
+        if (uiAlpha > 0f) Column(
+            Modifier.align(Alignment.BottomEnd).then(uiMod).padding(end = 12.dp, bottom = bottomInset + 44.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -299,7 +306,7 @@ fun VideoCard(
         asking?.let { at -> AskSheet(video, at) { asking = null } }
 
         // Progress: a thin line while playing; the full seek bar appears with the controls.
-        if (isActive && playback.duration > 0 && !playback.failed) {
+        if (isActive && playback.duration > 0 && !playback.failed && uiAlpha > 0f) {
             if (showControls) {
                 SeekBar(playback, { controlsTouch++ }, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset + 6.dp).fillMaxWidth())
             } else {

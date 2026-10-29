@@ -79,6 +79,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
     val list = remember(start, queue) { if (queue.any { it.id == start.id }) queue else listOf(start) + queue }
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.id == start.id }.coerceAtLeast(0)) { list.size }
     var landscape by remember { mutableStateOf(false) }
+    var playing by remember { mutableStateOf(true) }
 
     BackHandler { if (landscape) landscape = false else onClose() }
 
@@ -148,10 +149,13 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
                 bottomInset = 12.dp,
                 loop = false,
                 onRotate = { landscape = !landscape },
-                landscape = landscape
+                landscape = landscape,
+                immersive = true,
+                onPausedChange = { playing = !it }
             )
         }
-        IconButton(
+        // Back button only while paused (full screen shows nothing but the video while it plays).
+        if (!playing) IconButton(
             onClick = { if (landscape) landscape = false else onClose() },
             modifier = Modifier.statusBarsPadding().padding(8.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.35f))
         ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "Tilbake"), tint = Color.White) }
