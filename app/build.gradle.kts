@@ -92,6 +92,8 @@ dependencies {
     // On-device translation for subtitles
     implementation("com.google.mlkit:translate:17.0.3")
     // Offline speech recognition: makes subtitles for videos without captions
+    // Opens ChatGPT in a browser tab for "What do they mean here?"
+    implementation("androidx.browser:browser:1.8.0")
     implementation("com.alphacephei:vosk-android:0.3.47")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     // Optional offline AI: a small language model running on the phone

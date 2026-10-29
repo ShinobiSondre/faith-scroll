@@ -215,7 +215,7 @@ fun VideoCard(
                 color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.Center).padding(top = 150.dp)
                     .clip(CircleShape).background(Gold)
-                    .clickable { asking = if (usingEmbed) embedPos else playback.position }
+                    .clickable { AskChatGpt.open(ctx, video, if (usingEmbed) embedPos else playback.position) }
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             )
         }
