@@ -13,9 +13,19 @@ import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
 
-data class Video(val id: String, val title: String, val channel: String) {
+data class Video(val id: String, val title: String, val channel: String, val kind: String = KIND_STORY) {
+    companion object {
+        const val KIND_STORY = "story"
+        const val KIND_SERMON = "sermon"
+    }
     val thumbnail: String get() = "https://i.ytimg.com/vi/$id/hqdefault.jpg"
     val url: String get() = "https://www.youtube.com/watch?v=$id"
+    val mobileUrl: String get() = "https://m.youtube.com/watch?v=$id"
+}
+
+/** Testimonies for the swipe feed, sermons for the Watch tab. */
+data class VideoLibrary(val stories: List<Video>, val sermons: List<Video>) {
+    val all: List<Video> get() = (sermons + stories).distinctBy { it.id }
 }
 
 /**
@@ -23,16 +33,23 @@ data class Video(val id: String, val title: String, val channel: String) {
  * RSS feeds (no API key). The channel list can be edited in content/channels.json on GitHub.
  */
 object VideoRepository {
-    private val defaultChannels = listOf(
+    private val defaultStories = listOf(
         "UC9dK4qKU8-5xiqFoI9BGVmQ" to "I Am Second",
         "UCdMgPQvQhsdd-qD-fugvlSA" to "700 Club Testimonies",
         "UCVfwlh9XpX2Y_tQfjeln9QA" to "BibleProject"
     )
+    private val defaultSermons = listOf(
+        "UCnrFlpro0xfYjz6s5Xa8WWw" to "Desiring God",
+        "UCIQqvZbHSwX0yKNVK1MyYjQ" to "Elevation Church",
+        "UCXL6kvDyoQpvtaeafC4pLyg" to "In Touch Ministries",
+        "UCQmUmqrMGfnesNpdL7T282Q" to "Gospel in Life"
+    )
     private val fallback = listOf(Video("dDYbiukIFBc", "Best CBN Testimonies", "CBN"))
 
-    suspend fun load(ctx: Context): List<Video> = withContext(Dispatchers.IO) {
-        val cacheFile = File(ctx.filesDir, "videos_cache.json")
-        var channels = defaultChannels
+    suspend fun load(ctx: Context): VideoLibrary = withContext(Dispatchers.IO) {
+        val cacheFile = File(ctx.filesDir, "videos_cache_v2.json")
+        var stories = defaultStories
+        var sermons = defaultSermons
         var pinned = emptyList<Video>()
 
         val repo = BuildConfig.CONTENT_REPO
@@ -40,41 +57,60 @@ object VideoRepository {
             Http.get("https://raw.githubusercontent.com/$repo/main/content/channels.json")?.let { body ->
                 runCatching {
                     val o = JSONObject(body)
-                    o.optJSONArray("channels")?.let { a ->
-                        val list = (0 until a.length()).map { a.getJSONObject(it).let { c -> c.getString("id") to c.optString("name") } }
-                        if (list.isNotEmpty()) channels = list
-                    }
+                    channelList(o.optJSONArray("channels"))?.let { stories = it }
+                    channelList(o.optJSONArray("sermons"))?.let { sermons = it }
                     o.optJSONArray("videos")?.let { a -> pinned = parseVideos(a) }
                 }
             }
         }
 
-        val perChannel = coroutineScope {
-            channels.map { (id, name) -> async { fetchChannel(id, name) } }.awaitAll()
+        val (storyLists, sermonLists) = coroutineScope {
+            val a = stories.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_STORY) } }
+            val b = sermons.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_SERMON) } }
+            a.awaitAll() to b.awaitAll()
         }
-        // Interleave channels so the feed feels varied.
-        val mixed = mutableListOf<Video>()
-        val maxLen = perChannel.maxOfOrNull { it.size } ?: 0
-        for (i in 0 until maxLen) perChannel.forEach { list -> list.getOrNull(i)?.let(mixed::add) }
-        val all = (pinned + mixed).distinctBy { it.id }
+        val lib = VideoLibrary(
+            stories = (pinned + interleave(storyLists)).distinctBy { it.id },
+            sermons = interleave(sermonLists).distinctBy { it.id }
+        )
 
-        if (all.isNotEmpty()) {
+        if (lib.stories.size + lib.sermons.size > pinned.size) {
             val a = JSONArray()
-            all.forEach { a.put(JSONObject().put("id", it.id).put("title", it.title).put("channel", it.channel)) }
+            lib.all.forEach { a.put(it.toJson()) }
             cacheFile.writeText(a.toString())
-            return@withContext all
+            return@withContext lib
         }
         val cached = if (cacheFile.exists()) runCatching { parseVideos(JSONArray(cacheFile.readText())) }.getOrDefault(emptyList()) else emptyList()
-        cached.ifEmpty { fallback }
+        if (cached.isEmpty()) VideoLibrary(pinned.ifEmpty { fallback }, emptyList())
+        else VideoLibrary(cached.filter { it.kind == Video.KIND_STORY }, cached.filter { it.kind == Video.KIND_SERMON })
     }
 
-    private fun parseVideos(a: JSONArray): List<Video> = (0 until a.length()).mapNotNull { i ->
+    private fun channelList(a: JSONArray?): List<Pair<String, String>>? {
+        if (a == null) return null
+        val list = (0 until a.length()).mapNotNull { i ->
+            a.optJSONObject(i)?.let { c -> c.optString("id").takeIf { it.isNotBlank() }?.let { it to c.optString("name") } }
+        }
+        return list.ifEmpty { null }
+    }
+
+    /** Mixes channels so the list feels varied (newest of each first). */
+    private fun interleave(lists: List<List<Video>>): List<Video> {
+        val out = mutableListOf<Video>()
+        val maxLen = lists.maxOfOrNull { it.size } ?: 0
+        for (i in 0 until maxLen) lists.forEach { l -> l.getOrNull(i)?.let(out::add) }
+        return out
+    }
+
+    fun Video.toJson(): JSONObject =
+        JSONObject().put("id", id).put("title", title).put("channel", channel).put("kind", kind)
+
+    fun parseVideos(a: JSONArray): List<Video> = (0 until a.length()).mapNotNull { i ->
         val o = a.optJSONObject(i) ?: return@mapNotNull null
         val id = o.optString("id")
-        if (id.isBlank()) null else Video(id, o.optString("title"), o.optString("channel"))
+        if (id.isBlank()) null else Video(id, o.optString("title"), o.optString("channel"), o.optString("kind", Video.KIND_STORY))
     }
 
-    private fun fetchChannel(channelId: String, name: String): List<Video> {
+    private fun fetchChannel(channelId: String, name: String, kind: String): List<Video> {
         val xml = Http.get("https://www.youtube.com/feeds/videos.xml?channel_id=$channelId") ?: return emptyList()
         return runCatching {
             val parser = Xml.newPullParser()
@@ -100,7 +136,7 @@ object VideoRepository {
                         "author" -> inAuthor = false
                         "entry" -> {
                             inEntry = false
-                            id?.let { out += Video(it, title.orEmpty(), author ?: name) }
+                            id?.let { out += Video(it, title.orEmpty(), name.ifBlank { author.orEmpty() }, kind) }
                         }
                     }
                 }

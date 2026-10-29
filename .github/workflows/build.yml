@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,6 +43,6 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: FaithScroll v1.0.${{ github.run_number }}
-          body: Download the APK below and open it on your Android phone to install.
+          body: ${{ github.event.head_commit.message || 'Built by hand from the Actions tab.' }}
           files: FaithScroll-*.apk
           make_latest: true

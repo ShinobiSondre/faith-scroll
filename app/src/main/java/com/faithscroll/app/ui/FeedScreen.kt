@@ -94,6 +94,8 @@ fun FeedScreen(
     videos: List<Video>,
     startRef: String?,
     bottomInset: androidx.compose.ui.unit.Dp,
+    suspended: Boolean = false,
+    onOpenVideo: (Video) -> Unit = {},
     onReadChapter: (Verse) -> Unit
 ) {
     val order = remember(verses, startRef) {
@@ -151,9 +153,10 @@ fun FeedScreen(
                         )
                         is FeedItem.VideoItem -> VideoCard(
                             video = item.video,
-                            isActive = pager.settledPage == page,
+                            isActive = pager.settledPage == page && !suspended,
                             saved = state.isVideoSaved(item.video.id),
                             onSave = { state.toggleVideo(item.video) },
+                            onOpen = { onOpenVideo(item.video) },
                             bottomInset = bottomInset
                         )
                     }

@@ -48,10 +48,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.faithscroll.app.data.Verse
+import com.faithscroll.app.data.Video
 import com.faithscroll.app.util.Share
 
 @Composable
-fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onRead: (Verse) -> Unit) {
+fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVideo: (Video, List<Video>) -> Unit, onRead: (Verse) -> Unit) {
     val ctx = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
     val savedVerses = remember(state.saved, verses) { verses.filter { it.ref in state.saved } }
@@ -93,7 +94,7 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onRead: (
                 items(state.savedVideos, key = { it.id }) { v ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Plum)
-                            .clickable { Share.openUrl(ctx, v.url) }.padding(10.dp),
+                            .clickable { onOpenVideo(v, state.savedVideos) }.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AsyncImage(v.thumbnail, null, contentScale = ContentScale.Crop,

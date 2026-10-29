@@ -27,10 +27,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
@@ -71,6 +71,7 @@ fun VideoCard(
     isActive: Boolean,
     saved: Boolean,
     onSave: () -> Unit,
+    onOpen: () -> Unit,
     bottomInset: Dp
 ) {
     val ctx = LocalContext.current
@@ -119,7 +120,7 @@ fun VideoCard(
         ) {
             Box(
                 Modifier.size(84.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
-                    .clickable { if (failed) Share.openUrl(ctx, video.url) else paused = false },
+                    .clickable { if (failed) onOpen() else paused = false },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Filled.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(52.dp))
@@ -145,11 +146,11 @@ fun VideoCard(
                 Spacer(Modifier.height(10.dp))
                 Row(
                     Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f))
-                        .clickable { Share.openUrl(ctx, video.url) }
+                        .clickable { onOpen() }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("This one plays on YouTube — tap to watch", color = Color.White, fontSize = 13.sp)
+                    Text("Tap to watch this one in the player", color = Color.White, fontSize = 13.sp)
                 }
             }
         }
@@ -162,7 +163,7 @@ fun VideoCard(
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
             RailButton(Icons.Filled.Share, "Share", false, Color.White) { Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) "Muted" else "Sound", false, Color.White) { muted = !muted }
-            RailButton(Icons.AutoMirrored.Filled.OpenInNew, "YouTube", false, Color.White) { Share.openUrl(ctx, video.url) }
+            RailButton(Icons.Filled.OpenInFull, "Full", false, Color.White) { paused = true; onOpen() }
         }
     }
 }
@@ -184,7 +185,8 @@ fun YouTubePlayer(
     muted: Boolean,
     onPlaying: () -> Unit,
     onError: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    controls: Boolean = false
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -198,7 +200,7 @@ fun YouTubePlayer(
                 settings.domStorageEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
                 webChromeClient = WebChromeClient()
-                setOnTouchListener { _, _ -> true } // gestures handled by Compose
+                if (!controls) setOnTouchListener { _, _ -> true } // feed: gestures handled by Compose
                 addJavascriptInterface(
                     PlayerBridge(
                         onState = { s -> if (s == 1) post { onPlaying() } },
@@ -206,7 +208,7 @@ fun YouTubePlayer(
                     ),
                     "Android"
                 )
-                loadDataWithBaseURL("https://www.youtube.com", playerHtml(videoId, muted), "text/html", "utf-8", null)
+                loadDataWithBaseURL("https://www.youtube.com", playerHtml(videoId, muted, controls), "text/html", "utf-8", null)
                 webView = this
             }
         },
@@ -229,7 +231,10 @@ fun YouTubePlayer(
     }
 }
 
-private fun playerHtml(id: String, muted: Boolean) = """
+private fun playerHtml(id: String, muted: Boolean, controls: Boolean): String {
+    val ctl = if (controls) 1 else 0
+    val loop = if (controls) "" else "loop:1,playlist:'$id',"
+    return """
 <!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>html,body{margin:0;padding:0;height:100%;background:transparent;overflow:hidden}#p{position:absolute;inset:0;width:100%;height:100%}</style>
@@ -239,7 +244,7 @@ var player,ready=false,want='play',muted=$muted;
 var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('p',{width:'100%',height:'100%',videoId:'$id',
-    playerVars:{autoplay:1,playsinline:1,controls:0,rel:0,modestbranding:1,fs:0,iv_load_policy:3,loop:1,playlist:'$id',disablekb:1},
+    playerVars:{autoplay:1,playsinline:1,controls:$ctl,rel:0,modestbranding:1,fs:0,iv_load_policy:3,${loop}disablekb:1},
     events:{
       onReady:function(e){ready=true;if(muted)e.target.mute();else e.target.unMute();if(want=='play')e.target.playVideo();},
       onStateChange:function(e){Android.state(e.data);},
@@ -251,3 +256,4 @@ function pauseV(){want='pause';if(ready)player.pauseVideo();}
 function setMuted(m){muted=m;if(ready){if(m)player.mute();else player.unMute();}}
 </script></body></html>
 """
+}

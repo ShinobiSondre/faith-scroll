@@ -19,5 +19,23 @@
    "title": "Best CBN Testimonies",
    "channel": "CBN"
   }
+ ],
+ "sermons": [
+  {
+   "id": "UCnrFlpro0xfYjz6s5Xa8WWw",
+   "name": "Desiring God"
+  },
+  {
+   "id": "UCIQqvZbHSwX0yKNVK1MyYjQ",
+   "name": "Elevation Church"
+  },
+  {
+   "id": "UCXL6kvDyoQpvtaeafC4pLyg",
+   "name": "In Touch Ministries"
+  },
+  {
+   "id": "UCQmUmqrMGfnesNpdL7T282Q",
+   "name": "Gospel in Life"
+  }
  ]
 }

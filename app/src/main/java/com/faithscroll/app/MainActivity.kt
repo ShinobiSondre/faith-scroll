@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -50,6 +51,7 @@ import com.faithscroll.app.data.Prefs
 import com.faithscroll.app.data.Verse
 import com.faithscroll.app.data.VerseRepository
 import com.faithscroll.app.data.Video
+import com.faithscroll.app.data.VideoLibrary
 import com.faithscroll.app.data.VideoRepository
 import com.faithscroll.app.ui.AppState
 import com.faithscroll.app.ui.ChapterSheet
@@ -59,7 +61,11 @@ import com.faithscroll.app.ui.Gold
 import com.faithscroll.app.ui.Ink
 import com.faithscroll.app.ui.SavedScreen
 import com.faithscroll.app.ui.WidgetScreen
+import com.faithscroll.app.ui.WatchScreen
+import com.faithscroll.app.ui.PlayerScreen
 import com.faithscroll.app.widget.VerseWidgetProvider
+import com.faithscroll.app.update.UpdateOverlay
+import com.faithscroll.app.update.Updater
 
 class MainActivity : ComponentActivity() {
     companion object { const val EXTRA_REF = "verse_ref" }
@@ -72,11 +78,17 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         startRef.value = intent?.getStringExtra(EXTRA_REF)
         val streak = Prefs.recordOpen(this)
+        Updater.start(this)
         setContent {
             val appCtx = applicationContext
             val state = remember { AppState(appCtx, streak) }
             FaithTheme { App(state, startRef.value, openFeed.intValue) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Updater.onResume(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -90,12 +102,14 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     val ctx = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
     var verses by remember { mutableStateOf(VerseRepository.all(ctx)) }
-    var videos by remember { mutableStateOf<List<Video>>(emptyList()) }
+    var library by remember { mutableStateOf<VideoLibrary?>(null) }
+    var player by remember { mutableStateOf<Pair<Video, List<Video>>?>(null) }
+    val openVideo: (Video, List<Video>) -> Unit = { v, q -> player = v to q }
     var reading by remember { mutableStateOf<Verse?>(null) }
-    LaunchedEffect(openFeedSignal) { if (openFeedSignal > 0) tab = 0 }
+    LaunchedEffect(openFeedSignal) { if (openFeedSignal > 0) { player = null; tab = 0 } }
 
     LaunchedEffect(Unit) {
-        videos = VideoRepository.load(ctx)
+        library = VideoRepository.load(ctx)
         VerseRepository.refreshRemote(ctx)
         verses = VerseRepository.all(ctx)
         if (VerseWidgetProvider.hasWidgets(ctx)) VerseWidgetProvider.refresh(ctx)
@@ -111,8 +125,16 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             label = "tabs"
         ) { t ->
             when (t) {
-                0 -> key(startRef) { FeedScreen(state, verses, videos, startRef, bottomInset, onReadChapter = { reading = it }) }
-                1 -> SavedScreen(state, verses, bottomInset) { reading = it }
+                0 -> key(startRef) {
+                    FeedScreen(
+                        state, verses, library?.stories ?: emptyList(), startRef, bottomInset,
+                        suspended = player != null,
+                        onOpenVideo = { v -> openVideo(v, library?.stories ?: listOf(v)) },
+                        onReadChapter = { reading = it }
+                    )
+                }
+                1 -> WatchScreen(library, bottomInset, openVideo)
+                2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
                 else -> WidgetScreen(state, bottomInset)
             }
         }
@@ -124,11 +146,16 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             NavItem(Icons.Filled.Home, "Feed", tab == 0, Modifier.weight(1f)) { tab = 0 }
-            NavItem(Icons.Filled.Bookmarks, "Saved", tab == 1, Modifier.weight(1f)) { tab = 1 }
-            NavItem(Icons.Filled.Widgets, "Widget", tab == 2, Modifier.weight(1f)) { tab = 2 }
+            NavItem(Icons.Filled.PlayCircle, "Watch", tab == 1, Modifier.weight(1f)) { tab = 1 }
+            NavItem(Icons.Filled.Bookmarks, "Saved", tab == 2, Modifier.weight(1f)) { tab = 2 }
+            NavItem(Icons.Filled.Widgets, "Widget", tab == 3, Modifier.weight(1f)) { tab = 3 }
         }
 
+        player?.let { (v, q) -> PlayerScreen(v, q, state) { player = null } }
+
         reading?.let { v -> ChapterSheet(v) { reading = null } }
+
+        UpdateOverlay()
     }
 }
 
