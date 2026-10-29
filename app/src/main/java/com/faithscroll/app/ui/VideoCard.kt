@@ -1,5 +1,8 @@
 package com.faithscroll.app.ui
 
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Check
 import com.faithscroll.app.util.tr
 
 import android.annotation.SuppressLint
@@ -102,6 +105,13 @@ fun VideoCard(
     val openPage = LocalOpenPage.current
     val isYouTube = video.direct.isBlank()
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
+    // Captions available for this video? If they don't load, subtitles are simply turned off for it.
+    var hasCaptions by remember(video.id) { mutableStateOf<Boolean?>(null) }
+    if (isYouTube) LaunchedEffect(video.id) { hasCaptions = com.faithscroll.app.data.Transcripts.original(video.id, urgent = true) != null }
+    // Subscribe: follow this channel to get more of its videos.
+    val subScope = rememberCoroutineScope()
+    var channelId by remember(video.id) { mutableStateOf<String?>(null) }
+    var subscribed by remember(video.id) { mutableStateOf(com.faithscroll.app.data.YouTubeSubs.isFavouriteName(ctx, video.channel)) }
     var controlsTouch by remember(video.id) { mutableIntStateOf(0) }
     var muted by remember { mutableStateOf(false) }
     var fill by remember(video.id) { mutableStateOf<Boolean?>(null) } // null = automatic
@@ -217,7 +227,7 @@ fun VideoCard(
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f))))
 
         // Subtitles (live, in the app language)
-        if (isActive && isYouTube && CaptionSettings.on && !playback.failed) {
+        if (isActive && isYouTube && CaptionSettings.on && hasCaptions == true && !playback.failed) {
             CaptionOverlay(
                 video.id, playback.position,
                 Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = bottomInset + 190.dp)
@@ -258,6 +268,20 @@ fun VideoCard(
             RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) { muted = !muted }
             if (isYouTube) RailButton(
+                if (subscribed) Icons.Filled.Check else Icons.Filled.PersonAdd,
+                if (subscribed) tr("Subscribed", "Abonnerer") else tr("Subscribe", "Abonner"), subscribed, if (subscribed) Gold else Color.White
+            ) {
+                subScope.launch {
+                    val id = channelId ?: com.faithscroll.app.data.WatchPage.info(video.id)?.channelId?.takeIf { it.isNotBlank() }?.also { channelId = it }
+                    if (id == null) { android.widget.Toast.makeText(ctx, tr("Couldn't find the channel", "Fant ikke kanalen"), android.widget.Toast.LENGTH_SHORT).show(); return@launch }
+                    if (subscribed) { com.faithscroll.app.data.YouTubeSubs.unfollow(ctx, id); subscribed = false }
+                    else {
+                        com.faithscroll.app.data.YouTubeSubs.follow(ctx, id, video.channel); subscribed = true
+                        android.widget.Toast.makeText(ctx, tr("More from ${video.channel} coming to your feed", "Mer fra ${video.channel} kommer i feeden din"), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            if (isYouTube && hasCaptions == true) RailButton(
                 if (CaptionSettings.on) Icons.Filled.ClosedCaption else Icons.Filled.ClosedCaptionOff,
                 tr("Subtitles", "Tekst"), CaptionSettings.on, if (CaptionSettings.on) Gold else Color.White
             ) { CaptionSettings.toggle(ctx) }

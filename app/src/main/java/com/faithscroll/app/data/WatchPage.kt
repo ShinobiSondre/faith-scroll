@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 object WatchPage {
     /** [plain] = from YouTube's Android-app answer: its caption links download without any token. */
     data class Track(val baseUrl: String, val lang: String, val kind: String, val name: String, val plain: Boolean = false)
-    data class Info(val tracks: List<Track>, val title: String, val description: String)
+    data class Info(val tracks: List<Track>, val title: String, val description: String, val channelId: String = "", val channel: String = "")
 
     private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     // Keeps YouTube's visitor cookies between the page, player and caption requests (like a browser session).
@@ -84,7 +84,7 @@ object WatchPage {
         Diag.log("page", "$videoId: android=${status.ifBlank { "-" }}${ps?.optString("reason")?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""}, " +
             "tracks=${tracks.joinToString { it.lang + (if (it.kind == "asr") "*" else "") + (if (it.plain) "" else "(web)") }.ifBlank { "none" }}")
         val vd = android?.optJSONObject("videoDetails") ?: page?.optJSONObject("videoDetails")
-        Info(tracks, vd?.optString("title").orEmpty(), vd?.optString("shortDescription").orEmpty()).also { cache[videoId] = it }
+        Info(tracks, vd?.optString("title").orEmpty(), vd?.optString("shortDescription").orEmpty(), vd?.optString("channelId").orEmpty(), vd?.optString("author").orEmpty()).also { cache[videoId] = it }
     }
 
     /** The spoken language: YouTube's automatic captions are made from the audio. */

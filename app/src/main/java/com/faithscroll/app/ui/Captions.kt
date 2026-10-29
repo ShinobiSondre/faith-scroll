@@ -53,7 +53,7 @@ fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modif
     var useAsr by remember(videoId) { mutableStateOf(false) }
     LaunchedEffect(videoId) {
         val t = Transcripts.inAppLanguage(videoId, urgent = true) { partial -> youtube = partial }
-        if (t == null) useAsr = true else youtube = t
+        if (t != null) youtube = t // no captions: nothing is shown (the subtitle button hides too)
     }
 
     var line: String? = null

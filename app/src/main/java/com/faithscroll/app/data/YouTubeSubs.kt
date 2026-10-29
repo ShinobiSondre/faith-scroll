@@ -75,6 +75,22 @@ object YouTubeSubs {
         return found.size to christian.size
     }
 
+    /** Bumped when you subscribe/unsubscribe in the app, so the feed reloads that channel's videos. */
+    val changed = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    /** Subscribe from a video: the channel becomes a favourite source (its new videos come first in your feed). */
+    fun follow(ctx: Context, id: String, title: String) {
+        val list = all(ctx)
+        save(ctx, if (list.any { it.id == id }) list.map { if (it.id == id) it.copy(favourite = true) else it }
+            else listOf(SubChannel(id, title, favourite = true, christian = true)) + list)
+        favNames = null
+        YouTubeSubsCheck.favouriteNames = favourites(ctx).map { it.title }.toSet()
+        Diag.log("youtube", "subscribed to $title")
+        changed.value++
+    }
+
+    fun unfollow(ctx: Context, id: String) { setFavourite(ctx, id, false); YouTubeSubsCheck.favouriteNames = favourites(ctx).map { it.title }.toSet(); changed.value++ }
+
     fun clear(ctx: Context) { save(ctx, emptyList()); favNames = null }
 
     /** Reads subscriptions with a Google access token (scope youtube.readonly). Returns how many. */

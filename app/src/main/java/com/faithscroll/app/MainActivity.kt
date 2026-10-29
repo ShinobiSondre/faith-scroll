@@ -200,6 +200,9 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         verses = VerseRepository.all(ctx)
         if (VerseWidgetProvider.hasWidgets(ctx)) VerseWidgetProvider.refresh(ctx)
     }
+    // Subscribing on a video reloads the library so that channel's videos join the feed.
+    val subsChanged by com.faithscroll.app.data.YouTubeSubs.changed.collectAsState()
+    LaunchedEffect(subsChanged) { if (subsChanged > 0) socialVersion++ }
     LaunchedEffect(socialVersion) {
         social = SocialRepository.load(ctx)
         if (socialVersion > 0) library = VideoRepository.load(ctx) // e.g. new favourite YouTube channels
