@@ -79,7 +79,10 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
                 "For you" -> {
                     // Ranked by your taste with a dash of randomness, so it never feels stale.
                     val r = kotlin.random.Random(System.currentTimeMillis() / 600_000)
-                    library.all.sortedByDescending { com.faithscroll.app.data.Taste.scoreVideo(ctx, it) + r.nextFloat() * 1.5f }
+                    // Score each video once (re-scoring with a fresh random number inside the
+                    // sort made the order inconsistent, which crashed the sort).
+                    library.all.map { it to (com.faithscroll.app.data.Taste.scoreVideo(ctx, it) + r.nextFloat() * 1.5f) }
+                        .sortedByDescending { it.second }.map { it.first }
                 }
                 "Shorts" -> library.shorts
                 "Sermons" -> library.sermons

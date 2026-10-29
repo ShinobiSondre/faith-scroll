@@ -87,11 +87,22 @@ class MainActivity : ComponentActivity() {
     companion object { const val EXTRA_REF = "verse_ref" }
 
     private val startRef = mutableStateOf<String?>(null)
+    private val crashReport = mutableStateOf<String?>(null)
     private val openFeed = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.faithscroll.app.util.Lang.init(this)
+        // Save the details of any crash so they can be shown (and copied) on the next launch.
+        val crashFile = java.io.File(filesDir, "last_crash.txt")
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            runCatching {
+                crashFile.writeText("FaithScroll ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MODEL}\n\n" + e.stackTraceToString().take(6000))
+            }
+            previous?.uncaughtException(t, e)
+        }
+        crashReport.value = crashFile.takeIf { it.exists() }?.readText()?.also { crashFile.delete() }
         enableEdgeToEdge()
         startRef.value = intent?.getStringExtra(EXTRA_REF)
         val streak = Prefs.recordOpen(this)
@@ -101,7 +112,34 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appCtx = applicationContext
             val state = remember { AppState(appCtx, streak) }
-            FaithTheme { App(state, startRef.value, openFeed.intValue) }
+            FaithTheme {
+                App(state, startRef.value, openFeed.intValue)
+                crashReport.value?.let { report ->
+                    val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { crashReport.value = null },
+                        containerColor = com.faithscroll.app.ui.Plum,
+                        title = { Text(com.faithscroll.app.util.tr("Sorry, FaithScroll crashed", "Beklager, FaithScroll krasjet"), color = Color.White) },
+                        text = {
+                            Text(
+                                com.faithscroll.app.util.tr("Copy the details and send them to get it fixed.", "Kopier detaljene og send dem, så kan det fikses.") +
+                                    "\n\n" + report.lineSequence().take(6).joinToString("\n"),
+                                color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp
+                            )
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                clip.setText(androidx.compose.ui.text.AnnotatedString(report)); crashReport.value = null
+                            }) { Text(com.faithscroll.app.util.tr("Copy details", "Kopier detaljer"), color = Gold) }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { crashReport.value = null }) {
+                                Text("OK", color = Color.White.copy(alpha = 0.7f))
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 
