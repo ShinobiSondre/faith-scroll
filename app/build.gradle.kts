@@ -18,8 +18,8 @@ android {
         versionCode = runNumber
         versionName = "1.0.$runNumber"
         buildConfigField("String", "CONTENT_REPO", "\"$contentRepo\"")
-        // 64-bit and 32-bit ARM cover practically every phone; skipping emulator CPUs keeps the APK smaller.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // 64-bit ARM: every modern phone. Leaving out other CPU types keeps the download much smaller.
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
