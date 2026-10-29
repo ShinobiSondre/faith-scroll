@@ -126,6 +126,8 @@ fun WidgetScreen(
         Spacer(Modifier.height(16.dp))
         QualityCard()
         Spacer(Modifier.height(16.dp))
+        YouTubeCard(onChanged = { sourcesChanged() })
+        Spacer(Modifier.height(16.dp))
         SourcesCard()
 
         Spacer(Modifier.height(28.dp))

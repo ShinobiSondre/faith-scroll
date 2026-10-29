@@ -82,6 +82,9 @@ object VideoRepository {
 
         // Channels FaithScroll discovered and you enjoyed are fetched like the built-in ones.
         stories = (stories + Discovery.channels(ctx)).distinctBy { it.first }
+        // Your favourite YouTube subscriptions are always fetched.
+        val favs = YouTubeSubs.favourites(ctx).take(40).map { it.id to it.title }
+        stories = (favs + stories).distinctBy { it.first }
         val (storyLists, sermonLists, shortLists) = coroutineScope {
             val a = stories.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_STORY) } }
             val b = sermons.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_SERMON) } }

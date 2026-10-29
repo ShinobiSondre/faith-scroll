@@ -187,7 +187,10 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         verses = VerseRepository.all(ctx)
         if (VerseWidgetProvider.hasWidgets(ctx)) VerseWidgetProvider.refresh(ctx)
     }
-    LaunchedEffect(socialVersion) { social = SocialRepository.load(ctx) }
+    LaunchedEffect(socialVersion) {
+        social = SocialRepository.load(ctx)
+        if (socialVersion > 0) library = VideoRepository.load(ctx) // e.g. new favourite YouTube channels
+    }
     // Existing users get the one-time prayer reminder invitation too.
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(4000)

@@ -220,7 +220,8 @@ object Taste {
         load(ctx)
         val topic = topicsOf(v.title).maxOfOrNull { themeScore[it] ?: 0f } ?: 0f
         val shortBonus = if (v.kind == Video.KIND_SHORT) 0.6f else 0f // TikTok-style clips suit the feed
-        return (channelScore[v.channel] ?: 0f) + (kindScore[v.kind] ?: 0f) * 0.7f + topic * 0.5f + shortBonus
+        val favBonus = if (YouTubeSubs.isFavouriteName(ctx, v.channel)) 2.5f else 0f // your favourite subscriptions
+        return (channelScore[v.channel] ?: 0f) + (kindScore[v.kind] ?: 0f) * 0.7f + topic * 0.5f + shortBonus + favBonus
     }
 
     /** How many videos to show between illustrated messages (mostly videos, messages sprinkled in). */
