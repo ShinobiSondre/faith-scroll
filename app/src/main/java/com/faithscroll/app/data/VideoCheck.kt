@@ -44,7 +44,7 @@ object VideoCheck {
     /** Checks these videos in order, in the background (replaces any earlier list). */
     @Synchronized fun queue(ctx: Context, videos: List<Video>) {
         appCtx = ctx.applicationContext
-        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v4.json"); runCatching { load() }; publish() }
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v3.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
         if (todo.isEmpty()) return
         job?.cancel()
@@ -75,13 +75,12 @@ object VideoCheck {
         // Can't read YouTube's page (e.g. offline): no verdict yet, it's checked again later.
         val info = WatchPage.info(v.id) ?: run { reject(v, "page unreadable (will retry)"); return null }
         val want = if (Lang.no) "no" else "en"
-        // Captions must load right away, otherwise the video is left out (subtitles and Ask need them).
-        val t = Transcripts.original(v.id) ?: return reject(v, "no captions")
+        val t = Transcripts.original(v.id)
         // Spoken language: YouTube's automatic captions are made from the audio, so their language is
         // the spoken one. Without them (common for Norwegian), judge the title and description.
         var spoken = WatchPage.spoken(info)
         var how = "auto captions"
-        if (spoken.isNotBlank() && t.lang == spoken) {
+        if (spoken.isNotBlank() && t != null && t.lang == spoken) {
             LangFilter.detect(t.cues.take(60).joinToString(" ") { it.text })?.let { if (it != spoken) { spoken = it; how = "caption text" } }
         }
         if (spoken.isBlank()) {
@@ -92,12 +91,12 @@ object VideoCheck {
         val ok = when {
             spoken == want -> true // already in your language: no subtitles needed
             Lang.no && Lang.alsoEnglish && spoken == "en" ->
-                Transcripts.inAppLanguage(v.id)?.let { it.translated || it.lang == "no" } == true
+                t != null && Transcripts.inAppLanguage(v.id)?.let { it.translated || it.lang == "no" } == true
             else -> false
         }
         if (!ok) return reject(v, "spoken '$spoken' ($how) isn't the app language")
         if (spoken == "no") appCtx?.let { Discovery.rewardChannel(it, v.id) } // a Norwegian channel: keep it as a source
-        Diag.log("check", "${v.id}: OK (spoken $spoken by $how, ${t.cues.size} caption lines)")
+        Diag.log("check", "${v.id}: OK (spoken $spoken by $how, ${t?.cues?.size ?: 0} caption lines)")
         return true
     }
 
