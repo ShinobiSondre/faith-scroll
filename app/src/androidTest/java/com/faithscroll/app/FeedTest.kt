@@ -125,4 +125,18 @@ class FeedTest {
         val ok = "Marques Brownlee" !in names && "Veritasium" !in names && "Elevation Church" in names
         log("${if (ok) "PASS" else "FAIL"} Christian channels: $names (${secs(t0)})")
     }
+
+    @Test fun e_languageFromText() = runBlocking<Unit> {
+        val cases = listOf(
+            "JESUS FORANDRET MITT LIV" to "no",
+            "Vidar Brautaset: Kraften i Guds Ord – preken fra søndagens gudstjeneste" to "no",
+            "Dagens andakt: Herren er min hyrde, jeg mangler ikke noe" to "no",
+            "The Secret to Being a Good Friend – Live sermon on friendship" to "en",
+            "Testimonio poderoso: Dios cambió mi vida para siempre" to "es",
+        )
+        for ((text, want) in cases) {
+            val got = com.faithscroll.app.data.LangFilter.spokenFromText(text)
+            log("${if (got == want) "PASS" else "FAIL"} language '$text' → $got (want $want)")
+        }
+    }
 }

@@ -375,6 +375,18 @@ private fun LanguageCard() {
             Chip("English", mode == Lang.Mode.EN) { pick(Lang.Mode.EN) }
             Chip("Norsk", mode == Lang.Mode.NO) { pick(Lang.Mode.NO) }
         }
+        if (Lang.no) {
+            var also by remember { mutableStateOf(Lang.alsoEnglish) }
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Også engelske videoer", color = Color.White, fontSize = 14.sp)
+                    Text("Med norske undertekster. Av: bare videoer på norsk.", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                }
+                androidx.compose.material3.Switch(checked = also, onCheckedChange = {
+                    also = it; Lang.setAlsoEnglish(ctx, it); (ctx as? android.app.Activity)?.recreate()
+                })
+            }
+        }
         Text(
             tr("Bible verses: King James Version.", "Bibelvers: Bibelen 1930 (Det Norske Bibelselskap)."),
             color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)

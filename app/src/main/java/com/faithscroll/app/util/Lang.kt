@@ -7,6 +7,10 @@ import java.util.Locale
 object Lang {
     @Volatile var no: Boolean = false
         private set
+    /** Norwegian mode only: also show English videos (with Norwegian subtitles). */
+    @Volatile var alsoEnglish: Boolean = false
+        private set
+    fun setAlsoEnglish(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("also_en", on).apply(); alsoEnglish = on }
 
     enum class Mode { AUTO, EN, NO }
 
@@ -19,6 +23,7 @@ object Lang {
     }
 
     fun init(ctx: Context) {
+        alsoEnglish = prefs(ctx).getBoolean("also_en", false)
         no = when (mode(ctx)) {
             Mode.NO -> true
             Mode.EN -> false

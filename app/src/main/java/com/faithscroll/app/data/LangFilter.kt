@@ -94,6 +94,28 @@ object LangFilter {
         return ok
     }
 
+    // Words that only (or mostly) Norwegian uses – tells it apart from Danish/Swedish.
+    private val norwegianOnly = Regex(
+        "\\b(hva|hvem|hvorfor|bønn|bønner|preken|vitnesbyrd|kirka|ikkje|kva|korleis|eg|frelst|tilgivelse|hjerte|kjærlighet|kjærleik|herren|ånd|ånden|nåde|også|veldig|møte|gudstjeneste|menigheten|lovsang|andakt|fortelling|livet mitt|jeg)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** Spoken language guessed from a video's title and description; null if unsure. Blocking. */
+    fun spokenFromText(text: String): String? {
+        val clean = text.replace(Regex("https?://\\S+|#\\S+|@\\S+"), " ").take(1500)
+        val nor = norwegianOnly.findAll(clean).count()
+        val eng = english.findAll(clean).count()
+        val guess = detect(clean)
+        return when {
+            guess == "no" -> "no"
+            guess in setOf("da", "sv") && nor >= 2 -> "no"
+            guess == null && nor >= 2 && nor > eng / 2 -> "no"
+            guess == "en" || (guess == null && eng >= 3 && nor == 0) -> "en"
+            romance.findAll(clean).count() >= 2 -> "es"
+            else -> guess
+        }
+    }
+
     /** Most likely language of a longer text (e.g. captions), or null if unsure. Blocking. */
     fun detect(text: String): String? {
         if (text.length < 40) return null

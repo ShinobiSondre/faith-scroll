@@ -54,6 +54,9 @@ fun YouTubeCard(onChanged: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
     var setupHelp by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var login by remember { mutableStateOf(false) }
+    var signedIn by remember { mutableStateOf(YouTubeAccount.signedIn()) }
 
     fun afterImport(n: Int) {
         com.faithscroll.app.data.Diag.log("youtube", "imported $n channels")
@@ -62,9 +65,6 @@ fun YouTubeCard(onChanged: () -> Unit) {
         picking = true
     }
 
-    var status by remember { mutableStateOf<String?>(null) }
-    var login by remember { mutableStateOf(false) }
-    var signedIn by remember { mutableStateOf(YouTubeAccount.signedIn()) }
 
     fun readAccount() {
         busy = true
@@ -85,10 +85,15 @@ fun YouTubeCard(onChanged: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
         scope.launch {
-            runCatching { YouTubeSubs.importTakeout(ctx, uri) }
-                .onSuccess { afterImport(it) }
+            runCatching { YouTubeSubs.importTakeout(ctx, uri) { status = it } }
+                .onSuccess { (n, x) ->
+                    subs = YouTubeSubs.all(ctx)
+                    Toast.makeText(ctx, tr("Found $n channels – $x look Christian and were added as favourites.",
+                        "Fant $n kanaler – $x ser kristne ut og ble lagt til som favoritter."), Toast.LENGTH_LONG).show()
+                    picking = true
+                }
                 .onFailure { com.faithscroll.app.data.Diag.err("youtube", "Takeout import failed", it); Toast.makeText(ctx, it.message ?: "Error", Toast.LENGTH_LONG).show() }
-            busy = false
+            status = null; busy = false
         }
     }
 

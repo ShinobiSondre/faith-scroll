@@ -56,6 +56,11 @@ object YouTubeSubs {
         onProgress(com.faithscroll.app.util.tr("Reading your subscriptions…", "Leser abonnementene dine …"))
         val found = YouTubeAccount.subscriptions()
         if (found.isEmpty()) error(com.faithscroll.app.util.tr("No subscriptions found on this account", "Fant ingen abonnementer på denne kontoen"))
+        return applyFound(ctx, found, onProgress)
+    }
+
+    /** Saves the channels, marks the Christian ones and makes those favourites (earlier choices are kept). */
+    suspend fun applyFound(ctx: Context, found: List<Pair<String, String>>, onProgress: (String) -> Unit = {}): Pair<Int, Int> {
         val christian = YouTubeAccount.christianChannels(found) { n ->
             onProgress(com.faithscroll.app.util.tr("Finding Christian channels… $n/${found.size}", "Finner kristne kanaler … $n/${found.size}"))
         }
@@ -101,7 +106,7 @@ object YouTubeSubs {
      * Imports Google Takeout's subscriptions.csv (or the whole Takeout .zip).
      * Columns: Channel Id, Channel Url, Channel Title.
      */
-    suspend fun importTakeout(ctx: Context, uri: Uri): Int = withContext(Dispatchers.IO) {
+    suspend fun importTakeout(ctx: Context, uri: Uri, onProgress: (String) -> Unit = {}): Pair<Int, Int> = withContext(Dispatchers.IO) {
         val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Can't open file")
         val csv = if (bytes.size > 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) {
             ZipInputStream(bytes.inputStream()).use { zip ->
@@ -122,8 +127,7 @@ object YouTubeSubs {
             if (!id.startsWith("UC")) null else id to (cols.getOrNull(2)?.trim().orEmpty().ifBlank { id })
         }.toList()
         if (found.isEmpty()) error("No channels found in that file")
-        merge(ctx, found)
-        found.size
+        applyFound(ctx, found, onProgress)
     }
 
     private fun splitCsv(line: String): List<String> {

@@ -43,6 +43,7 @@ import com.faithscroll.app.util.tr
 @Composable
 fun YouTubeLoginDialog(onDone: (Boolean) -> Unit) {
     var loading by remember { mutableStateOf(true) }
+    var refused by remember { mutableStateOf(false) }
     var finished by remember { mutableStateOf(false) }
     fun finish(ok: Boolean) { if (!finished) { finished = true; onDone(ok) } }
 
@@ -58,6 +59,11 @@ fun YouTubeLoginDialog(onDone: (Boolean) -> Unit) {
                 TextButton(onClick = { finish(YouTubeAccount.signedIn()) }) { Text(tr("Close", "Lukk"), color = Gold) }
             }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Gold)
+            if (refused) Text(
+                tr("Google won't allow sign-in inside apps on this phone. Close this and use \"Import from Google Takeout\" instead – it gives the same list.",
+                    "Google tillater ikke innlogging inne i apper på denne telefonen. Lukk dette og bruk «Importer fra Google Takeout» i stedet – det gir samme liste."),
+                color = Color.White, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().background(Plum).padding(12.dp)
+            )
             Box(Modifier.weight(1f).fillMaxWidth().background(Color.White)) {
                 AndroidView(factory = { c ->
                     CookieManager.getInstance().setAcceptCookie(true)
@@ -66,7 +72,12 @@ fun YouTubeLoginDialog(onDone: (Boolean) -> Unit) {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         // Look like a normal desktop browser, and don't announce "embedded app", so Google allows the sign-in.
-                        settings.userAgentString = YouTubeAccount.UA
+                        settings.userAgentString = YouTubeAccount.LOGIN_UA
+                        // Firefox has no navigator.userAgentData; hide WebView's so the page sees one consistent browser.
+                        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) runCatching {
+                            androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this,
+                                "try{Object.defineProperty(Navigator.prototype,'userAgentData',{get:function(){return undefined}});}catch(e){}", setOf("*"))
+                        }
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
                         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST))
@@ -77,6 +88,9 @@ fun YouTubeLoginDialog(onDone: (Boolean) -> Unit) {
                                 loading = false
                                 CookieManager.getInstance().flush()
                                 val host = android.net.Uri.parse(url).host.orEmpty()
+                                if (host.contains("accounts.google") && (url.contains("rejected") || url.contains("disallowed"))) {
+                                    Diag.log("youtube", "Google refused sign-in in the app: $url"); refused = true
+                                }
                                 if (host.endsWith("youtube.com") && YouTubeAccount.signedIn()) {
                                     Diag.log("youtube", "signed in")
                                     finish(true)

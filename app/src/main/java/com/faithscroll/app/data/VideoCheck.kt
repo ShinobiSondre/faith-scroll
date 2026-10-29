@@ -32,7 +32,8 @@ object VideoCheck {
     private var store: File? = null
     private const val KEEP = 24 * 60 * 60_000L
 
-    private fun mode() = if (Lang.no) "no" else "en"
+    private fun mode() = if (!Lang.no) "en" else if (Lang.alsoEnglish) "no+en" else "no"
+    private var appCtx: Context? = null
 
     fun isOk(id: String) = results[id]?.let { it.ok && it.mode == mode() && fresh(it) } == true
     private fun known(id: String) = results[id]?.let { it.mode == mode() && fresh(it) } == true
@@ -42,7 +43,8 @@ object VideoCheck {
 
     /** Checks these videos in order, in the background (replaces any earlier list). */
     @Synchronized fun queue(ctx: Context, videos: List<Video>) {
-        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v2.json"); runCatching { load() }; publish() }
+        appCtx = ctx.applicationContext
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v3.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
         if (todo.isEmpty()) return
         job?.cancel()
@@ -70,27 +72,31 @@ object VideoCheck {
     }
 
     private suspend fun check(v: Video): Boolean? {
+        // Can't read YouTube's page (e.g. offline): no verdict yet, it's checked again later.
+        val info = WatchPage.info(v.id) ?: run { reject(v, "page unreadable (will retry)"); return null }
+        val want = if (Lang.no) "no" else "en"
         val t = Transcripts.original(v.id)
-        if (t == null) {
-            // Can't read YouTube's page at all (e.g. offline): don't remember a verdict, try again later.
-            if (WatchPage.info(v.id) == null) { reject(v, "page unreadable (will retry)"); return null }
-            return reject(v, "no working captions")
+        // Spoken language: YouTube's automatic captions are made from the audio, so their language is
+        // the spoken one. Without them (common for Norwegian), judge the title and description.
+        var spoken = WatchPage.spoken(info)
+        var how = "auto captions"
+        if (spoken.isNotBlank() && t != null && t.lang == spoken) {
+            LangFilter.detect(t.cues.take(60).joinToString(" ") { it.text })?.let { if (it != spoken) { spoken = it; how = "caption text" } }
         }
-        val sample = t.cues.take(60).joinToString(" ") { it.text }
-        // Spoken language: YouTube's automatic captions; double-checked against what the captions actually say.
-        var spoken = t.spoken.ifBlank { StreamResolver.cached(v.id)?.spoken.orEmpty() }
-        if (t.lang == t.spoken || t.spoken.isBlank()) {
-            LangFilter.detect(sample)?.let { detected -> if (spoken.isBlank() || detected != spoken) spoken = detected }
+        if (spoken.isBlank()) {
+            spoken = LangFilter.spokenFromText(listOf(v.title, info.title, info.description).joinToString("\n")).orEmpty()
+            how = "title/description"
         }
-        if (spoken.isBlank()) return reject(v, "spoken language unknown")
+        if (spoken.isBlank()) return reject(v, "language unknown")
         val ok = when {
-            !Lang.no -> spoken == "en"
-            spoken == "no" -> true
-            spoken == "en" -> Transcripts.inAppLanguage(v.id)?.let { it.translated || it.lang == "no" } == true
+            spoken == want -> true // already in your language: no subtitles needed
+            Lang.no && Lang.alsoEnglish && spoken == "en" ->
+                t != null && Transcripts.inAppLanguage(v.id)?.let { it.translated || it.lang == "no" } == true
             else -> false
         }
-        if (!ok) return reject(v, "spoken '$spoken' isn't the app language")
-        Diag.log("check", "${v.id}: OK (spoken $spoken, ${t.cues.size} caption lines)")
+        if (!ok) return reject(v, "spoken '$spoken' ($how) isn't the app language")
+        if (spoken == "no") appCtx?.let { Discovery.rewardChannel(it, v.id) } // a Norwegian channel: keep it as a source
+        Diag.log("check", "${v.id}: OK (spoken $spoken by $how, ${t?.cues?.size ?: 0} caption lines)")
         return true
     }
 

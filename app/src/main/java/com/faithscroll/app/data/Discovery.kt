@@ -47,7 +47,9 @@ object Discovery {
         "prayer" to listOf("how to pray sermon", "powerful prayer", "holy spirit encounter testimony")
     )
     private val norwegian = listOf(
-        "kristent vitnesbyrd", "preken", "andakt", "lovsang", "jesus forandret livet mitt", "bibelundervisning", "bønn for i dag"
+        "kristent vitnesbyrd", "preken", "andakt", "jesus forandret livet mitt", "bibelundervisning", "bønn for i dag",
+        "vitnesbyrd jesus", "preken menighet", "dagens andakt", "kristen tro", "møte med jesus", "gudstjeneste preken",
+        "bibelen forklart", "tale om tro", "frelst vitnesbyrd", "jesus helbredet meg", "kristen podcast norsk", "oppmuntring fra bibelen"
     )
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("discovery", Context.MODE_PRIVATE)
@@ -75,6 +77,9 @@ object Discovery {
         p.apply()
     }
 
+    /** A discovered video passed as Norwegian: its channel becomes a permanent source right away. */
+    fun rewardChannel(ctx: Context, videoId: String) { if (channelOfVideo.containsKey(videoId)) reward(ctx, videoId, 2f) }
+
     fun removeChannel(ctx: Context, id: String) {
         val ch = runCatching { JSONObject(prefs(ctx).getString("channels", "{}")!!) }.getOrDefault(JSONObject())
         ch.remove(id)
@@ -87,7 +92,8 @@ object Discovery {
         val queries = mutableListOf<String>()
         Taste.topThemes(ctx, 3).forEach { t -> byTheme[t]?.random(rnd)?.let(queries::add) }
         queries += general.shuffled(rnd).take(if (queries.isEmpty()) 4 else 2)
-        if (Lang.no) queries += norwegian.shuffled(rnd).take(2)
+        if (Lang.no && !Lang.alsoEnglish) { queries.clear(); queries += norwegian.shuffled(rnd).take(6) }
+        else if (Lang.no) queries += norwegian.shuffled(rnd).take(3)
 
         val results = coroutineScope { queries.distinct().map { q -> async { runCatching { searchOnce(q) }.getOrDefault(emptyList()) } }.awaitAll() }
         val out = mutableListOf<Video>()
