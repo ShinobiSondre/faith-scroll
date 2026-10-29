@@ -132,7 +132,7 @@ object Asr {
 
     fun stop(videoId: String) { lives[videoId]?.job?.cancel() }
 
-    private suspend fun audioFile(ctx: Context, videoId: String): File? =
+    internal suspend fun audioFile(ctx: Context, videoId: String): File? =
         downloadAudio(videoId, File(ctx.cacheDir, "asr").apply { mkdirs() })
 
     /** Downloads a video's audio track into [dir] (also used by the diagnostic tests). */
