@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">FaithScroll</string>
+    <string name="widget_name">Daily Verse</string>
+    <string name="widget_description">A Bible verse on your home screen. Transparent, semi-transparent or solid.</string>
+</resources>

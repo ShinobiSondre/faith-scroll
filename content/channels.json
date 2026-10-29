@@ -1,0 +1,23 @@
+{
+ "channels": [
+  {
+   "id": "UC9dK4qKU8-5xiqFoI9BGVmQ",
+   "name": "I Am Second"
+  },
+  {
+   "id": "UCdMgPQvQhsdd-qD-fugvlSA",
+   "name": "700 Club Testimonies"
+  },
+  {
+   "id": "UCVfwlh9XpX2Y_tQfjeln9QA",
+   "name": "BibleProject"
+  }
+ ],
+ "videos": [
+  {
+   "id": "dDYbiukIFBc",
+   "title": "Best CBN Testimonies",
+   "channel": "CBN"
+  }
+ ]
+}
