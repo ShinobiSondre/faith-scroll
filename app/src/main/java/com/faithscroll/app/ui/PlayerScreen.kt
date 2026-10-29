@@ -1,5 +1,6 @@
 package com.faithscroll.app.ui
 
+import kotlinx.coroutines.launch
 import com.faithscroll.app.util.tr
 
 import android.annotation.SuppressLint
@@ -80,6 +81,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.id == start.id }.coerceAtLeast(0)) { list.size }
     var landscape by remember { mutableStateOf(false) }
     var playing by remember { mutableStateOf(true) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     BackHandler { if (landscape) landscape = false else onClose() }
 
@@ -136,7 +138,17 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
             userScrollEnabled = !landscape
         ) { page ->
             val v = list[page]
-            VideoCard(
+            SwipeToRate(
+                enabled = pager.settledPage == page,
+                onMore = { Taste.videoMore(ctx, v); com.faithscroll.app.data.Discovery.reward(ctx, v.id, 2f) },
+                onLess = {
+                    Taste.videoLess(ctx, v)
+                    com.faithscroll.app.data.Seen.mark(ctx, v.id)
+                    // Skip ahead past this channel's videos.
+                    val next = (page + 1 until list.size).firstOrNull { list[it].channel != v.channel } ?: (page + 1)
+                    if (next < list.size) scope.launch { pager.animateScrollToPage(next) } else onClose()
+                }
+            ) { VideoCard(
                 video = v,
                 isActive = pager.settledPage == page,
                 preload = page == pager.settledPage + 1,
@@ -152,7 +164,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
                 landscape = landscape,
                 immersive = true,
                 onPausedChange = { playing = !it }
-            )
+            ) }
         }
         // Back button only while paused (full screen shows nothing but the video while it plays).
         if (!playing) IconButton(
