@@ -74,6 +74,7 @@ object SocialRepository {
         // Short share links (pin.it, vm.tiktok.com) redirect to the real address.
         if (Regex("//(pin\\.it|vm\\.tiktok\\.com|vt\\.tiktok\\.com)/").containsMatchIn(link)) link = resolveRedirect(link) ?: link
 
+        if (link.contains("tiktok.com")) return@withContext null // videos come only from YouTube
         Regex("tiktok\\.com/@([^/?#]+)/(?:video|photo)/(\\d+)").find(link)?.let { m ->
             saveTikToks(ctx, userTikToks(ctx) + TikTok(m.groupValues[2], m.groupValues[1]))
             return@withContext "TikTok from @${m.groupValues[1]}"

@@ -25,12 +25,12 @@ object Transcripts {
     fun target(): String = if (Lang.no) "no" else "en"
 
     /** Original captions (best track: manual before automatic, app language before others). */
-    suspend fun original(videoId: String): Transcript? = withContext(Dispatchers.IO) {
+    suspend fun original(videoId: String, urgent: Boolean = false): Transcript? = withContext(Dispatchers.IO) {
         cache["o|$videoId"]?.let { return@withContext it }
         missing[videoId]?.let { if (System.currentTimeMillis() - it < 10 * 60_000) return@withContext null }
         val r = StreamResolver.resolve(videoId) ?: return@withContext null
         if (r.subtitles.isEmpty()) {
-            val link = CaptionGrabber.grab(videoId) ?: run { missing[videoId] = System.currentTimeMillis(); return@withContext null }
+            val link = CaptionGrabber.grab(videoId, urgent) ?: run { missing[videoId] = System.currentTimeMillis(); return@withContext null }
             captureTimedText(videoId, link)
             return@withContext cache["o|$videoId"]
         }
@@ -55,10 +55,10 @@ object Transcripts {
     }
 
     /** Captions in the app language: translated on the phone when the video is in another language. */
-    suspend fun inAppLanguage(videoId: String, onProgress: (Transcript) -> Unit = {}): Transcript? = withContext(Dispatchers.IO) {
+    suspend fun inAppLanguage(videoId: String, urgent: Boolean = false, onProgress: (Transcript) -> Unit = {}): Transcript? = withContext(Dispatchers.IO) {
         val want = target()
         cache["t|$want|$videoId"]?.let { return@withContext it }
-        val orig = original(videoId) ?: return@withContext null
+        val orig = original(videoId, urgent) ?: return@withContext null
         if (orig.lang == want) return@withContext orig
         // Like YouTube's "Auto-translate": ask YouTube for the captions already translated.
         CaptionGrabber.known(videoId)?.let { link ->
@@ -109,7 +109,7 @@ object Transcripts {
 
     /** Transcript text around a moment, from YouTube captions or the phone's own transcript. */
     suspend fun textAround(videoId: String, atMs: Long): String {
-        original(videoId)?.let { return window(it, atMs) }
+        original(videoId, urgent = true)?.let { return window(it, atMs) }
         val cues = Asr.cues(videoId).value
         return cues.filter { it.end >= atMs - 90_000 && it.start <= atMs + 10_000 }.joinToString(" ") { it.text }
     }

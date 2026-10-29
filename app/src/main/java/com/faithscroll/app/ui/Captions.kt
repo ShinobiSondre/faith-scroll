@@ -52,7 +52,7 @@ fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modif
     var youtube by remember(videoId) { mutableStateOf<Transcript?>(null) }
     var useAsr by remember(videoId) { mutableStateOf(false) }
     LaunchedEffect(videoId) {
-        val t = Transcripts.inAppLanguage(videoId) { partial -> youtube = partial }
+        val t = Transcripts.inAppLanguage(videoId, urgent = true) { partial -> youtube = partial }
         if (t == null) useAsr = true else youtube = t
     }
 

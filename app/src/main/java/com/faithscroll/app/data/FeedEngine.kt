@@ -43,7 +43,7 @@ class FeedEngine(
         if (sinceMessage >= gap) { sinceMessage = 0; return pickIllustration() }
         sinceMessage++
         // TikToks you've added are mixed in with the videos.
-        val tiks = social()?.tiktoks.orEmpty().filter { it.id !in shownTikToks }
+        val tiks = emptyList<TikTok>() // videos come only from YouTube
         if (tiks.isNotEmpty() && rnd.nextDouble() < 0.25) {
             val t = tiks.random(rnd); shownTikToks += t.id
             return FeedItem.TikTokItem(t, tr("From TikTok", "Fra TikTok"))

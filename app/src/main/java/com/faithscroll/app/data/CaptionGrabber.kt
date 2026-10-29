@@ -2,88 +2,191 @@ package com.faithscroll.app.data
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
+import java.io.File
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * YouTube only hands out caption files to its own player (with a fresh token). So, for a video
- * that's coming up, a tiny invisible YouTube player loads it muted, and we note the caption link
- * it requests. With that link we can fetch the captions, and YouTube's own auto-translation.
+ * YouTube only hands out caption files to its own player (with a fresh token). So one tiny,
+ * invisible YouTube player stays loaded, and for each video we just switch it to that video
+ * (muted) and note the caption link it requests: about 1–2 seconds, versus 5–8 for building a
+ * new player each time. The video on screen always goes first; the next ones queue behind it.
+ * Found links are kept on the phone for a few hours, so revisiting or pausing to ask is instant.
  */
 object CaptionGrabber {
+    private const val TIMEOUT_MS = 9_000L
+    private const val KEEP_MS = 4 * 60 * 60_000L // caption links stay valid for several hours
+
     private var host: WeakReference<Activity>? = null
-    private val links = ConcurrentHashMap<String, String>()
+    private var web: WebView? = null
+    private var ready = CompletableDeferred<Unit>()
+    private val links = ConcurrentHashMap<String, Pair<Long, String>>()
     private val none = ConcurrentHashMap<String, Long>()
-    private val lock = Mutex()
+    private val waiting = ConcurrentHashMap<String, CompletableDeferred<String?>>()
+    private val queue = ArrayDeque<String>() // video ids, front = most urgent
+    private var current: String? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var store: File? = null
 
-    fun attach(a: Activity) { host = WeakReference(a) }
+    fun attach(a: Activity) {
+        host = WeakReference(a)
+        if (store == null) { store = File(a.filesDir, "caption_links.json"); runCatching { load() } }
+        scope.launch { ensurePlayer() }
+    }
 
-    fun known(videoId: String): String? = links[videoId]
-    fun remember(videoId: String, url: String) { links[videoId] = url }
+    fun known(videoId: String): String? = links[videoId]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second
+    fun remember(videoId: String, url: String) { links[videoId] = System.currentTimeMillis() to url; save() }
 
-    /** The caption link for [videoId], or null if YouTube has no captions for it (or it timed out). */
-    suspend fun grab(videoId: String): String? {
-        links[videoId]?.let { return it }
+    /**
+     * The caption link for [videoId], or null if YouTube has none. [urgent] = the video on screen:
+     * it jumps ahead of the background queue.
+     */
+    suspend fun grab(videoId: String, urgent: Boolean = false): String? {
+        known(videoId)?.let { return it }
         none[videoId]?.let { if (System.currentTimeMillis() - it < 30 * 60_000) return null }
-        return lock.withLock {
-            links[videoId] ?: withContext(Dispatchers.Main) { run(videoId) }.also {
-                if (it == null) { none[videoId] = System.currentTimeMillis(); Diag.log("subs", "$videoId: YouTube has no captions for it") }
-                else Diag.log("subs", "$videoId: caption link from YouTube's player")
+        val d = synchronized(this) {
+            waiting[videoId]?.also { if (urgent) bump(videoId) } ?: CompletableDeferred<String?>().also {
+                waiting[videoId] = it
+                if (urgent) queue.addFirst(videoId) else queue.addLast(videoId)
             }
+        }
+        scope.launch { pump() }
+        return d.await()
+    }
+
+    @Synchronized private fun bump(id: String) { if (queue.remove(id)) queue.addFirst(id) }
+
+    /** Works through the queue one video at a time on the shared player. */
+    private suspend fun pump() {
+        if (current != null) return
+        while (true) {
+            val id = synchronized(this) { queue.removeFirstOrNull() } ?: return
+            current = id
+            val started = System.currentTimeMillis()
+            val url = runCatching { load(id) }.getOrNull()
+            val secs = "%.1f".format((System.currentTimeMillis() - started) / 1000f)
+            if (url != null) { remember(id, url); Diag.log("subs", "$id: YouTube caption link in $secs s") }
+            else { none[id] = System.currentTimeMillis(); Diag.log("subs", "$id: no YouTube captions ($secs s)") }
+            waiting.remove(id)?.complete(url)
+            current = null
         }
     }
 
+    private var found: CompletableDeferred<String?>? = null
+    private var foundFor: String? = null
+
+    private suspend fun load(id: String): String? {
+        if (!ensurePlayer()) return null
+        val d = CompletableDeferred<String?>()
+        found = d; foundFor = id
+        web?.evaluateJavascript("go('$id')", null)
+        return withTimeoutOrNull(TIMEOUT_MS) { d.await() }.also {
+            found = null; foundFor = null
+            web?.evaluateJavascript("try{cur=null;p.stopVideo();}catch(x){}", null) // got what we need; stop downloading video
+        }
+    }
+
+    /** Builds the hidden player once and waits until YouTube's player API is ready. */
     @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun run(videoId: String): String? {
-        val activity = host?.get() ?: return null
-        val root = activity.window?.decorView as? ViewGroup ?: return null
-        val found = CompletableDeferred<String?>()
-        val web = WebView(activity).apply {
-            alpha = 0.01f
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
-            webViewClient = object : WebViewClient() {
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                    val u = request.url.toString()
-                    if (u.contains("/api/timedtext") && !found.isCompleted) found.complete(u)
-                    return null
+    private suspend fun ensurePlayer(): Boolean = withContext(Dispatchers.Main) {
+        if (web == null) {
+            val activity = host?.get() ?: return@withContext false
+            val root = activity.window?.decorView as? ViewGroup ?: return@withContext false
+            ready = CompletableDeferred()
+            web = WebView(activity).apply {
+                alpha = 0.01f
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false
+                webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                        val u = request.url
+                        if (u.path?.contains("/api/timedtext") == true) {
+                            val v = u.getQueryParameter("v")
+                            if (v != null && v == foundFor) found?.complete(u.toString())
+                            else if (v != null) remember(v, u.toString())
+                        }
+                        return null
+                    }
                 }
+                addJavascriptInterface(Bridge, "Grab")
             }
-            addJavascriptInterface(object {
-                @android.webkit.JavascriptInterface fun noCaptions() { if (!found.isCompleted) found.complete(null) }
-            }, "Grab")
+            root.addView(web, FrameLayout.LayoutParams(4, 4))
+            web!!.loadDataWithBaseURL("https://www.youtube.com", HTML, "text/html", "utf-8", null)
         }
-        root.addView(web, FrameLayout.LayoutParams(4, 4))
-        web.loadDataWithBaseURL("https://www.youtube.com", html(videoId), "text/html", "utf-8", null)
-        val url = withTimeoutOrNull(20_000) { found.await() }
-        root.removeView(web)
-        web.stopLoading(); web.loadUrl("about:blank"); web.destroy()
-        return url?.also { links[videoId] = it }
+        withTimeoutOrNull(15_000) { ready.await() } != null
     }
 
-    private fun html(id: String) = """
+    private object Bridge {
+        @JavascriptInterface fun ready() { ready.complete(Unit) }
+        @JavascriptInterface fun none(id: String) { if (id == foundFor) found?.complete(null) }
+    }
+
+    /** Frees the hidden player (e.g. when the app is closed); it's rebuilt when needed. */
+    fun release() {
+        scope.launch {
+            web?.let { w -> (w.parent as? ViewGroup)?.removeView(w); w.stopLoading(); w.destroy() }
+            web = null
+        }
+    }
+
+    private fun save() {
+        val f = store ?: return
+        runCatching {
+            val now = System.currentTimeMillis()
+            val o = JSONObject()
+            links.entries.filter { now - it.value.first < KEEP_MS }.forEach { (k, v) -> o.put(k, JSONObject().put("t", v.first).put("u", v.second)) }
+            f.writeText(o.toString())
+        }
+    }
+
+    private fun load() {
+        val f = store ?: return
+        if (!f.exists()) return
+        val o = JSONObject(f.readText())
+        val now = System.currentTimeMillis()
+        o.keys().forEach { k ->
+            val e = o.getJSONObject(k)
+            if (now - e.getLong("t") < KEEP_MS) links[k] = e.getLong("t") to e.getString("u")
+        }
+    }
+
+    private const val HTML = """
 <!DOCTYPE html><html><body style="margin:0"><div id="p"></div><script>
 var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
-var p,checked=0;
+var p,cur=null,tries=0;
 function onYouTubeIframeAPIReady(){
- p=new YT.Player('p',{width:4,height:4,videoId:'$id',playerVars:{autoplay:1,mute:1,playsinline:1,controls:0,cc_load_policy:1},
-  events:{onReady:function(e){e.target.mute();e.target.playVideo();},
-   onApiChange:function(){try{p.loadModule('captions');var tl=p.getOption('captions','tracklist')||[];
-     if(tl.length){p.setOption('captions','track',{languageCode:tl[0].languageCode});}else if(++checked>3){Grab.noCaptions();}}catch(x){}}}});
+ p=new YT.Player('p',{width:4,height:4,playerVars:{autoplay:1,mute:1,playsinline:1,controls:0,cc_load_policy:1},
+  events:{onReady:function(){Grab.ready();},
+   onApiChange:function(){caps();},
+   onStateChange:function(e){if(e.data==1){caps();}}}});
 }
+function caps(){
+ if(!cur)return;
+ try{p.loadModule('captions');var tl=p.getOption('captions','tracklist')||[];
+  if(tl.length){p.setOption('captions','track',{languageCode:tl[0].languageCode});}
+  else if(++tries>3){Grab.none(cur);}
+ }catch(x){}
+}
+function go(id){cur=id;tries=0;p.mute();p.loadVideoById({videoId:id,startSeconds:0});
+ setTimeout(function(){if(cur==id)caps();},1500);setTimeout(function(){if(cur==id)caps();},3000);
+ setTimeout(function(){if(cur==id&&tries>0)Grab.none(id);},6000);}
 </script></body></html>
 """
 }

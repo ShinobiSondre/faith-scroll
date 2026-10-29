@@ -153,12 +153,10 @@ object AskSessions {
     }
 
     private suspend fun buildContext(video: Video, atMs: Long): String {
-        var words = runCatching { Transcripts.textAround(video.id, atMs) }.getOrDefault("")
-        var tries = 0
-        while (words.isBlank() && tries++ < 8) { // captions may still be arriving
-            delay(1000)
-            words = runCatching { Transcripts.textAround(video.id, atMs) }.getOrDefault("")
-        }
+        val t0 = System.currentTimeMillis()
+        // YouTube captions are usually cached already (fetched ahead); otherwise this takes ~1–2 s.
+        val words = runCatching { kotlinx.coroutines.withTimeoutOrNull(10_000) { Transcripts.textAround(video.id, atMs) } }.getOrNull().orEmpty()
+        Diag.log("ai", "${video.id}: transcript ready in ${(System.currentTimeMillis() - t0) / 1000.0} s")
         val desc = StreamResolver.cached(video.id)?.description.orEmpty().take(700)
         Diag.log("ai", "${video.id}: asking with ${words.length} chars of transcript, ${desc.length} of description")
         val mm = atMs / 60000; val ss = (atMs / 1000) % 60

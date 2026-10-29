@@ -151,6 +151,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) com.faithscroll.app.data.CaptionGrabber.release()
+    }
+
     override fun onResume() {
         super.onResume()
         Updater.onResume(this)
@@ -226,8 +231,9 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     // Mostly videos: shorts, testimonies and sermons take turns.
     val feedVideos = remember(library, social, discovered) {
         val l = library
-        val clips = social?.clips.orEmpty()
-        if (l == null && clips.isEmpty() && discovered.isEmpty()) return@remember emptyList<Video>()
+        // YouTube is the only video source (every video gets captions, translation and Ask).
+        val clips = emptyList<Video>()
+        if (l == null && discovered.isEmpty()) return@remember emptyList<Video>()
         val shorts = l?.shorts.orEmpty(); val stories = l?.stories.orEmpty(); val sermons = l?.sermons.orEmpty()
         val out = mutableListOf<Video>()
         for (i in 0 until maxOf(stories.size, sermons.size, shorts.size, clips.size, discovered.size)) {

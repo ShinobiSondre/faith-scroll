@@ -424,11 +424,11 @@ private fun SourcesCard() {
 
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
         Text(tr("Your sources", "Dine kilder"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Text(tr("Paste a Pinterest board, a subreddit (like r/TrueChristian) or a TikTok link and it shows up in your feed.", "Lim inn en Pinterest-tavle, et subreddit (som r/TrueChristian) eller en TikTok-lenke, så dukker det opp i feeden din."), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Text(tr("Add Christian images to your feed: paste a Pinterest board or a subreddit (like r/TrueChristian). Videos come from YouTube.", "Legg til kristne bilder i feeden: lim inn en Pinterest-tavle eller et subreddit (som r/TrueChristian). Videoene kommer fra YouTube."), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
         Spacer(Modifier.height(12.dp))
         androidx.compose.material3.OutlinedTextField(
             value = link, onValueChange = { link = it }, singleLine = true,
-            placeholder = { Text(tr("r/… · pinterest.com/… · tiktok.com/…", "r/… · pinterest.com/… · tiktok.com/…")) },
+            placeholder = { Text("r/… · pinterest.com/…") },
             modifier = Modifier.fillMaxWidth(),
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Gold, cursorColor = Gold, focusedTextColor = Color.White, unfocusedTextColor = Color.White
@@ -446,7 +446,7 @@ private fun SourcesCard() {
                         boards = SocialRepository.userBoards(ctx); tiktoks = SocialRepository.userTikToks(ctx); subs = SocialRepository.userSubs(ctx)
                         Toast.makeText(ctx, tr("Added $added", "La til $added"), Toast.LENGTH_SHORT).show()
                         sourcesChanged()
-                    } else Toast.makeText(ctx, tr("That isn't a subreddit, Pinterest board or TikTok link.", "Det er ikke et subreddit, en Pinterest-tavle eller en TikTok-lenke."), Toast.LENGTH_LONG).show()
+                    } else Toast.makeText(ctx, tr("That isn't a subreddit or Pinterest board.", "Det er ikke et subreddit eller en Pinterest-tavle."), Toast.LENGTH_LONG).show()
                 }
             },
             enabled = link.isNotBlank() && !busy,
@@ -464,7 +464,7 @@ private fun SourcesCard() {
         boards.forEach { b ->
             SourceRow("Pinterest · $b") { SocialRepository.removeBoard(ctx, b); boards = SocialRepository.userBoards(ctx); sourcesChanged() }
         }
-        tiktoks.forEach { t ->
+        tiktoks.filter { false }.forEach { t ->
             SourceRow("TikTok · " + (if (t.author.isNotBlank()) "@${t.author}" else t.id)) {
                 SocialRepository.removeTikTok(ctx, t.id); tiktoks = SocialRepository.userTikToks(ctx); sourcesChanged()
             }

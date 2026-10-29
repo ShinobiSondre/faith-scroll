@@ -41,12 +41,12 @@ object Prefetcher {
             }
         }
 
-        // Subtitles: if the next video has no usable YouTube captions, transcribe its first 90 s now.
+        // Subtitles: fetch YouTube captions (and YouTube's translation) for the next 3 videos now,
+        // so they're ready the moment you swipe. Phone transcription only if YouTube has none.
         val captionsOn = app.getSharedPreferences("captions", Context.MODE_PRIVATE).getBoolean("on", true)
-        videos.firstOrNull()?.takeIf { captionsOn && it.direct.isBlank() }?.let { next ->
-            if (asrJobs[next.id]?.isActive != true) asrJobs[next.id] = scope.launch {
-                if (Transcripts.original(next.id) == null) Asr.ensure(app, next.id, 0, maxMs = 90_000)
-                else Transcripts.inAppLanguage(next.id) // translate YouTube captions ahead too
+        if (captionsOn) upcoming.filterIsInstance<FeedItem.VideoItem>().map { it.video }.filter { it.direct.isBlank() }.take(3).forEach { v ->
+            if (asrJobs[v.id]?.isActive != true) asrJobs[v.id] = scope.launch {
+                if (Transcripts.inAppLanguage(v.id) == null && v == videos.firstOrNull()) Asr.ensure(app, v.id, 0, maxMs = 90_000)
             }
         }
 
