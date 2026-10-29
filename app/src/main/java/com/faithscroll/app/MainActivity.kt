@@ -109,6 +109,11 @@ class MainActivity : ComponentActivity() {
         Updater.start(this)
         com.faithscroll.app.prayer.Reminders.schedule(this)
         com.faithscroll.app.data.StreamResolver.setup(this)
+        // Let the stream finder pass YouTube's bot check (proof-of-origin tokens), so playback,
+        // audio for subtitles and captions aren't cut off with HTTP 403.
+        com.faithscroll.app.potoken.AppContext.set(this)
+        org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
+            .setPoTokenProvider(com.faithscroll.app.potoken.PoTokenProviderImpl)
         setContent {
             val appCtx = applicationContext
             val state = remember { AppState(appCtx, streak) }

@@ -71,6 +71,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.faithscroll.app.data.Video
 import com.faithscroll.app.util.Share
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -107,6 +108,11 @@ fun VideoCard(
     val playback = remember(video.id) { PlaybackState() }
     var embedPlaying by remember(video.id) { mutableStateOf(false) }
     var embedFailed by remember(video.id) { mutableStateOf(false) }
+    var embedPos by remember(video.id) { mutableStateOf(0L) }
+    var embedStart by remember(video.id) { mutableStateOf(0) }
+    val cardScope = androidx.compose.runtime.rememberCoroutineScope()
+    // When the app's own player fails, continue in YouTube's player from the same second.
+    LaunchedEffect(playback.failed) { if (playback.failed) { embedStart = (playback.position / 1000).toInt(); com.faithscroll.app.data.Diag.log("play", "${video.id}: own player failed at ${embedStart}s → YouTube player") } }
     // Autoplay: every card starts playing when it comes on screen.
     LaunchedEffect(isActive) { paused = false; controls = false }
 
@@ -149,6 +155,10 @@ fun VideoCard(
             } else if (!embedFailed && isActive) {
                 // Fallback: YouTube's own player, still full screen inside the app.
                 YouTubePlayer(
+                    startSec = remember(video.id) { (playback.position / 1000).toInt() },
+                    captions = CaptionSettings.on || asking != null,
+                    onTimedText = { url -> cardScope.launch { com.faithscroll.app.data.Transcripts.captureTimedText(video.id, url) } },
+                    onTime = { embedPos = it },
                     videoId = video.id, paused = paused || suspended, muted = muted,
                     onPlaying = { embedPlaying = true }, onError = { embedFailed = true },
                     modifier = Modifier.fillMaxSize()
@@ -171,13 +181,14 @@ fun VideoCard(
             CircularProgressIndicator(color = Gold, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center).size(44.dp))
         }
         // When paused: ask what the speaker means at this moment.
-        if (isActive && paused && isYouTube && !playback.failed) {
+        val usingEmbed = playback.failed && !embedFailed
+        if (isActive && paused && isYouTube && (!playback.failed || usingEmbed)) {
             Text(
                 "✦ " + tr("What do they mean here?", "Hva mener de her?"),
                 color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.Center).padding(top = 150.dp)
                     .clip(CircleShape).background(Gold)
-                    .clickable { asking = playback.position }
+                    .clickable { asking = if (usingEmbed) embedPos else playback.position }
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             )
         }
@@ -307,9 +318,10 @@ private fun fmt(ms: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
-private class PlayerBridge(val onState: (Int) -> Unit, val onError: (Int) -> Unit) {
+private class PlayerBridge(val onState: (Int) -> Unit, val onError: (Int) -> Unit, val onTime: (Long) -> Unit = {}) {
     @JavascriptInterface fun state(s: Int) = onState(s)
     @JavascriptInterface fun error(code: Int) = onError(code)
+    @JavascriptInterface fun time(ms: Double) = onTime(ms.toLong())
 }
 
 @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
@@ -321,9 +333,14 @@ fun YouTubePlayer(
     onPlaying: () -> Unit,
     onError: () -> Unit,
     modifier: Modifier = Modifier,
-    controls: Boolean = false
+    controls: Boolean = false,
+    startSec: Int = 0,
+    captions: Boolean = false, // show YouTube's captions, translated into the app language
+    onTimedText: (String) -> Unit = {}, // the caption file YouTube's player downloaded
+    onTime: (Long) -> Unit = {}
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
+    val lang = com.faithscroll.app.data.Transcripts.target()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     AndroidView(
@@ -335,15 +352,24 @@ fun YouTubePlayer(
                 settings.domStorageEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
                 webChromeClient = WebChromeClient()
+                webViewClient = object : android.webkit.WebViewClient() {
+                    // Notice when YouTube's player fetches captions (the URL carries its token).
+                    override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
+                        val u = request.url.toString()
+                        if (u.contains("/api/timedtext")) post { onTimedText(u) }
+                        return null
+                    }
+                }
                 if (!controls) setOnTouchListener { _, _ -> true } // feed: gestures handled by Compose
                 addJavascriptInterface(
                     PlayerBridge(
                         onState = { s -> if (s == 1) post { onPlaying() } },
-                        onError = { post { onError() } }
+                        onError = { post { onError() } },
+                        onTime = { ms -> post { onTime(ms) } }
                     ),
                     "Android"
                 )
-                loadDataWithBaseURL("https://www.youtube.com", playerHtml(videoId, muted, controls), "text/html", "utf-8", null)
+                loadDataWithBaseURL("https://www.youtube.com", playerHtml(videoId, muted, controls, startSec, captions, lang), "text/html", "utf-8", null)
                 webView = this
             }
         },
@@ -352,6 +378,7 @@ fun YouTubePlayer(
 
     LaunchedEffect(paused, webView) { webView?.evaluateJavascript(if (paused) "pauseV()" else "playV()", null) }
     LaunchedEffect(muted, webView) { webView?.evaluateJavascript("setMuted(${muted})", null) }
+    LaunchedEffect(captions, webView) { webView?.evaluateJavascript("setCaptions(${captions})", null) }
 
     DisposableEffect(lifecycle, webView) {
         val obs = LifecycleEventObserver { _, e ->
@@ -366,7 +393,7 @@ fun YouTubePlayer(
     }
 }
 
-private fun playerHtml(id: String, muted: Boolean, controls: Boolean): String {
+private fun playerHtml(id: String, muted: Boolean, controls: Boolean, startSec: Int = 0, captions: Boolean = false, lang: String = "en"): String {
     val ctl = if (controls) 1 else 0
     val loop = if (controls) "" else "loop:1,playlist:'$id',"
     return """
@@ -375,13 +402,15 @@ private fun playerHtml(id: String, muted: Boolean, controls: Boolean): String {
 <style>html,body{margin:0;padding:0;height:100%;background:transparent;overflow:hidden}#p{position:absolute;inset:0;width:100%;height:100%}</style>
 </head><body><div id="p"></div>
 <script>
-var player,ready=false,want='play',muted=$muted;
+var player,ready=false,want='play',muted=$muted,capsOn=$captions,lang='$lang';
 var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('p',{width:'100%',height:'100%',videoId:'$id',
-    playerVars:{autoplay:1,playsinline:1,controls:$ctl,rel:0,modestbranding:1,fs:0,iv_load_policy:3,${loop}disablekb:1},
+    playerVars:{autoplay:1,playsinline:1,controls:$ctl,rel:0,modestbranding:1,fs:0,iv_load_policy:3,${loop}disablekb:1,start:$startSec,cc_load_policy:${if (captions) 1 else 0},cc_lang_pref:lang,hl:lang},
     events:{
-      onReady:function(e){ready=true;if(muted)e.target.mute();else e.target.unMute();if(want=='play')e.target.playVideo();},
+      onReady:function(e){ready=true;if(muted)e.target.mute();else e.target.unMute();if(want=='play')e.target.playVideo();
+        applyCaptions();setInterval(function(){try{Android.time(player.getCurrentTime()*1000);}catch(x){}},500);},
+      onApiChange:function(){applyCaptions();},
       onStateChange:function(e){Android.state(e.data);},
       onError:function(e){Android.error(e.data);}
     }});
@@ -389,6 +418,20 @@ function onYouTubeIframeAPIReady(){
 function playV(){want='play';if(ready)player.playVideo();}
 function pauseV(){want='pause';if(ready)player.pauseVideo();}
 function setMuted(m){muted=m;if(ready){if(m)player.mute();else player.unMute();}}
+function applyCaptions(){
+  if(!ready)return;
+  try{
+    if(!capsOn){player.unloadModule('captions');return;}
+    player.loadModule('captions');
+    var tl=player.getOption('captions','tracklist')||[];
+    if(!tl.length)return;
+    var t=null;
+    for(var i=0;i<tl.length;i++){if((tl[i].languageCode||'').split('-')[0]==lang){t=tl[i];break;}}
+    if(t){player.setOption('captions','track',{languageCode:t.languageCode});}
+    else{player.setOption('captions','track',{languageCode:tl[0].languageCode,translationLanguage:{languageCode:lang}});}
+  }catch(x){}
+}
+function setCaptions(on){capsOn=on;applyCaptions();}
 </script></body></html>
 """
 }

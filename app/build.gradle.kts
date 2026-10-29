@@ -83,6 +83,10 @@ dependencies {
     implementation("androidx.media3:media3-database:1.5.1")
     // Finds the direct stream URLs for videos (same library the NewPipe app uses)
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    // Proof-of-origin tokens (YouTube's bot check), generated in a hidden WebView like NewPipe does
+    implementation("io.reactivex.rxjava3:rxjava:3.1.9")
+    implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // On-device language detection (offline), so videos match the app language
     implementation("com.google.mlkit:language-id:17.0.6")

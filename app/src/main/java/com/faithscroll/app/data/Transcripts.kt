@@ -101,6 +101,34 @@ object Transcripts {
         return cues.filter { it.end >= atMs - 90_000 && it.start <= atMs + 10_000 }.joinToString(" ") { it.text }
     }
 
+    /**
+     * YouTube's own player fetches captions with a valid token. When the fallback player does that,
+     * we read the same file (as JSON) so "What do they mean here?" and subtitles have a transcript.
+     */
+    suspend fun captureTimedText(videoId: String, url: String) = withContext(Dispatchers.IO) {
+        if (cache["o|$videoId"] != null) return@withContext
+        val u = android.net.Uri.parse(url)
+        val b = u.buildUpon().clearQuery()
+        for (k in u.queryParameterNames) if (k != "fmt" && k != "tlang") u.getQueryParameters(k).forEach { b.appendQueryParameter(k, it) }
+        b.appendQueryParameter("fmt", "json3")
+        val body = Http.get(b.build().toString(), 15_000) ?: run { Diag.log("subs", "$videoId: captured captions download failed"); return@withContext }
+        val cues = runCatching {
+            val events = org.json.JSONObject(body).optJSONArray("events") ?: org.json.JSONArray()
+            (0 until events.length()).mapNotNull { i ->
+                val e = events.getJSONObject(i)
+                val segs = e.optJSONArray("segs") ?: return@mapNotNull null
+                val text = (0 until segs.length()).joinToString("") { segs.getJSONObject(it).optString("utf8") }.replace("\n", " ").trim()
+                if (text.isBlank()) null else Cue(e.optLong("tStartMs"), e.optLong("tStartMs") + e.optLong("dDurationMs", 2000), text)
+            }
+        }.getOrDefault(emptyList())
+        if (cues.isEmpty()) { Diag.log("subs", "$videoId: captured captions empty"); return@withContext }
+        val lang = (u.getQueryParameter("lang") ?: "en").substringBefore('-').let { if (it == "nb" || it == "nn") "no" else it }
+        cache["o|$videoId"] = Transcript(lang, cues, false)
+        Diag.log("subs", "$videoId: transcript captured from YouTube's player (${cues.size} lines, $lang)")
+    }
+
+    fun hasTranscript(videoId: String) = cache["o|$videoId"] != null
+
     /** The words around a moment (for "What do they mean here?"). */
     fun window(t: Transcript, atMs: Long, beforeMs: Long = 90_000, afterMs: Long = 10_000): String =
         t.cues.filter { it.end >= atMs - beforeMs && it.start <= atMs + afterMs }.joinToString(" ") { it.text }

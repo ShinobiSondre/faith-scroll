@@ -74,7 +74,14 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
         busy = true; error = null
         turns += Ai.Turn(true, question)
         val ctxText = context ?: run {
-            val words = runCatching { Transcripts.textAround(video.id, atMs) }.getOrDefault("")
+            var words = runCatching { Transcripts.textAround(video.id, atMs) }.getOrDefault("")
+            // In YouTube's player the transcript arrives once its captions load; wait a few seconds.
+            var tries = 0
+            while (words.isBlank() && tries++ < 6) {
+                kotlinx.coroutines.delay(1000)
+                words = runCatching { Transcripts.textAround(video.id, atMs) }.getOrDefault("")
+            }
+            com.faithscroll.app.data.Diag.log("ai", "${video.id}: asking with ${words.length} chars of transcript")
             val mm = atMs / 60000; val ss = (atMs / 1000) % 60
             buildString {
                 append("Video: \"${video.title}\" by ${video.channel}\n")
