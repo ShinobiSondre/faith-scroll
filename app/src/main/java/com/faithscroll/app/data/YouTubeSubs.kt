@@ -30,6 +30,7 @@ object YouTubeSubs {
     ).apply()
 
     fun favourites(ctx: Context): List<SubChannel> = all(ctx).filter { it.favourite }
+        .also { YouTubeSubsCheck.favouriteNames = it.map { c -> c.title }.toSet() }
     private var favNames: Set<String>? = null
     fun isFavouriteName(ctx: Context, name: String): Boolean =
         (favNames ?: favourites(ctx).map { it.title }.toSet().also { favNames = it }).contains(name)

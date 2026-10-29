@@ -112,6 +112,9 @@ class MainActivity : ComponentActivity() {
         // Let the stream finder pass YouTube's bot check (proof-of-origin tokens), so playback,
         // audio for subtitles and captions aren't cut off with HTTP 403.
         com.faithscroll.app.potoken.AppContext.set(this)
+        com.faithscroll.app.data.CaptionGrabber.attach(this)
+        // Subtitles are on by default: fetch the speech model in the background now, not on first use.
+        if (getSharedPreferences("captions", MODE_PRIVATE).getBoolean("on", true)) com.faithscroll.app.data.Asr.prepare(this)
         org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
             .setPoTokenProvider(com.faithscroll.app.potoken.PoTokenProviderImpl)
         setContent {

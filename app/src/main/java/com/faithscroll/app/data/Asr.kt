@@ -62,6 +62,12 @@ object Asr {
     private val http = OkHttpClient.Builder().readTimeout(60, TimeUnit.SECONDS).build()
 
     fun live(videoId: String): Live = lives.getOrPut(videoId) { Live() }
+
+    /** Downloads/loads the speech model ahead of time. */
+    fun prepare(ctx: Context) {
+        val app = ctx.applicationContext
+        scope.launch { runCatching { model(app) }.onFailure { Diag.err("asr", "speech model", it) } }
+    }
     fun cues(videoId: String): StateFlow<List<Cue>> = live(videoId).cues
 
     fun modelReady(ctx: Context) = File(ctx.filesDir, "vosk/$MODEL_DIR").isDirectory
@@ -88,7 +94,9 @@ object Asr {
                     while (true) {
                         val n = input.read(buf); if (n < 0) break
                         out.write(buf, 0, n); got += n
-                        modelProgress.value = got.toFloat() / total
+                        val p = got.toFloat() / total
+                        if ((p * 4).toInt() > (modelProgress.value * 4).toInt()) Diag.log("asr", "speech model ${(p * 100).toInt()} %")
+                        modelProgress.value = p
                     }
                 }
             }
@@ -141,7 +149,8 @@ object Asr {
         if (f.exists() && f.length() > 10_000) return@withContext f
         val r = StreamResolver.resolve(videoId) ?: return@withContext null
         // A small, widely decodable audio track (AAC-LC ~128k if the tiny HE-AAC one is all there is otherwise).
-        val url = (r.audios.filter { it.bitrate >= 64 }.minByOrNull { it.bitrate } ?: r.audios.minByOrNull { it.bitrate })?.url
+        val tracks = StreamResolver.preferredAudio(r).filter { it.original || it.lang == "en" }.ifEmpty { StreamResolver.preferredAudio(r) }
+        val url = (tracks.filter { it.bitrate >= 64 }.minByOrNull { it.bitrate } ?: tracks.minByOrNull { it.bitrate })?.url
             ?: r.muxed.minByOrNull { it.height }?.url
             ?: run { Diag.log("asr", "$videoId: no audio track"); return@withContext null }
         Diag.log("asr", "$videoId: downloading audio")

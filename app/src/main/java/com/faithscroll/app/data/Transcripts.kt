@@ -19,6 +19,7 @@ data class Transcript(val lang: String, val cues: List<Cue>, val translated: Boo
 
 object Transcripts {
     private val cache = ConcurrentHashMap<String, Transcript>()
+    private val missing = ConcurrentHashMap<String, Long>()
 
     /** The app language as a 2-letter code. */
     fun target(): String = if (Lang.no) "no" else "en"
@@ -26,8 +27,13 @@ object Transcripts {
     /** Original captions (best track: manual before automatic, app language before others). */
     suspend fun original(videoId: String): Transcript? = withContext(Dispatchers.IO) {
         cache["o|$videoId"]?.let { return@withContext it }
+        missing[videoId]?.let { if (System.currentTimeMillis() - it < 10 * 60_000) return@withContext null }
         val r = StreamResolver.resolve(videoId) ?: return@withContext null
-        if (r.subtitles.isEmpty()) { Diag.log("subs", "$videoId: YouTube has no caption tracks → phone transcript"); return@withContext null }
+        if (r.subtitles.isEmpty()) {
+            val link = CaptionGrabber.grab(videoId) ?: run { missing[videoId] = System.currentTimeMillis(); return@withContext null }
+            captureTimedText(videoId, link)
+            return@withContext cache["o|$videoId"]
+        }
         val want = target()
         fun base(l: String) = l.substringBefore('-').lowercase().let { if (it == "nb" || it == "nn") "no" else it }
         val track = r.subtitles.sortedWith(
@@ -54,6 +60,13 @@ object Transcripts {
         cache["t|$want|$videoId"]?.let { return@withContext it }
         val orig = original(videoId) ?: return@withContext null
         if (orig.lang == want) return@withContext orig
+        // Like YouTube's "Auto-translate": ask YouTube for the captions already translated.
+        CaptionGrabber.known(videoId)?.let { link ->
+            youtubeTranslated(link, want)?.let { t ->
+                Diag.log("subs", "$videoId: YouTube auto-translated captions → $want (${t.cues.size} lines)")
+                return@withContext t.also { cache["t|$want|$videoId"] = it }
+            }
+        }
         val src = TranslateLanguage.fromLanguageTag(orig.lang) ?: return@withContext orig
         val dst = TranslateLanguage.fromLanguageTag(want) ?: return@withContext orig
         val translator = Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(src).setTargetLanguage(dst).build())
@@ -106,6 +119,7 @@ object Transcripts {
      * we read the same file (as JSON) so "What do they mean here?" and subtitles have a transcript.
      */
     suspend fun captureTimedText(videoId: String, url: String) = withContext(Dispatchers.IO) {
+        CaptionGrabber.remember(videoId, url)
         if (cache["o|$videoId"] != null) return@withContext
         val u = android.net.Uri.parse(url)
         val b = u.buildUpon().clearQuery()
@@ -128,6 +142,27 @@ object Transcripts {
     }
 
     fun hasTranscript(videoId: String) = cache["o|$videoId"] != null
+
+    /** YouTube's own machine translation of a caption track (tlang), as JSON. */
+    private fun youtubeTranslated(link: String, lang: String): Transcript? {
+        val u = android.net.Uri.parse(link)
+        val b = u.buildUpon().clearQuery()
+        for (k in u.queryParameterNames) if (k != "fmt" && k != "tlang") u.getQueryParameters(k).forEach { b.appendQueryParameter(k, it) }
+        b.appendQueryParameter("fmt", "json3").appendQueryParameter("tlang", if (lang == "no") "no" else lang)
+        val body = Http.get(b.build().toString(), 15_000) ?: return null
+        val cues = parseJson3(body)
+        return if (cues.isEmpty()) null else Transcript(lang, cues, true)
+    }
+
+    private fun parseJson3(body: String): List<Cue> = runCatching {
+        val events = org.json.JSONObject(body).optJSONArray("events") ?: org.json.JSONArray()
+        (0 until events.length()).mapNotNull { i ->
+            val e = events.getJSONObject(i)
+            val segs = e.optJSONArray("segs") ?: return@mapNotNull null
+            val text = (0 until segs.length()).joinToString("") { segs.getJSONObject(it).optString("utf8") }.replace("\n", " ").trim()
+            if (text.isBlank()) null else Cue(e.optLong("tStartMs"), e.optLong("tStartMs") + e.optLong("dDurationMs", 2000), text)
+        }
+    }.getOrDefault(emptyList())
 
     /** The words around a moment (for "What do they mean here?"). */
     fun window(t: Transcript, atMs: Long, beforeMs: Long = 90_000, afterMs: Long = 10_000): String =

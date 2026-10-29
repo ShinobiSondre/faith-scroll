@@ -97,6 +97,8 @@ dependencies {
     // Offline speech recognition: makes subtitles for videos without captions
     implementation("com.alphacephei:vosk-android:0.3.47")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
+    // Optional offline AI: a small language model running on the phone
+    implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")

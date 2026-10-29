@@ -35,6 +35,18 @@ object LangFilter {
         blocked.value = blocked.value + id
     }
 
+    // Common English words: a title with two of these is English, whatever the detector guesses.
+    private val english = Regex(
+        "\\b(the|and|of|to|you|your|is|in|for|with|how|why|what|when|who|god|jesus|christ|lord|sermon|faith|prayer|pray|love|grace|hope|bible|church|my|me|we|our|be|are|this|that|from|on|it|life|story|testimony|peace|fear|heart|word|day|will|can|not|do|about)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** Channels known to be English (the built-in ones); their titles are never rejected. */
+    private val trusted = setOf(
+        "I Am Second", "700 Club Testimonies", "BibleProject", "Desiring God", "Elevation Church",
+        "In Touch Ministries", "Gospel in Life", "Jesus Shorts", "Christian Daily Devotional", "Our Daily Bread"
+    )
+
     // Common Spanish / Portuguese words: two or more in a title is a strong sign.
     private val romance = Regex(
         "\\b(el|los|las|del|que|dios|señor|senhor|jesús|cristo|testimonio|testemunho|iglesia|igreja|oración|oração|oracion|palabra|palavra|cómo|como|para|con|una|uno|est[aá]|mi|tu|su|vida|amor|fe|hermanos|irmãos|predica|prédica|pregação|culto|alabanza|louvor|mensaje|mensagem|hoy|hoje|nunca|siempre|sempre)\\b",
@@ -68,15 +80,23 @@ object LangFilter {
         }
         // Another alphabet (Hindi, Arabic, Russian, Korean…) → not for this feed.
         if (other > 2 && other * 3 > latin) return false
-        if (romance.findAll(text).count() >= 2) { Diag.log("lang", "rejected (es/pt words): ${raw.take(60)}"); return false }
+        val romanceHits = romance.findAll(text).count()
+        if (romanceHits >= 2) { Diag.log("lang", "rejected (es/pt words): ${raw.take(60)}"); return false }
+        if (english.findAll(text).count() >= 2) return true
         if (latin < 12) return true // too short to tell; give it the benefit of the doubt
-        val tag = runCatching { Tasks.await(client.identifyLanguage(text), 2, TimeUnit.SECONDS) }.getOrNull() ?: return true
-        val ok = tag == "und" || tag in allowed()
+        // Second opinion: accept if any allowed language is a plausible reading (short titles fool detectors).
+        val options = runCatching { Tasks.await(client.identifyPossibleLanguages(text), 2, TimeUnit.SECONDS) }.getOrNull()
+            ?: return true
+        val best = options.maxByOrNull { it.confidence }?.languageTag ?: "und"
+        val ok = best == "und" || best in allowed() || options.any { it.languageTag in allowed() && it.confidence >= 0.12f }
+        val tag = best
         if (!ok) Diag.log("lang", "rejected ($tag): ${raw.take(60)}")
         return ok
     }
 
-    suspend fun videos(list: List<Video>): List<Video> = withContext(Dispatchers.Default) { list.filter { ok(it.title) } }
+    suspend fun videos(list: List<Video>): List<Video> = withContext(Dispatchers.Default) {
+        list.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
+    }
     suspend fun pins(list: List<Pin>): List<Pin> = withContext(Dispatchers.Default) { list.filter { it.title.isBlank() || ok(it.title) } }
 
     /** YouTube search language/country for discovery. */

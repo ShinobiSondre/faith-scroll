@@ -123,6 +123,8 @@ fun WidgetScreen(
         Spacer(Modifier.height(16.dp))
         PrayerCard(onBeStill, onNeedNotifications)
         Spacer(Modifier.height(16.dp))
+        AiCard()
+        Spacer(Modifier.height(16.dp))
         LanguageCard()
         Spacer(Modifier.height(16.dp))
         QualityCard()
@@ -310,6 +312,47 @@ private fun PrayerCard(onBeStill: () -> Unit, onNeedNotifications: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Button(onClick = onBeStill, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)) {
             Text(tr("Be still with God", "Vær stille hos Gud"), fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Which AI answers "What do they mean here?": free online models, or a small one on this phone. */
+@Composable
+private fun AiCard() {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var offline by remember { mutableStateOf(com.faithscroll.app.data.Ai.preferOffline(ctx)) }
+    val progress by com.faithscroll.app.data.OfflineAi.progress.collectAsState()
+    var removed by remember { mutableStateOf(0) }
+    val ready = remember(progress, removed) { com.faithscroll.app.data.OfflineAi.ready(ctx) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text("✦ " + tr("AI explanations", "KI-forklaringer"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(tr("For \"What do they mean here?\". Free, no account.", "For «Hva mener de her?». Gratis, uten konto."), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(tr("Online (best)", "På nett (best)"), !offline) { offline = false; com.faithscroll.app.data.Ai.setPreferOffline(ctx, false) }
+            Chip(tr("On this phone", "På telefonen"), offline) { offline = true; com.faithscroll.app.data.Ai.setPreferOffline(ctx, true) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (offline) tr("A small model (Qwen 2.5, 1.5B) runs on your phone. Works without internet; simpler answers.",
+                "En liten modell (Qwen 2.5, 1,5B) kjører på telefonen. Virker uten nett; enklere svar.")
+            else tr("Large open models (Llama 3.3 70B and others) via free services. The phone model is used as backup if downloaded.",
+                "Store åpne modeller (Llama 3.3 70B m.fl.) via gratis tjenester. Telefonmodellen brukes som reserve hvis den er lastet ned."),
+            color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        when {
+            progress >= 0f -> {
+                androidx.compose.material3.LinearProgressIndicator(progress = { progress }, color = Gold, modifier = Modifier.fillMaxWidth())
+                Text(tr("Downloading phone model… ${(progress * 100).toInt()} % (≈1.6 GB, Wi-Fi recommended)", "Laster ned telefonmodell … ${(progress * 100).toInt()} % (≈1,6 GB, bruk helst Wi-Fi)"),
+                    color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            }
+            ready -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Phone model ready", "Telefonmodell klar") + " ✓", color = Gold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { com.faithscroll.app.data.OfflineAi.delete(ctx); removed++ }) { Text(tr("Remove", "Fjern"), color = Color.White.copy(alpha = 0.7f)) }
+            }
+            else -> OutlinedButton(onClick = { com.faithscroll.app.data.OfflineAi.start(ctx) }) { Text(tr("Download phone model (≈1.6 GB)", "Last ned telefonmodell (≈1,6 GB)"), color = Gold) }
         }
     }
 }
