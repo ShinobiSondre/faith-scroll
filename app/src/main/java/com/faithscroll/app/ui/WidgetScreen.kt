@@ -1,5 +1,7 @@
 package com.faithscroll.app.ui
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.rememberCoroutineScope
 import com.faithscroll.app.util.tr
 import com.faithscroll.app.util.Lang
 
@@ -261,6 +263,28 @@ private fun DiagnosticsCard() {
             clip.setText(androidx.compose.ui.text.AnnotatedString("FaithScroll ${com.faithscroll.app.BuildConfig.VERSION_NAME}\n" + com.faithscroll.app.data.Diag.text()))
             Toast.makeText(ctx, tr("Copied. Paste it in your message.", "Kopiert. Lim det inn i meldingen din."), Toast.LENGTH_SHORT).show()
         }) { Text(tr("Copy", "Kopier"), color = Gold) }
+    }
+    // Runs the transcript chain on real videos from your feed, right here on the phone.
+    var testing by remember { mutableStateOf(false) }
+    var results by remember { mutableStateOf<List<String>?>(null) }
+    val testScope = rememberCoroutineScope()
+    TextButton(enabled = !testing, onClick = {
+        testing = true
+        testScope.launch {
+            val ids = com.faithscroll.app.data.VideoCheck.verified.value.take(6).map { it to it }.ifEmpty {
+                listOf("dDYbiukIFBc" to "Best CBN Testimonies")
+            }
+            results = com.faithscroll.app.ui.AskChatGpt.selfTest(ids)
+            testing = false
+        }
+    }) { Text(if (testing) tr("Testing transcripts…", "Tester tekster …") else tr("Test transcripts", "Test tekster"), color = Gold) }
+    results?.let { r ->
+        AlertDialog(
+            onDismissRequest = { results = null }, containerColor = Plum,
+            title = { Text(tr("Transcript test: ${r.count { it.startsWith("PASS") }}/${r.size} OK", "Teksttest: ${r.count { it.startsWith("PASS") }}/${r.size} OK"), color = Color.White) },
+            text = { Text(r.joinToString("\n\n"), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp) },
+            confirmButton = { TextButton(onClick = { results = null }) { Text("OK", color = Gold) } }
+        )
     }
     if (open) {
         Text(

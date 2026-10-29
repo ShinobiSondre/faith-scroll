@@ -30,7 +30,7 @@ jobs:
       - name: Build release APK
         run: |
           set +e
-          gradle :app:assembleRelease --no-daemon 2>&1 | tee build.log
+          gradle :app:assembleRelease :app:testReleaseUnitTest --tests "com.faithscroll.app.AskPromptTest" --no-daemon 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             # Surface the errors as annotations so they can be read without the full log.
