@@ -66,12 +66,16 @@ object VideoCheck {
         val t = Transcripts.original(v.id)
         if (t == null) {
             if (CaptionGrabber.working) return reject(v, "no working captions")
-            // Captions aren't working on this phone at all: fall back to the language of the
-            // video's original audio track (from YouTube's stream info). Unknown still means out.
-            val spoken = StreamResolver.resolve(v.id)?.spoken.orEmpty()
-            val ok = spoken.isNotBlank() && (spoken == "en" || (Lang.no && spoken == "no"))
-            return if (ok) { Diag.log("check", "${v.id}: OK by audio language $spoken (captions unavailable)"); true }
-            else reject(v, "captions unavailable and audio language '${spoken.ifBlank { "?" }}'")
+            // Captions aren't working on this phone at all: decide by the language of the original
+            // audio track if YouTube says it, otherwise by the title + description text.
+            // Unknown still means out.
+            val r = StreamResolver.resolve(v.id)
+            val lang = r?.spoken?.takeIf { it.isNotBlank() }
+                ?: LangFilter.detect("${v.title}. ${r?.description.orEmpty().take(800)}")
+                ?: ""
+            val ok = lang == "en" || (Lang.no && lang == "no")
+            return if (ok) { Diag.log("check", "${v.id}: OK by language of title/description/audio: $lang (captions unavailable)"); true }
+            else reject(v, "captions unavailable, language '${lang.ifBlank { "?" }}'")
         }
         val sample = t.cues.take(60).joinToString(" ") { it.text }
         // Spoken language: YouTube's automatic captions; double-checked against what the captions actually say.

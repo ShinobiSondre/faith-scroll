@@ -87,5 +87,6 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb logcat -c
-            gradle :app:connectedDebugAndroidTest --no-daemon || true
-            adb logcat -d -s FSTEST:I | grep -E "PASS|FAIL" | sed -E 's/^.*(PASS|FAIL)/::notice::\1/' || true
+            gradle :app:connectedDebugAndroidTest --no-daemon -Pandroid.testInstrumentationRunnerArguments.class=com.faithscroll.app.GrabberTest || true
+            adb logcat -d -s FSTEST:I | sed -E 's/^.*FSTEST: //' > fstest.txt || true
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' fstest.txt | cut -c1-60000); echo "::warning title=Grabber test::$msg"
