@@ -9,7 +9,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.localization.ContentCountry
+import org.schabi.newpipe.extractor.localization.Localization
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -89,11 +92,13 @@ object Discovery {
         val results = coroutineScope { queries.distinct().map { q -> async { runCatching { searchOnce(q) }.getOrDefault(emptyList()) } }.awaitAll() }
         val out = mutableListOf<Video>()
         for (i in 0 until (results.maxOfOrNull { it.size } ?: 0)) results.forEach { l -> l.getOrNull(i)?.let(out::add) }
-        out.distinctBy { it.id }.filter { !Seen.has(ctx, it.id) }
+        LangFilter.videos(out.distinctBy { it.id }.filter { !Seen.has(ctx, it.id) })
     }
 
     private fun searchOnce(q: String): List<Video> {
         StreamResolver.ensureInit()
+        val (lang, country) = LangFilter.searchLanguage
+        NewPipe.setupLocalization(Localization(lang, country), ContentCountry(country))
         val yt = ServiceList.YouTube
         val handler = yt.searchQHFactory.fromQuery(q, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         val info = SearchInfo.getInfo(yt, handler)
@@ -127,6 +132,8 @@ object Discovery {
             val known = SocialRepository.userSubs(ctx).map { it.lowercase() }.toSet() + SocialRepository.defaultSubreddits.map { it.lowercase() }
             val found = (0 until kids.length()).mapNotNull { i -> kids.getJSONObject(i).optJSONObject("data") }
                 .filter { !it.optBoolean("over18") && it.optInt("subscribers") > 20_000 && it.optString("subreddit_type") == "public" }
+                .filter { val l = it.optString("lang"); l.isBlank() || l == "en" || (Lang.no && l in setOf("no", "nb", "nn")) }
+                .filter { LangFilter.ok(it.optString("public_description").ifBlank { it.optString("title") }) }
                 .map { it.optString("display_name") }
                 .filter { it.isNotBlank() && it.lowercase() !in known }
             val existing = JSONArray(prefs(ctx).getString("subs", "[]"))

@@ -70,5 +70,7 @@ dependencies {
     // Finds the direct stream URLs for videos (same library the NewPipe app uses)
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // On-device language detection (offline), so videos match the app language
+    implementation("com.google.mlkit:language-id:17.0.6")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 }

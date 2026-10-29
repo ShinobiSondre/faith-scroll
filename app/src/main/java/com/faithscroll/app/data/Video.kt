@@ -89,9 +89,9 @@ object VideoRepository {
             Triple(a.awaitAll(), b.awaitAll(), c.awaitAll())
         }
         val lib = VideoLibrary(
-            stories = (pinned + interleave(storyLists)).distinctBy { it.id },
-            sermons = interleave(sermonLists).distinctBy { it.id },
-            shorts = interleave(shortLists).distinctBy { it.id }
+            stories = LangFilter.videos((pinned + interleave(storyLists)).distinctBy { it.id }),
+            sermons = LangFilter.videos(interleave(sermonLists).distinctBy { it.id }),
+            shorts = LangFilter.videos(interleave(shortLists).distinctBy { it.id })
         )
 
         if (lib.stories.size + lib.sermons.size + lib.shorts.size > pinned.size) {
@@ -102,10 +102,10 @@ object VideoRepository {
         }
         val cached = if (cacheFile.exists()) runCatching { parseVideos(JSONArray(cacheFile.readText())) }.getOrDefault(emptyList()) else emptyList()
         if (cached.isEmpty()) VideoLibrary(pinned.ifEmpty { fallback }, emptyList())
-        else VideoLibrary(
-            cached.filter { it.kind == Video.KIND_STORY }, cached.filter { it.kind == Video.KIND_SERMON },
-            cached.filter { it.kind == Video.KIND_SHORT }
-        )
+        else {
+            val ok = LangFilter.videos(cached)
+            VideoLibrary(ok.filter { it.kind == Video.KIND_STORY }, ok.filter { it.kind == Video.KIND_SERMON }, ok.filter { it.kind == Video.KIND_SHORT })
+        }
     }
 
     private fun channelList(a: JSONArray?): List<Pair<String, String>>? {

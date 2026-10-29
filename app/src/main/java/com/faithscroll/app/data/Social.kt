@@ -160,7 +160,11 @@ object SocialRepository {
         } else emptyList()
 
         clips.forEach { if (it.direct.isNotBlank()) StreamResolver.registerDirect(it.id, it.direct) }
-        SocialLibrary(finalPins.distinctBy { it.image }, (userTikToks(ctx) + tiktoks).distinctBy { it.id }, clips.distinctBy { it.id })
+        SocialLibrary(
+            LangFilter.pins(finalPins.distinctBy { it.image }),
+            (userTikToks(ctx) + tiktoks).distinctBy { it.id },
+            LangFilter.videos(clips.distinctBy { it.id })
+        )
     }
 
     private fun <T> interleaveTwo(a: List<T>, b: List<T>): List<T> {
