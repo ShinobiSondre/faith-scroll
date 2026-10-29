@@ -35,6 +35,10 @@ import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.ClosedCaptionOff
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -92,6 +96,11 @@ fun VideoCard(
     val ctx = LocalContext.current
     var paused by remember(video.id) { mutableStateOf(false) }
     var controls by remember(video.id) { mutableStateOf(false) }
+    var expanded by remember(video.id) { mutableStateOf(false) }
+    var asking by remember(video.id) { mutableStateOf<Long?>(null) }
+    val openPage = LocalOpenPage.current
+    val isYouTube = video.direct.isBlank()
+    LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
     var controlsTouch by remember(video.id) { mutableIntStateOf(0) }
     var muted by remember { mutableStateOf(false) }
     var fill by remember(video.id) { mutableStateOf<Boolean?>(null) } // null = automatic
@@ -157,6 +166,18 @@ fun VideoCard(
         if (isActive && !paused && !embedFailed && (playback.buffering && !embedPlaying)) {
             CircularProgressIndicator(color = Gold, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center).size(44.dp))
         }
+        // When paused: ask what the speaker means at this moment.
+        if (isActive && paused && isYouTube && !playback.failed) {
+            Text(
+                "✦ " + tr("What do they mean here?", "Hva mener de her?"),
+                color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Center).padding(top = 150.dp)
+                    .clip(CircleShape).background(Gold)
+                    .clickable { asking = playback.position }
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            )
+        }
+
         // Play / pause button: hidden while playing, shown when you touch the video (or it's paused).
         AnimatedVisibility(
             visible = showControls,
@@ -180,9 +201,18 @@ fun VideoCard(
 
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f))))
 
-        // Caption
+        // Subtitles (live, in the app language)
+        if (isActive && isYouTube && CaptionSettings.on && !playback.failed) {
+            CaptionOverlay(
+                video.id, playback.position,
+                Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = bottomInset + 190.dp)
+            )
+        }
+
+        // Caption: tap to see the full title, description and a link to the original page
         Column(
             Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 44.dp)
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { expanded = true }
         ) {
             if (reason != null) {
                 ReasonTag(reason)
@@ -200,7 +230,8 @@ fun VideoCard(
             Spacer(Modifier.height(6.dp))
             Text(video.channel, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             Spacer(Modifier.height(4.dp))
-            Text(video.title, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(video.title, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(tr("more", "mer"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
 
         Column(
@@ -211,9 +242,22 @@ fun VideoCard(
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
             RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) { muted = !muted }
+            if (isYouTube) RailButton(
+                if (CaptionSettings.on) Icons.Filled.ClosedCaption else Icons.Filled.ClosedCaptionOff,
+                tr("Subtitles", "Tekst"), CaptionSettings.on, if (CaptionSettings.on) Gold else Color.White
+            ) { CaptionSettings.toggle(ctx) }
             if (onRotate != null) RailButton(Icons.Filled.ScreenRotation, tr("Rotate", "Roter"), landscape, Color.White, onRotate)
             if (onExpand != null) RailButton(Icons.Filled.OpenInFull, tr("Full", "Full"), false, Color.White) { paused = true; onExpand() }
         }
+
+        // Expanded details
+        androidx.compose.animation.AnimatedVisibility(
+            visible = expanded, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) })
+        }
+        asking?.let { at -> AskSheet(video, at) { asking = null } }
 
         // Progress: a thin line while playing; the full seek bar appears with the controls.
         if (isActive && playback.duration > 0 && !playback.failed) {
@@ -343,4 +387,40 @@ function pauseV(){want='pause';if(ready)player.pauseVideo();}
 function setMuted(m){muted=m;if(ready){if(m)player.mute();else player.unMute();}}
 </script></body></html>
 """
+}
+
+/** Full title, description and a button to the original page. */
+@Composable
+private fun VideoDetails(video: Video, onClose: () -> Unit, onGoToPage: () -> Unit) {
+    var description by remember(video.id) { mutableStateOf(StreamResolver.cached(video.id)?.description.orEmpty()) }
+    LaunchedEffect(video.id) {
+        if (description.isBlank() && video.direct.isBlank()) description = StreamResolver.resolve(video.id)?.description.orEmpty()
+    }
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f))
+            .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null, onClick = onClose)
+    ) {
+        Column(
+            Modifier.fillMaxSize().statusBarsPadding().padding(24.dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
+        ) {
+            Spacer(Modifier.height(40.dp))
+            Text(video.channel, color = Gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Text(video.title, color = Color.White, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                if (video.direct.isNotBlank()) tr("Shared on Reddit.", "Delt på Reddit.") else description.ifBlank { "…" },
+                color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, lineHeight = 20.sp
+            )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                tr("Go to page", "Gå til siden") + "  →",
+                color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(CircleShape).background(Gold).clickable(onClick = onGoToPage).padding(horizontal = 18.dp, vertical = 10.dp)
+            )
+            Spacer(Modifier.height(80.dp))
+        }
+    }
 }

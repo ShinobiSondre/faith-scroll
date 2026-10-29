@@ -169,6 +169,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var onboarding by remember { mutableStateOf(!Taste.isOnboarded(ctx)) }
     var tasteVersion by remember { mutableIntStateOf(0) }
     var beStill by remember { mutableStateOf(false) }
+    var webPage by remember { mutableStateOf<String?>(null) }
     var askReminders by remember { mutableStateOf(false) }
     // Android 13+ needs permission to show the prayer reminders.
     val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -228,6 +229,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         out.distinctBy { it.id }
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(com.faithscroll.app.ui.LocalOpenPage provides { url -> webPage = url }) {
     Box(Modifier.fillMaxSize().background(Ink)) {
         Row(Modifier.fillMaxSize()) {
             if (sideNav) {
@@ -247,7 +249,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             key(tasteVersion) {
                 FeedScreen(
                     state, feedVideos, social, bottomInset,
-                    suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill,
+                    suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null,
                     twoPane = twoPane,
                     onOpenVideo = { v -> openVideo(v, feedVideos) },
                     onBeStill = { beStill = true }
@@ -296,6 +298,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
 
         if (beStill) com.faithscroll.app.prayer.BeStillScreen(onClose = { beStill = false })
 
+        webPage?.let { url -> com.faithscroll.app.ui.WebPageScreen(url) { webPage = null } }
+
         // One-time invitation to turn on prayer reminders.
         if (askReminders) {
             androidx.compose.material3.AlertDialog(
@@ -329,6 +333,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         reading?.let { v -> ChapterSheet(v) { reading = null } }
 
         UpdateOverlay()
+    }
     }
 }
 

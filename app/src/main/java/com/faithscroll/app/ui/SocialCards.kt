@@ -15,6 +15,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -85,6 +87,8 @@ fun PinCard(
     var burstAt by remember { mutableStateOf<Offset?>(null) }
     var burstKey by remember { mutableIntStateOf(0) }
     var loading by remember(pin.id) { mutableStateOf(true) }
+    var expanded by remember(pin.id) { mutableStateOf(false) }
+    val openPage = LocalOpenPage.current
 
     Box(
         Modifier.fillMaxSize().background(Ink).pointerInput(pin.id) {
@@ -103,7 +107,10 @@ fun PinCard(
         if (loading) CircularProgressIndicator(color = Gold, modifier = Modifier.align(Alignment.Center).size(40.dp))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
 
-        Column(Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 26.dp)) {
+        Column(
+            Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 26.dp)
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { expanded = true }
+        ) {
             reason?.let { ReasonTag(it); Spacer(Modifier.height(8.dp)) }
             Text(if (pin.board.startsWith("r/")) "via Reddit · ${pin.board}" else tr("via Pinterest · ${pin.board.substringBefore("/")}", "via Pinterest · ${pin.board.substringBefore("/")}"), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
             if (pin.title.isNotBlank()) {
@@ -126,6 +133,30 @@ fun PinCard(
             }
         }
         burstAt?.let { HeartBurstAt(it, burstKey) }
+
+        // Expanded: full title and a link to the original post
+        if (expanded) {
+            androidx.activity.compose.BackHandler { expanded = false }
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f))
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { expanded = false }
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column {
+                    Text(if (pin.board.startsWith("r/")) pin.board else "Pinterest · ${pin.board}", color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(pin.title.ifBlank { "…" }, color = Color.White, fontSize = 19.sp, lineHeight = 25.sp)
+                    Spacer(Modifier.height(20.dp))
+                    if (pin.link.isNotBlank()) Text(
+                        com.faithscroll.app.util.tr("Go to page", "Gå til siden") + "  →",
+                        color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(Gold)
+                            .clickable { expanded = false; openPage(pin.link) }.padding(horizontal = 18.dp, vertical = 10.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
