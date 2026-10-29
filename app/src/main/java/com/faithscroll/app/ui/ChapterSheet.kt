@@ -62,15 +62,15 @@ fun ChapterSheet(verse: Verse, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).padding(horizontal = 22.dp)) {
             Text(verse.chapterRef, color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
-            Text("King James Version · read it in context", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(tr("King James Version · read it in context", "King James Version · les det i sammenheng"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
             Spacer(Modifier.height(14.dp))
             when {
                 loading -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Gold)
                 }
                 chapter == null -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Couldn't load the chapter. Check your connection.", color = Color.White.copy(alpha = 0.8f))
-                    TextButton(onClick = { attempt++ }) { Text("Try again", color = Gold) }
+                    Text(tr("Couldn't load the chapter. Check your connection.", "Kunne ikke laste kapittelet. Sjekk nettforbindelsen."), color = Color.White.copy(alpha = 0.8f))
+                    TextButton(onClick = { attempt++ }) { Text(tr("Try again", "Prøv igjen"), color = Gold) }
                 }
                 else -> LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(chapter!!.verses, key = { it.number }) { v ->

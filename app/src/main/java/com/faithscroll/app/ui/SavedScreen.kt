@@ -61,17 +61,17 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
     val savedMessages = remember(state.savedMessages) { MessageRepository.all(ctx).filter { it.id in state.savedMessages } }
 
     Column(Modifier.fillMaxSize().background(Ink).statusBarsPadding()) {
-        Text("Saved", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
+        Text(tr("Saved", "Lagret"), color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp))
         TabRow(selectedTabIndex = tab, containerColor = Ink, contentColor = Gold) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Videos (${state.savedVideos.size})") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Messages (${savedMessages.size + state.savedPins.size})") })
-            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Verses (${savedVerses.size})") })
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(tr("Videos (${state.savedVideos.size})", "Videoer (${state.savedVideos.size})")) })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(tr("Messages (${savedMessages.size + state.savedPins.size})", "Budskap (${savedMessages.size + state.savedPins.size})")) })
+            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text(tr("Verses (${savedVerses.size})", "Vers (${savedVerses.size})")) })
         }
         val pad = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomInset + 24.dp)
         val grid = GridCells.Adaptive(340.dp)
         when (tab) {
-            0 -> if (state.savedVideos.isEmpty()) Empty("Save sermons and stories from the feed to watch again.")
+            0 -> if (state.savedVideos.isEmpty()) Empty(tr("Save sermons and stories from the feed to watch again.", "Lagre prekener og historier fra feeden for å se dem igjen."))
             else LazyVerticalGrid(grid, contentPadding = pad, verticalArrangement = Arrangement.spacedBy(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(state.savedVideos, key = { it.id }) { v ->
                     Row(
@@ -86,18 +86,18 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
                             Text(v.title, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
                             Text(v.channel, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                         }
-                        IconButton(onClick = { Share.video(ctx, v) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
-                        IconButton(onClick = { state.toggleVideo(v) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
+                        IconButton(onClick = { Share.video(ctx, v) }) { Icon(Icons.Filled.Share, tr("Share", "Del"), tint = Color.White) }
+                        IconButton(onClick = { state.toggleVideo(v) }) { Icon(Icons.Filled.Bookmark, tr("Remove", "Fjern"), tint = Gold) }
                     }
                 }
             }
-            1 -> if (savedMessages.isEmpty() && state.savedPins.isEmpty()) Empty("Tap the bookmark on an illustrated message to keep it here.")
+            1 -> if (savedMessages.isEmpty() && state.savedPins.isEmpty()) Empty(tr("Tap the bookmark on an illustrated message to keep it here.", "Trykk på bokmerket på et illustrert budskap for å ta vare på det her."))
             else LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = pad, verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(state.savedPins, key = { "pin-" + it.id }) { pn ->
                     Box(Modifier.fillMaxWidth().aspectRatio(0.8f).clip(RoundedCornerShape(18.dp)).background(Plum)) {
                         AsyncImage(pn.image, pn.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                         IconButton(onClick = { state.togglePin(pn) }, modifier = Modifier.align(Alignment.BottomEnd)) {
-                            Icon(Icons.Filled.Bookmark, "Remove", tint = Gold)
+                            Icon(Icons.Filled.Bookmark, tr("Remove", "Fjern"), tint = Gold)
                         }
                     }
                 }
@@ -110,13 +110,13 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
                         Text(m.text, color = Color.White, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
                             lineHeight = 21.sp, modifier = Modifier.align(Alignment.Center).padding(14.dp))
                         Row(Modifier.align(Alignment.BottomEnd)) {
-                            IconButton(onClick = { Share.message(ctx, m, renderMessage(m)) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
-                            IconButton(onClick = { state.toggleMessageSave(m.id) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
+                            IconButton(onClick = { Share.message(ctx, m, renderMessage(m)) }) { Icon(Icons.Filled.Share, tr("Share", "Del"), tint = Color.White) }
+                            IconButton(onClick = { state.toggleMessageSave(m.id) }) { Icon(Icons.Filled.Bookmark, tr("Remove", "Fjern"), tint = Gold) }
                         }
                     }
                 }
             }
-            else -> if (savedVerses.isEmpty()) Empty("Verses you save from the widget appear here.")
+            else -> if (savedVerses.isEmpty()) Empty(tr("Verses you save from the widget appear here.", "Vers du lagrer fra widgeten vises her."))
             else LazyVerticalGrid(grid, contentPadding = pad, verticalArrangement = Arrangement.spacedBy(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(savedVerses, key = { it.ref }) { v ->
                     Column(
@@ -129,9 +129,9 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("— ${v.ref}", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { onRead(v) }) { Icon(Icons.AutoMirrored.Filled.MenuBook, "Read chapter", tint = Color.White) }
-                            IconButton(onClick = { Share.verse(ctx, v, Palettes.argb(v.theme)) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
-                            IconButton(onClick = { state.toggleSave(v.ref) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
+                            IconButton(onClick = { onRead(v) }) { Icon(Icons.AutoMirrored.Filled.MenuBook, tr("Read chapter", "Les kapittelet"), tint = Color.White) }
+                            IconButton(onClick = { Share.verse(ctx, v, Palettes.argb(v.theme)) }) { Icon(Icons.Filled.Share, tr("Share", "Del"), tint = Color.White) }
+                            IconButton(onClick = { state.toggleSave(v.ref) }) { Icon(Icons.Filled.Bookmark, tr("Remove", "Fjern"), tint = Gold) }
                         }
                     }
                 }

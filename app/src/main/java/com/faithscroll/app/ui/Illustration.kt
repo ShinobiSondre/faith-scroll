@@ -160,9 +160,9 @@ fun MessageCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) "Amen" else "Like", liked, if (liked) HeartRed else Color.White, onLike)
-            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
-            RailButton(Icons.Filled.Share, "Share", false, Color.White) { onShared(); Share.message(ctx, message, renderMessage(message)) }
+            RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) tr("Amen", "Amen") else tr("Like", "Liker"), liked, if (liked) HeartRed else Color.White, onLike)
+            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
+            RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.message(ctx, message, renderMessage(message)) }
         }
 
         burstAt?.let { HeartBurstAt(it, burstKey) }

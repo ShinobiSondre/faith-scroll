@@ -166,12 +166,12 @@ fun VideoCard(
                     .clickable { paused = !paused; controlsTouch++ },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause, if (paused) "Play" else "Pause",
+                Icon(if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause, if (paused) tr("Play", "Spill av") else tr("Pause", "Pause"),
                     tint = Color.White, modifier = Modifier.size(52.dp))
             }
         }
         if (embedFailed) {
-            Text("This video can't play right now. Swipe for the next one.",
+            Text(tr("This video can't play right now. Swipe for the next one.", "Denne videoen kan ikke spilles nå. Sveip til neste."),
                 color = Color.White, fontSize = 15.sp, modifier = Modifier.align(Alignment.Center).padding(32.dp))
         }
 
@@ -179,7 +179,7 @@ fun VideoCard(
 
         // Caption
         Column(
-            Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 30.dp)
+            Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 44.dp)
         ) {
             if (reason != null) {
                 ReasonTag(reason)
@@ -187,10 +187,10 @@ fun VideoCard(
             }
             Text(
                 when {
-                    video.kind == Video.KIND_SERMON -> "SERMON"
-                    video.channel.startsWith("r/") -> "FROM REDDIT"
-                    video.kind == Video.KIND_SHORT -> "SHORT"
-                    else -> "REAL STORIES OF FAITH"
+                    video.kind == Video.KIND_SERMON -> tr("SERMON", "PREKEN")
+                    video.channel.startsWith("r/") -> tr("FROM REDDIT", "FRA REDDIT")
+                    video.kind == Video.KIND_SHORT -> tr("SHORT", "KORT")
+                    else -> tr("REAL STORIES OF FAITH", "EKTE TROSHISTORIER")
                 },
                 color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
             )
@@ -201,25 +201,25 @@ fun VideoCard(
         }
 
         Column(
-            Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = bottomInset + 30.dp),
+            Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = bottomInset + 44.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
-            RailButton(Icons.Filled.Share, "Share", false, Color.White) { onShared(); Share.video(ctx, video) }
-            RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) "Muted" else "Sound", false, Color.White) { muted = !muted }
-            if (onRotate != null) RailButton(Icons.Filled.ScreenRotation, "Rotate", landscape, Color.White, onRotate)
-            if (onExpand != null) RailButton(Icons.Filled.OpenInFull, "Full", false, Color.White) { paused = true; onExpand() }
+            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
+            RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
+            RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) { muted = !muted }
+            if (onRotate != null) RailButton(Icons.Filled.ScreenRotation, tr("Rotate", "Roter"), landscape, Color.White, onRotate)
+            if (onExpand != null) RailButton(Icons.Filled.OpenInFull, tr("Full", "Full"), false, Color.White) { paused = true; onExpand() }
         }
 
         // Progress: a thin line while playing; the full seek bar appears with the controls.
         if (isActive && playback.duration > 0 && !playback.failed) {
             if (showControls) {
-                SeekBar(playback, { controlsTouch++ }, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset).fillMaxWidth())
+                SeekBar(playback, { controlsTouch++ }, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset + 6.dp).fillMaxWidth())
             } else {
                 val frac = (playback.position.toFloat() / playback.duration).coerceIn(0f, 1f)
-                Box(Modifier.align(Alignment.BottomStart).padding(bottom = bottomInset).fillMaxWidth().height(2.dp).background(Color.White.copy(alpha = 0.2f)))
-                Box(Modifier.align(Alignment.BottomStart).padding(bottom = bottomInset).fillMaxWidth(frac).height(2.dp).background(Gold))
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = bottomInset + 16.dp).fillMaxWidth().height(2.5.dp).background(Color.White.copy(alpha = 0.22f)))
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = bottomInset + 16.dp).fillMaxWidth(frac).height(2.5.dp).background(Gold))
             }
         }
     }

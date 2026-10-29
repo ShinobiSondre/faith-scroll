@@ -147,7 +147,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
         IconButton(
             onClick = { if (landscape) landscape = false else onClose() },
             modifier = Modifier.statusBarsPadding().padding(8.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.35f))
-        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
+        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "Tilbake"), tint = Color.White) }
     }
 }
 

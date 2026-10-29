@@ -57,9 +57,9 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Column(Modifier.fillMaxSize().background(Ink).statusBarsPadding()) {
-        Text("Watch", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
+        Text(tr("Watch", "Se"), color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 20.dp, top = 12.dp))
-        Text("Sermons and real stories of faith", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp,
+        Text(tr("Sermons and real stories of faith", "Prekener og ekte troshistorier"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp,
             modifier = Modifier.padding(start = 20.dp, bottom = 10.dp))
 
         if (library == null) {
@@ -70,7 +70,7 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
         val channels = remember(library) { library.all.map { it.channel }.distinct() }
         val chips = listOf("For you", "Shorts", "Sermons", "Stories") + channels
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(chips) { c -> FilterChip(c, c == filter) { filter = c } }
+            items(chips) { c -> FilterChip(chipLabel(c), c == filter) { filter = c } }
         }
         val list = remember(library, filter) {
             when (filter) {
@@ -87,7 +87,7 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
         }
         if (list.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
-                Text("Couldn't load videos right now. Check your connection and reopen the app.",
+                Text(tr("Couldn't load videos right now. Check your connection and reopen the app.", "Kunne ikke laste videoer nå. Sjekk nettforbindelsen og åpne appen på nytt."),
                     color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
             }
             return@Column
@@ -110,7 +110,7 @@ private fun Hero(v: Video, onClick: () -> Unit) {
             AsyncImage(v.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
             Box(Modifier.align(Alignment.Center).size(64.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(40.dp))
+                Icon(Icons.Filled.PlayArrow, tr("Play", "Spill av"), tint = Color.White, modifier = Modifier.size(40.dp))
             }
             Text("LATEST", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
                 modifier = Modifier.align(Alignment.BottomStart).padding(14.dp))
@@ -132,4 +132,12 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(label, color = if (selected) Ink else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
+}
+
+private fun chipLabel(key: String) = when (key) {
+    "For you" -> tr("For you", "For deg")
+    "Shorts" -> tr("Shorts", "Korte")
+    "Sermons" -> tr("Sermons", "Prekener")
+    "Stories" -> tr("Stories", "Historier")
+    else -> key
 }

@@ -71,13 +71,13 @@ fun UpdateOverlay() {
             contentAlignment = Alignment.Center
         ) {
             val (icon, title, body) = when (u.stage) {
-                UpdateStage.Downloading -> Triple(Icons.Filled.Downloading, "A new FaithScroll is here!", "Downloading build ${u.newBuild}…")
-                UpdateStage.NeedsPermission -> Triple(Icons.Filled.LockOpen, "One quick switch",
-                    "Android needs to let FaithScroll update itself. Tap Allow, turn the switch on, then come back.")
-                UpdateStage.Installing -> Triple(Icons.Filled.SystemUpdate, "Installing…",
-                    "Tap Update. When it's done, tap Open to start the new version.")
-                UpdateStage.Ready -> Triple(Icons.Filled.SystemUpdate, "Ready to update", "Build ${u.newBuild} is downloaded.")
-                UpdateStage.Failed -> Triple(Icons.Filled.CloudOff, "No update this time", u.error.orEmpty())
+                UpdateStage.Downloading -> Triple(Icons.Filled.Downloading, tr("A new FaithScroll is here!", "En ny FaithScroll er her!"), tr("Downloading build ${u.newBuild}…", "Laster ned versjon ${u.newBuild} …"))
+                UpdateStage.NeedsPermission -> Triple(Icons.Filled.LockOpen, tr("One quick switch", "Én liten bryter"),
+                    tr("Android needs to let FaithScroll update itself. Tap Allow, turn the switch on, then come back.", "Android må la FaithScroll oppdatere seg selv. Trykk Tillat, slå på bryteren og kom tilbake."))
+                UpdateStage.Installing -> Triple(Icons.Filled.SystemUpdate, tr("Installing…", "Installerer …"),
+                    tr("Tap Update. When it's done, tap Open to start the new version.", "Trykk Oppdater. Når den er ferdig, trykk Åpne for å starte den nye versjonen."))
+                UpdateStage.Ready -> Triple(Icons.Filled.SystemUpdate, tr("Ready to update", "Klar til å oppdatere"), tr("Build ${u.newBuild} is downloaded.", "Versjon ${u.newBuild} er lastet ned."))
+                UpdateStage.Failed -> Triple(Icons.Filled.CloudOff, tr("No update this time", "Ingen oppdatering nå"), u.error.orEmpty())
                 UpdateStage.Idle -> Triple(Icons.Filled.SystemUpdate, "", "")
             }
             Column(
@@ -94,7 +94,7 @@ fun UpdateOverlay() {
                     Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
                     if (u.newBuild > 0) {
                         Spacer(Modifier.height(4.dp))
-                        Text("Build ${u.currentBuild}  →  ${u.newBuild}", color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+                        Text(tr("Build ${u.currentBuild}  →  ${u.newBuild}", "Versjon ${u.currentBuild}  →  ${u.newBuild}"), color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
                     }
                 }
                 Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
@@ -122,11 +122,11 @@ fun UpdateOverlay() {
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.End) {
-                    if (u.stage != UpdateStage.Failed) TextButton(onClick = { u.later() }) { Text("Later", color = Color.White.copy(alpha = 0.8f)) }
+                    if (u.stage != UpdateStage.Failed) TextButton(onClick = { u.later() }) { Text(tr("Later", "Senere"), color = Color.White.copy(alpha = 0.8f)) }
                     val gold = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
                     when (u.stage) {
-                        UpdateStage.NeedsPermission -> Button(onClick = { u.allowInstalls(ctx) }, colors = gold) { Text("Allow") }
-                        UpdateStage.Ready -> Button(onClick = { u.installNow(ctx) }, colors = gold) { Text("Update now") }
+                        UpdateStage.NeedsPermission -> Button(onClick = { u.allowInstalls(ctx) }, colors = gold) { Text(tr("Allow", "Tillat")) }
+                        UpdateStage.Ready -> Button(onClick = { u.installNow(ctx) }, colors = gold) { Text(tr("Update now", "Oppdater nå")) }
                         UpdateStage.Failed -> Button(onClick = { u.later() }, colors = gold) { Text("OK") }
                         else -> Unit
                     }

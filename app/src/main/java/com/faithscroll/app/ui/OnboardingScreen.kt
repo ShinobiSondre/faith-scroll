@@ -53,33 +53,33 @@ import com.faithscroll.app.data.Taste
 
 private data class Opt(val key: String, val label: String)
 
-private val heartOptions = listOf(
-    Opt("peace", "🕊  Peace & less anxiety"), Opt("hope", "🌅  Hope for the future"),
-    Opt("strength", "💪  Strength to keep going"), Opt("comfort", "🤍  Comfort in hard times"),
-    Opt("love", "❤️  Love & relationships"), Opt("guidance", "🧭  Guidance & decisions"),
-    Opt("faith", "✝️  Growing my faith"), Opt("grace", "🌿  Forgiveness & a fresh start"),
-    Opt("courage", "🦁  Courage over fear"), Opt("joy", "☀️  Joy & gratitude"),
-    Opt("prayer", "🙏  A deeper prayer life")
+private val heartOptions get() = listOf(
+    Opt("peace", tr("🕊  Peace & less anxiety", "🕊  Fred og mindre uro")), Opt("hope", tr("🌅  Hope for the future", "🌅  Håp for fremtiden")),
+    Opt("strength", tr("💪  Strength to keep going", "💪  Styrke til å holde ut")), Opt("comfort", tr("🤍  Comfort in hard times", "🤍  Trøst i tunge tider")),
+    Opt("love", tr("❤️  Love & relationships", "❤️  Kjærlighet og relasjoner")), Opt("guidance", tr("🧭  Guidance & decisions", "🧭  Veiledning og valg")),
+    Opt("faith", tr("✝️  Growing my faith", "✝️  Vokse i troen")), Opt("grace", tr("🌿  Forgiveness & a fresh start", "🌿  Tilgivelse og en ny start")),
+    Opt("courage", tr("🦁  Courage over fear", "🦁  Mot fremfor frykt")), Opt("joy", tr("☀️  Joy & gratitude", "☀️  Glede og takknemlighet")),
+    Opt("prayer", tr("🙏  A deeper prayer life", "🙏  Et dypere bønneliv"))
 )
-private val journeyOptions = listOf(
-    Opt("exploring", "Just exploring who Jesus is"),
-    Opt("new", "New to faith"),
-    Opt("growing", "Growing — I want to go deeper"),
-    Opt("mature", "Walking with God for years")
+private val journeyOptions get() = listOf(
+    Opt("exploring", tr("Just exploring who Jesus is", "Utforsker bare hvem Jesus er")),
+    Opt("new", tr("New to faith", "Ny i troen")),
+    Opt("growing", tr("Growing — I want to go deeper", "Voksende – jeg vil gå dypere")),
+    Opt("mature", tr("Walking with God for years", "Har vandret med Gud i mange år"))
 )
-private val watchOptions = listOf(
-    Opt("stories", "🎥  Real-life testimonies"),
-    Opt("sermons", "⛪  Sermons & preaching"),
-    Opt("teaching", "📖  Bible explained"),
-    Opt("messages", "🎨  Illustrated messages")
+private val watchOptions get() = listOf(
+    Opt("stories", tr("🎥  Real-life testimonies", "🎥  Ekte vitnesbyrd")),
+    Opt("sermons", tr("⛪  Sermons & preaching", "⛪  Prekener og forkynnelse")),
+    Opt("teaching", tr("📖  Bible explained", "📖  Bibelen forklart")),
+    Opt("messages", tr("🎨  Illustrated messages", "🎨  Illustrerte budskap"))
 )
-private val voiceOptions = listOf(
-    Opt("Desiring God", "John Piper · Desiring God"),
-    Opt("Elevation Church", "Steven Furtick · Elevation"),
-    Opt("In Touch Ministries", "Charles Stanley · In Touch"),
-    Opt("Gospel in Life", "Tim Keller · Gospel in Life"),
-    Opt("I Am Second", "I Am Second stories"),
-    Opt("700 Club Testimonies", "700 Club testimonies"),
+private val voiceOptions get() = listOf(
+    Opt("Desiring God", tr("John Piper · Desiring God", "John Piper · Desiring God")),
+    Opt("Elevation Church", tr("Steven Furtick · Elevation", "Steven Furtick · Elevation")),
+    Opt("In Touch Ministries", tr("Charles Stanley · In Touch", "Charles Stanley · In Touch")),
+    Opt("Gospel in Life", tr("Tim Keller · Gospel in Life", "Tim Keller · Gospel in Life")),
+    Opt("I Am Second", tr("I Am Second stories", "I Am Second-historier")),
+    Opt("700 Club Testimonies", tr("700 Club testimonies", "700 Club-vitnesbyrd")),
     Opt("BibleProject", "BibleProject")
 )
 
@@ -127,33 +127,33 @@ fun OnboardingScreen(onDone: () -> Unit) {
                             Spacer(Modifier.height(60.dp))
                             Text("✦", color = Gold, fontSize = 44.sp)
                             Spacer(Modifier.height(12.dp))
-                            Title("Welcome to FaithScroll")
-                            Sub("A few quick questions so your feed speaks to where you are. You can change them any time.")
+                            Title(tr("Welcome to FaithScroll", "Velkommen til FaithScroll"))
+                            Sub(tr("A few quick questions so your feed speaks to where you are. You can change them any time.", "Noen raske spørsmål, så feeden din treffer der du er nå. Du kan endre dem når som helst."))
                         }
                         1 -> {
-                            Title("What's on your heart right now?")
-                            Sub("Pick as many as you like.")
+                            Title(tr("What's on your heart right now?", "Hva ligger på hjertet ditt nå?"))
+                            Sub(tr("Pick as many as you like.", "Velg så mange du vil."))
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 heartOptions.forEach { o -> Choice(o.label, o.key in heart) { heart = heart.toggle(o.key) } }
                             }
                         }
                         2 -> {
-                            Title("Where are you in your walk with God?")
-                            Sub("There's no wrong answer.")
+                            Title(tr("Where are you in your walk with God?", "Hvor er du i vandringen med Gud?"))
+                            Sub(tr("There's no wrong answer.", "Det finnes ikke noe feil svar."))
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 journeyOptions.forEach { o -> Choice(o.label, journey == o.key, wide = true) { journey = o.key } }
                             }
                         }
                         3 -> {
-                            Title("What would you like to see?")
-                            Sub("Pick any.")
+                            Title(tr("What would you like to see?", "Hva vil du se?"))
+                            Sub(tr("Pick any.", "Velg det du vil."))
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 watchOptions.forEach { o -> Choice(o.label, o.key in watch, wide = true) { watch = watch.toggle(o.key) } }
                             }
                         }
                         else -> {
-                            Title("Any voices you already love?")
-                            Sub("Optional. We'll show more from them.")
+                            Title(tr("Any voices you already love?", "Noen stemmer du allerede er glad i?"))
+                            Sub(tr("Optional. We'll show more from them.", "Valgfritt. Vi viser mer fra dem."))
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 voiceOptions.forEach { o -> Choice(o.label, o.key in voices) { voices = voices.toggle(o.key) } }
                             }
@@ -164,7 +164,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (step in 1..4) TextButton(onClick = { if (step == 4) finish() else step++ }) {
-                    Text("Skip", color = Color.White.copy(alpha = 0.7f))
+                    Text(tr("Skip", "Hopp over"), color = Color.White.copy(alpha = 0.7f))
                 }
                 Spacer(Modifier.weight(1f))
                 val enabled = when (step) { 1 -> heart.isNotEmpty(); 2 -> journey != null; 3 -> watch.isNotEmpty(); else -> true }
@@ -174,7 +174,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink, disabledContainerColor = Color.White.copy(alpha = 0.15f)),
                     modifier = Modifier.height(52.dp)
                 ) {
-                    Text(when (step) { 0 -> "Let's begin"; 4 -> "Show my feed"; else -> "Next" }, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(when (step) { 0 -> tr("Let's begin", "La oss begynne"); 4 -> tr("Show my feed", "Vis feeden min"); else -> tr("Next", "Neste") }, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Spacer(Modifier.width(4.dp))
                 }
             }

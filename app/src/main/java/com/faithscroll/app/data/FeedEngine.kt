@@ -42,7 +42,7 @@ class FeedEngine(
         val tiks = social()?.tiktoks.orEmpty().filter { it.id !in shownTikToks }
         if (tiks.isNotEmpty() && rnd.nextDouble() < 0.25) {
             val t = tiks.random(rnd); shownTikToks += t.id
-            return FeedItem.TikTokItem(t, "From TikTok")
+            return FeedItem.TikTokItem(t, tr("From TikTok", "Fra TikTok"))
         }
         return pickVideo(vids) ?: pickIllustration()
     }
@@ -58,7 +58,7 @@ class FeedEngine(
         }, rnd = rnd)!!
         shownPins += pin.id
         val topic = Taste.topicsOf(pin.title).maxByOrNull { Taste.themeWeight(ctx, it) }
-        val reason = if (!random && topic != null && Taste.themeWeight(ctx, topic) > 1f) "For you · ${Taste.themeLabels[topic]}" else null
+        val reason = if (!random && topic != null && Taste.themeWeight(ctx, topic) > 1f) tr("For you · ${Taste.themeLabels[topic]}", "For deg · ${Taste.themeLabels[topic]}") else null
         return FeedItem.PinItem(pin, reason)
     }
 
@@ -73,7 +73,7 @@ class FeedEngine(
             val theme = Taste.weightedPick(Taste.themes, { Taste.themeWeight(ctx, it) }, rnd = rnd) ?: "faith"
             m = pool.filter { it.theme == theme }.ifEmpty { pool }.random(rnd)
             val label = Taste.themeLabels[m.theme]
-            reason = if (Taste.themeWeight(ctx, m.theme) > 0.5f && label != null) "For you · $label" else null
+            reason = if (Taste.themeWeight(ctx, m.theme) > 0.5f && label != null) tr("For you · $label", "For deg · $label") else null
         }
         recentMessages.addLast(m.id)
         while (recentMessages.size > messages.size / 2) recentMessages.removeFirst()
@@ -90,11 +90,11 @@ class FeedEngine(
         }, rnd = rnd)!!
         shownVideos += v.id
         val reason = when {
-            random -> "Something new"
+            random -> tr("Something new", "Noe nytt")
             Taste.scoreVideo(ctx, v) > 1.2f -> {
                 val topic = Taste.topicsOf(v.title).maxByOrNull { Taste.themeWeight(ctx, it) }
-                if (topic != null && Taste.themeWeight(ctx, topic) > 1f) "For you · ${Taste.themeLabels[topic]}"
-                else "Because you watch ${v.channel}"
+                if (topic != null && Taste.themeWeight(ctx, topic) > 1f) tr("For you · ${Taste.themeLabels[topic]}", "For deg · ${Taste.themeLabels[topic]}")
+                else tr("Because you watch ${v.channel}", "Fordi du ser på ${v.channel}")
             }
             else -> null
         }

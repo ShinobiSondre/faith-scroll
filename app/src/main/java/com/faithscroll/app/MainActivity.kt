@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.faithscroll.app.util.Lang.init(this)
         enableEdgeToEdge()
         startRef.value = intent?.getStringExtra(EXTRA_REF)
         val streak = Prefs.recordOpen(this)
@@ -148,8 +149,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     val bottomInset = if (sideNav) navInset + 8.dp else navInset + 64.dp
 
     val tabs = listOf(
-        Triple(Icons.Filled.Home, "Feed", 0), Triple(Icons.Filled.PlayCircle, "Watch", 1),
-        Triple(Icons.Filled.Bookmarks, "Saved", 2), Triple(Icons.Filled.Person, "Me", 3)
+        Triple(Icons.Filled.Home, tr("Feed", "Feed"), 0), Triple(Icons.Filled.PlayCircle, tr("Watch", "Se"), 1),
+        Triple(Icons.Filled.Bookmarks, tr("Saved", "Lagret"), 2), Triple(Icons.Filled.Person, tr("Me", "Meg"), 3)
     )
 
     // Mostly videos: shorts, testimonies and sermons take turns.

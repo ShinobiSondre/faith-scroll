@@ -68,24 +68,24 @@ object VerseRepository {
 }
 
 object Encouragement {
-    private val byTheme = mapOf(
-        "hope" to listOf("Hold on to this promise today.", "Your story isn't finished. God is still writing."),
-        "love" to listOf("You are fully known and fully loved.", "Let His love overflow to someone today."),
-        "strength" to listOf("Lean on Him when you feel weak.", "His strength meets you right where you are."),
-        "comfort" to listOf("Bring Him what you're carrying.", "You are not alone in this."),
-        "guidance" to listOf("Ask Him to lead your next step.", "Pause and listen before you decide."),
-        "peace" to listOf("Breathe. Be still. He is near.", "Trade one worry for one prayer."),
-        "courage" to listOf("Take the brave step. He goes with you.", "Fear is loud, but He is greater."),
-        "faith" to listOf("Trust Him with what you can't see.", "Faith grows as you read His Word."),
-        "grace" to listOf("You are forgiven. Walk in it.", "New mercies, every single morning."),
-        "joy" to listOf("Name three things you're thankful for.", "Let joy be your song today."),
-        "prayer" to listOf("Turn this verse into a prayer.", "Talk to Him. He's listening.")
+    private val byTheme: Map<String, List<String>> get() = mapOf(
+        "hope" to listOf(tr("Hold on to this promise today.", "Hold fast på dette løftet i dag."), tr("Your story isn't finished. God is still writing.", "Historien din er ikke ferdig. Gud skriver fortsatt.")),
+        "love" to listOf(tr("You are fully known and fully loved.", "Du er fullt kjent og fullt elsket."), tr("Let His love overflow to someone today.", "La Hans kjærlighet renne over til noen i dag.")),
+        "strength" to listOf(tr("Lean on Him when you feel weak.", "Len deg på Ham når du føler deg svak."), tr("His strength meets you right where you are.", "Hans styrke møter deg akkurat der du er.")),
+        "comfort" to listOf(tr("Bring Him what you're carrying.", "Gi Ham det du bærer på."), tr("You are not alone in this.", "Du er ikke alene i dette.")),
+        "guidance" to listOf(tr("Ask Him to lead your next step.", "Be Ham lede ditt neste steg."), tr("Pause and listen before you decide.", "Stopp opp og lytt før du bestemmer deg.")),
+        "peace" to listOf(tr("Breathe. Be still. He is near.", "Pust. Vær stille. Han er nær."), tr("Trade one worry for one prayer.", "Bytt én bekymring mot én bønn.")),
+        "courage" to listOf(tr("Take the brave step. He goes with you.", "Ta det modige steget. Han går med deg."), tr("Fear is loud, but He is greater.", "Frykten er høylytt, men Han er større.")),
+        "faith" to listOf(tr("Trust Him with what you can't see.", "Stol på Ham med det du ikke kan se."), tr("Faith grows as you read His Word.", "Troen vokser når du leser Hans ord.")),
+        "grace" to listOf(tr("You are forgiven. Walk in it.", "Du er tilgitt. Lev i det."), tr("New mercies, every single morning.", "Ny nåde, hver eneste morgen.")),
+        "joy" to listOf(tr("Name three things you're thankful for.", "Nevn tre ting du er takknemlig for."), tr("Let joy be your song today.", "La glede være sangen din i dag.")),
+        "prayer" to listOf(tr("Turn this verse into a prayer.", "Gjør dette verset til en bønn."), tr("Talk to Him. He's listening.", "Snakk med Ham. Han lytter."))
     )
-    private val general = listOf(
-        "Read it slowly. Let it sink in.",
-        "Open the chapter and read the whole story.",
-        "Say it out loud. Carry it with you today.",
-        "Share it with someone who needs it."
+    private val general: List<String> get() = listOf(
+        tr("Read it slowly. Let it sink in.", "Les det sakte. La det synke inn."),
+        tr("Open the chapter and read the whole story.", "Åpne kapittelet og les hele fortellingen."),
+        tr("Say it out loud. Carry it with you today.", "Si det høyt. Bær det med deg i dag."),
+        tr("Share it with someone who needs it.", "Del det med noen som trenger det.")
     )
     fun forVerse(v: Verse): String {
         val pool = (byTheme[v.theme] ?: emptyList()) + general

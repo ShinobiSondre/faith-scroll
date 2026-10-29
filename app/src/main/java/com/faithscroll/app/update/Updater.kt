@@ -89,7 +89,7 @@ object Updater {
             totalBytes = r.size
             download(ctx, r.url, r.size)
         } catch (_: Exception) {
-            if (stage == UpdateStage.Downloading) fail("The download stopped. Try again later.")
+            if (stage == UpdateStage.Downloading) fail(tr("The download stopped. Try again later.", "Nedlastingen stoppet. Prøv igjen senere."))
         } finally {
             checking = false
         }
@@ -180,7 +180,7 @@ object Updater {
         }
         when {
             cancelled -> stage = UpdateStage.Idle
-            !ok -> fail("The download stopped. Try again later.")
+            !ok -> fail(tr("The download stopped. Try again later.", "Nedlastingen stoppet. Prøv igjen senere."))
             else -> { progress = 1f; install(ctx, file) }
         }
     }
@@ -199,7 +199,7 @@ object Updater {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         } catch (_: Exception) {
-            fail("The update couldn't start.")
+            fail(tr("The update couldn't start.", "Oppdateringen kunne ikke starte."))
         }
     }
 

@@ -267,7 +267,7 @@ private fun FeedHeader(state: AppState) {
         ) {
             Icon(Icons.Filled.LocalFireDepartment, null, tint = Gold, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
-            Text("${state.streak.current} day${if (state.streak.current == 1) "" else "s"}", color = Color.White, fontSize = 13.sp)
+            Text(tr("${state.streak.current} day${if (state.streak.current == 1) "" else "s"}", "${state.streak.current} ${if (state.streak.current == 1) "dag" else "dager"}"), color = Color.White, fontSize = 13.sp)
         }
     }
 }
@@ -290,7 +290,7 @@ private fun SidePanel(
             when (current) {
                 is FeedItem.VideoItem -> {
                     val v = current.video
-                    Text(if (v.kind == Video.KIND_SERMON) "SERMON" else "STORY OF FAITH", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text(if (v.kind == Video.KIND_SERMON) tr("SERMON", "PREKEN") else tr("STORY OF FAITH", "TROSHISTORIE"), color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.height(8.dp))
                     Text(v.title, color = Color.White, fontSize = 22.sp, lineHeight = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
@@ -299,40 +299,40 @@ private fun SidePanel(
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         val saved = state.isVideoSaved(v.id)
-                        PanelButton(if (saved) "Saved" else "Save") { state.toggleVideo(v) }
-                        PanelButton("Share") { Share.video(ctx, v) }
-                        PanelButton("Full screen") { onOpenVideo(v) }
+                        PanelButton(if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre")) { state.toggleVideo(v) }
+                        PanelButton(tr("Share", "Del")) { Share.video(ctx, v) }
+                        PanelButton(tr("Full screen", "Fullskjerm")) { onOpenVideo(v) }
                     }
                 }
                 is FeedItem.MessageItem -> {
                     val m = current.message
-                    Text("A WORD FOR YOU", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text(tr("A WORD FOR YOU", "ET ORD TIL DEG"), color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.height(8.dp))
                     Text(m.text, color = Color.White, fontSize = 24.sp, lineHeight = 30.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
                     if (m.ref.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(m.ref, color = Gold, fontSize = 14.sp) }
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PanelButton(if (m.id in state.savedMessages) "Saved" else "Save") { state.toggleMessageSave(m.id) }
-                        PanelButton("Share") { Share.message(ctx, m, renderMessage(m)) }
+                        PanelButton(if (m.id in state.savedMessages) tr("Saved", "Lagret") else tr("Save", "Lagre")) { state.toggleMessageSave(m.id) }
+                        PanelButton(tr("Share", "Del")) { Share.message(ctx, m, renderMessage(m)) }
                     }
                 }
                 is FeedItem.PinItem -> {
                     val pn = current.pin
-                    Text(if (pn.board.startsWith("r/")) "FROM REDDIT" else "FROM PINTEREST", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text(if (pn.board.startsWith("r/")) tr("FROM REDDIT", "FRA REDDIT") else tr("FROM PINTEREST", "FRA PINTEREST"), color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.height(8.dp))
                     if (pn.title.isNotBlank()) Text(pn.title, color = Color.White, fontSize = 20.sp, lineHeight = 26.sp, fontFamily = FontFamily.Serif)
                     Text(pn.board, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
                     Spacer(Modifier.height(16.dp))
-                    PanelButton(if (state.isPinSaved(pn.id)) "Saved" else "Save") { state.togglePin(pn) }
+                    PanelButton(if (state.isPinSaved(pn.id)) tr("Saved", "Lagret") else tr("Save", "Lagre")) { state.togglePin(pn) }
                 }
                 is FeedItem.TikTokItem -> {
-                    Text("FROM TIKTOK", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text(tr("FROM TIKTOK", "FRA TIKTOK"), color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     if (current.tiktok.author.isNotBlank()) Text("@${current.tiktok.author}", color = Color.White, fontSize = 20.sp)
                 }
                 null -> Unit
             }
             Spacer(Modifier.height(28.dp))
-            Text("Up next", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(tr("Up next", "Neste"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
         }
         items(upcoming, key = { it.first }) { (index, item) ->
@@ -358,7 +358,7 @@ private fun SidePanel(
                             modifier = Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp)).background(Plum)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(item.pin.title.ifBlank { "Illustrated message" }, color = Color.White, fontSize = 14.sp, maxLines = 2,
+                        Text(item.pin.title.ifBlank { tr("Illustrated message", "Illustrert budskap") }, color = Color.White, fontSize = 14.sp, maxLines = 2,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     }
                     is FeedItem.TikTokItem -> {
@@ -366,7 +366,7 @@ private fun SidePanel(
                             Text("TikTok", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(12.dp))
-                        Text(if (item.tiktok.author.isNotBlank()) "@${item.tiktok.author}" else "TikTok video", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(if (item.tiktok.author.isNotBlank()) "@${item.tiktok.author}" else tr("TikTok video", "TikTok-video"), color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
                     }
                     is FeedItem.MessageItem -> {
                         Box(
@@ -402,7 +402,7 @@ fun VerseOverlay(verse: Verse, state: AppState, onRead: (Verse) -> Unit, onClose
             .clickable(remember { MutableInteractionSource() }, null) { }
     ) {
         VerseCard(
-            verse = verse, reason = "From your widget", isCurrent = true,
+            verse = verse, reason = tr("From your widget", "Fra widgeten din"), isCurrent = true,
             saved = verse.ref in state.saved, liked = verse.ref in state.liked,
             onLike = { state.toggleLike(verse.ref) }, onDoubleTapLike = { state.like(verse.ref) },
             onSave = { state.toggleSave(verse.ref) }, onShared = {}, onRead = { onRead(verse) },
@@ -411,7 +411,7 @@ fun VerseOverlay(verse: Verse, state: AppState, onRead: (Verse) -> Unit, onClose
         androidx.compose.material3.IconButton(
             onClick = onClose,
             modifier = Modifier.statusBarsPadding().padding(8.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.3f))
-        ) { Icon(Icons.Filled.Close, "Close", tint = Color.White) }
+        ) { Icon(Icons.Filled.Close, tr("Close", "Lukk"), tint = Color.White) }
     }
 }
 
@@ -515,7 +515,7 @@ private fun VerseCard(
             ) {
                 Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Read ${verse.chapterRef}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(tr("Read ${verse.chapterRef}", "Les ${verse.chapterRef}"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
 
@@ -525,9 +525,9 @@ private fun VerseCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) "Amen" else "Like", liked, if (liked) HeartRed else Color.White, onLike)
-            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
-            RailButton(Icons.Filled.Share, "Share", false, Color.White) { onShared(); Share.verse(ctx, verse, Palettes.argb(verse.theme)) }
+            RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) tr("Amen", "Amen") else tr("Like", "Liker"), liked, if (liked) HeartRed else Color.White, onLike)
+            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
+            RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.verse(ctx, verse, Palettes.argb(verse.theme)) }
         }
 
         burstAt?.let { pos -> HeartBurstAt(pos, burstKey) }

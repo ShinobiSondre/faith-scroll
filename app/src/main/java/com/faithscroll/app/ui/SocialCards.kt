@@ -103,7 +103,7 @@ fun PinCard(
 
         Column(Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 26.dp)) {
             reason?.let { ReasonTag(it); Spacer(Modifier.height(8.dp)) }
-            Text(if (pin.board.startsWith("r/")) "via Reddit · ${pin.board}" else "via Pinterest · ${pin.board.substringBefore("/")}", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text(if (pin.board.startsWith("r/")) "via Reddit · ${pin.board}" else tr("via Pinterest · ${pin.board.substringBefore("/")}", "via Pinterest · ${pin.board.substringBefore("/")}"), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
             if (pin.title.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(pin.title, color = Color.White, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -114,13 +114,13 @@ fun PinCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) "Amen" else "Like", liked, if (liked) HeartRed else Color.White, onLike)
-            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) "Saved" else "Save", saved, if (saved) Gold else Color.White, onSave)
-            RailButton(Icons.Filled.Share, "Share", false, Color.White) {
+            RailButton(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) tr("Amen", "Amen") else tr("Like", "Liker"), liked, if (liked) HeartRed else Color.White, onLike)
+            RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
+            RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) {
                 onShared()
                 val i = Intent(Intent.ACTION_SEND).setType("text/plain")
                     .putExtra(Intent.EXTRA_TEXT, listOf(pin.title, pin.link).filter { it.isNotBlank() }.joinToString("\n"))
-                ctx.startActivity(Intent.createChooser(i, "Share").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ctx.startActivity(Intent.createChooser(i, tr("Share", "Del")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }
         burstAt?.let { HeartBurstAt(it, burstKey) }
@@ -181,7 +181,7 @@ fun TikTokCard(tiktok: TikTok, reason: String?, isActive: Boolean, bottomInset: 
             Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = bottomInset + 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) "Muted" else "Sound", false, Color.White) {
+            RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) {
                 muted = !muted; send(if (muted) "mute" else "unMute")
             }
         }

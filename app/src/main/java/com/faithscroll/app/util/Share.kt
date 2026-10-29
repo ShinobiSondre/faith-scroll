@@ -33,7 +33,7 @@ object Share {
             } else type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, text)
         }
-        ctx.startActivity(Intent.createChooser(intent, "Share verse").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent.createChooser(intent, tr("Share verse", "Del verset")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     fun message(ctx: Context, m: Message, image: Bitmap) {
@@ -50,7 +50,7 @@ object Share {
             } else type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, text)
         }
-        ctx.startActivity(Intent.createChooser(intent, "Share").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent.createChooser(intent, tr("Share", "Del")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     fun video(ctx: Context, video: Video) {
@@ -58,7 +58,7 @@ object Share {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, "${video.title}\n${video.url}")
         }
-        ctx.startActivity(Intent.createChooser(intent, "Share story").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent.createChooser(intent, tr("Share story", "Del historien")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     fun openUrl(ctx: Context, url: String) {

@@ -13,10 +13,10 @@ import kotlin.random.Random
 object Taste {
     val themes = listOf("hope", "peace", "strength", "love", "faith", "comfort", "guidance", "joy", "grace", "courage", "prayer")
 
-    val themeLabels = mapOf(
-        "hope" to "Hope", "peace" to "Peace", "strength" to "Strength", "love" to "Love",
-        "faith" to "Faith", "comfort" to "Comfort", "guidance" to "Guidance", "joy" to "Joy",
-        "grace" to "Forgiveness", "courage" to "Courage", "prayer" to "Prayer"
+    val themeLabels: Map<String, String> get() = mapOf(
+        "hope" to tr("Hope", "Håp"), "peace" to tr("Peace", "Fred"), "strength" to tr("Strength", "Styrke"), "love" to tr("Love", "Kjærlighet"),
+        "faith" to tr("Faith", "Tro"), "comfort" to tr("Comfort", "Trøst"), "guidance" to tr("Guidance", "Veiledning"), "joy" to tr("Joy", "Glede"),
+        "grace" to tr("Forgiveness", "Tilgivelse"), "courage" to tr("Courage", "Mot"), "prayer" to tr("Prayer", "Bønn")
     )
 
     /** Words in a video title that hint at its topic. */

@@ -80,7 +80,7 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
         Modifier.widthIn(max = 680.dp).fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = bottomInset + 24.dp)
     ) {
-        Text("Me", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+        Text(tr("Me", "Meg"), color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(16.dp))
 
         // Personalization
@@ -90,32 +90,34 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.AutoAwesome, null, tint = Gold, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
-                Text("Your For You feed", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(tr("Your For You feed", "Din «For deg»-feed"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                if (tops.isEmpty()) "FaithScroll learns from what you linger on, like, save and watch."
-                else "Lately you're drawn to ${tops.joinToString(", ")}" + (fav?.let { ", and you enjoy $it" } ?: "") + ".",
+                if (tops.isEmpty()) tr("FaithScroll learns from what you linger on, like, save and watch.", "FaithScroll lærer av hva du blir værende ved, liker, lagrer og ser på.")
+                else tr("Lately you're drawn to ${tops.joinToString(", ")}", "I det siste trekkes du mot ${tops.joinToString(", ")}") + (fav?.let { tr(", and you enjoy $it", ", og du liker $it") } ?: "") + ".",
                 color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("Retake questions", false) { onPersonalize() }
-                Chip("Start fresh", false) {
+                Chip(tr("Retake questions", "Svar på nytt"), false) { onPersonalize() }
+                Chip(tr("Start fresh", "Start på nytt"), false) {
                     Taste.reset(ctx)
-                    Toast.makeText(ctx, "Cleared. Answer a few questions to start again.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, tr("Cleared. Answer a few questions to start again.", "Nullstilt. Svar på noen spørsmål for å starte på nytt."), Toast.LENGTH_SHORT).show()
                     onPersonalize()
                 }
             }
         }
 
         Spacer(Modifier.height(16.dp))
+        LanguageCard()
+        Spacer(Modifier.height(16.dp))
         QualityCard()
         Spacer(Modifier.height(16.dp))
         SourcesCard()
 
         Spacer(Modifier.height(28.dp))
-        Text("Home screen widget", color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+        Text(tr("Home screen widget", "Widget på hjemskjermen"), color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
 
         // Live preview over a mock wallpaper so transparency is visible
@@ -142,9 +144,9 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
 
         Spacer(Modifier.height(22.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Background", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text(tr("Background", "Bakgrunn"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Text(
-                when { opacity < 5 -> "Transparent"; opacity < 85 -> "Semi-transparent · ${opacity.roundToInt()}%"; else -> "Solid" },
+                when { opacity < 5 -> tr("Transparent", "Gjennomsiktig"); opacity < 85 -> tr("Semi-transparent · ${opacity.roundToInt()}%", "Halvgjennomsiktig · ${opacity.roundToInt()} %"); else -> tr("Solid", "Heldekkende") },
                 color = Gold, fontSize = 14.sp
             )
         }
@@ -162,19 +164,19 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
         }
 
         Spacer(Modifier.height(22.dp))
-        Text("Text style", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Text(tr("Text style", "Tekststil"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip("Light text", lightText) { lightText = true; Prefs.setWidgetLightText(ctx, true); apply() }
-            Chip("Dark text", !lightText) { lightText = false; Prefs.setWidgetLightText(ctx, false); apply() }
+            Chip(tr("Light text", "Lys tekst"), lightText) { lightText = true; Prefs.setWidgetLightText(ctx, true); apply() }
+            Chip(tr("Dark text", "Mørk tekst"), !lightText) { lightText = false; Prefs.setWidgetLightText(ctx, false); apply() }
         }
-        Text("Tip: use light text on dark wallpapers, dark text on light ones.", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        Text(tr("Tip: use light text on dark wallpapers, dark text on light ones.", "Tips: bruk lys tekst på mørke bakgrunner og mørk tekst på lyse."), color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
 
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("New verse every hour", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Text("Or tap ↻ on the widget anytime", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                Text(tr("New verse every hour", "Nytt vers hver time"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(tr("Or tap ↻ on the widget anytime", "Eller trykk ↻ på widgeten når du vil"), color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
             }
             Switch(checked = auto, onCheckedChange = { auto = it; Prefs.setWidgetAutoChange(ctx, it) },
                 colors = SwitchDefaults.colors(checkedTrackColor = Gold, checkedThumbColor = Ink))
@@ -186,19 +188,19 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
                 val mgr = AppWidgetManager.getInstance(ctx)
                 val ok = mgr.isRequestPinAppWidgetSupported &&
                     mgr.requestPinAppWidget(ComponentName(ctx, VerseWidgetProvider::class.java), null, null)
-                if (!ok) Toast.makeText(ctx, "Long-press your home screen → Widgets → FaithScroll", Toast.LENGTH_LONG).show()
+                if (!ok) Toast.makeText(ctx, tr("Long-press your home screen → Widgets → FaithScroll", "Hold inne på hjemskjermen → Moduler → FaithScroll"), Toast.LENGTH_LONG).show()
             },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
         ) {
-            Icon(Icons.Filled.AddToHomeScreen, null); Spacer(Modifier.width(8.dp)); Text("Add widget to home screen", fontWeight = FontWeight.SemiBold)
+            Icon(Icons.Filled.AddToHomeScreen, null); Spacer(Modifier.width(8.dp)); Text(tr("Add widget to home screen", "Legg widgeten på hjemskjermen"), fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(10.dp))
         OutlinedButton(
             onClick = { VerseWidgetProvider.nextVerse(ctx); previewRef = Prefs.widgetRef(ctx) },
             modifier = Modifier.fillMaxWidth().height(52.dp)
         ) {
-            Icon(Icons.Filled.Refresh, null, tint = Gold); Spacer(Modifier.width(8.dp)); Text("Show a new verse now", color = Gold)
+            Icon(Icons.Filled.Refresh, null, tint = Gold); Spacer(Modifier.width(8.dp)); Text(tr("Show a new verse now", "Vis et nytt vers nå"), color = Gold)
         }
 
         Spacer(Modifier.height(28.dp))
@@ -209,13 +211,13 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
             Icon(Icons.Filled.LocalFireDepartment, null, tint = Gold, modifier = Modifier.size(36.dp))
             Spacer(Modifier.width(14.dp))
             Column {
-                Text("${state.streak.current}-day reading streak", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text("Best: ${state.streak.best} days · ${state.streak.totalDays} days in the Word", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
+                Text(tr("${state.streak.current}-day reading streak", "${state.streak.current} dager på rad i Ordet"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(tr("Best: ${state.streak.best} days · ${state.streak.totalDays} days in the Word", "Beste: ${state.streak.best} dager · ${state.streak.totalDays} dager i Ordet totalt"), color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.",
+            tr("Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.", "Bibeltekst: King James Version (fri bruk). Videoene strømmes fra YouTube-kanaler med vitnesbyrd og bibelundervisning."),
             color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp
         )
     }
@@ -223,6 +225,31 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
 }
 
 private var sourcesChanged: () -> Unit = {}
+
+/** App language: follows the phone, or English / Norsk. Restarts the screen to apply. */
+@Composable
+private fun LanguageCard() {
+    val ctx = LocalContext.current
+    var mode by remember { mutableStateOf(Lang.mode(ctx)) }
+    fun pick(m: Lang.Mode) {
+        if (m == mode) return
+        mode = m; Lang.setMode(ctx, m)
+        (ctx as? android.app.Activity)?.recreate()
+    }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text(tr("Language", "Språk"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(tr("Phone setting", "Som telefonen"), mode == Lang.Mode.AUTO) { pick(Lang.Mode.AUTO) }
+            Chip("English", mode == Lang.Mode.EN) { pick(Lang.Mode.EN) }
+            Chip("Norsk", mode == Lang.Mode.NO) { pick(Lang.Mode.NO) }
+        }
+        Text(
+            tr("Bible verses are in English (King James Version).", "Bibelversene er på engelsk (King James Version)."),
+            color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+}
 
 /** Video quality / data saver. */
 @Composable
@@ -232,23 +259,23 @@ private fun QualityCard() {
     val now = remember(mode) { VideoQuality.targetHeight(ctx) }
     val mobile = remember { VideoQuality.onMobileData(ctx) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
-        Text("Video quality", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(tr("Video quality", "Videokvalitet"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip("Auto", mode == VideoQuality.Mode.AUTO) { mode = VideoQuality.Mode.AUTO; VideoQuality.setMode(ctx, mode) }
-            Chip("Data saver", mode == VideoQuality.Mode.SAVER) { mode = VideoQuality.Mode.SAVER; VideoQuality.setMode(ctx, mode) }
-            Chip("High", mode == VideoQuality.Mode.HIGH) { mode = VideoQuality.Mode.HIGH; VideoQuality.setMode(ctx, mode) }
+            Chip(tr("Auto", "Auto"), mode == VideoQuality.Mode.AUTO) { mode = VideoQuality.Mode.AUTO; VideoQuality.setMode(ctx, mode) }
+            Chip(tr("Data saver", "Datasparing"), mode == VideoQuality.Mode.SAVER) { mode = VideoQuality.Mode.SAVER; VideoQuality.setMode(ctx, mode) }
+            Chip(tr("High", "Høy"), mode == VideoQuality.Mode.HIGH) { mode = VideoQuality.Mode.HIGH; VideoQuality.setMode(ctx, mode) }
         }
         Spacer(Modifier.height(8.dp))
         Text(
             when (mode) {
-                VideoQuality.Mode.AUTO -> "720p on Wi-Fi, 480p on mobile data, 360p when your phone's Data Saver is on."
-                VideoQuality.Mode.SAVER -> "Always 360p and only the next video is preloaded. Uses the least data."
-                VideoQuality.Mode.HIGH -> "1080p on Wi-Fi, 720p on mobile data."
-            } + " Right now: ${now}p on ${if (mobile) "mobile data" else "Wi-Fi"}.",
+                VideoQuality.Mode.AUTO -> tr("720p on Wi-Fi, 480p on mobile data, 360p when your phone's Data Saver is on.", "720p på Wi-Fi, 480p på mobildata, 360p når datasparing er på i telefonen.")
+                VideoQuality.Mode.SAVER -> tr("Always 360p and only the next video is preloaded. Uses the least data.", "Alltid 360p, og bare neste video lastes på forhånd. Bruker minst data.")
+                VideoQuality.Mode.HIGH -> tr("1080p on Wi-Fi, 720p on mobile data.", "1080p på Wi-Fi, 720p på mobildata.")
+            } + tr(" Right now: ${now}p on ${if (mobile) "mobile data" else "Wi-Fi"}.", " Nå: ${now}p på ${if (mobile) "mobildata" else "Wi-Fi"}."),
             color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp
         )
-        Text("Video cache: ${com.faithscroll.app.data.StreamResolver.cacheSizeMb()} MB of 300 MB",
+        Text(tr("Video cache: ${com.faithscroll.app.data.StreamResolver.cacheSizeMb()} MB of 300 MB", "Videobuffer: ${com.faithscroll.app.data.StreamResolver.cacheSizeMb()} MB av 300 MB"),
             color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
@@ -265,12 +292,12 @@ private fun SourcesCard() {
     var subs by remember { mutableStateOf(SocialRepository.userSubs(ctx)) }
 
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
-        Text("Your sources", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Text("Paste a Pinterest board, a subreddit (like r/TrueChristian) or a TikTok link and it shows up in your feed.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Text(tr("Your sources", "Dine kilder"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(tr("Paste a Pinterest board, a subreddit (like r/TrueChristian) or a TikTok link and it shows up in your feed.", "Lim inn en Pinterest-tavle, et subreddit (som r/TrueChristian) eller en TikTok-lenke, så dukker det opp i feeden din."), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
         Spacer(Modifier.height(12.dp))
         androidx.compose.material3.OutlinedTextField(
             value = link, onValueChange = { link = it }, singleLine = true,
-            placeholder = { Text("r/… · pinterest.com/… · tiktok.com/…") },
+            placeholder = { Text(tr("r/… · pinterest.com/… · tiktok.com/…", "r/… · pinterest.com/… · tiktok.com/…")) },
             modifier = Modifier.fillMaxWidth(),
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Gold, cursorColor = Gold, focusedTextColor = Color.White, unfocusedTextColor = Color.White
@@ -286,14 +313,14 @@ private fun SourcesCard() {
                     if (added != null) {
                         link = ""
                         boards = SocialRepository.userBoards(ctx); tiktoks = SocialRepository.userTikToks(ctx); subs = SocialRepository.userSubs(ctx)
-                        Toast.makeText(ctx, "Added $added", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, tr("Added $added", "La til $added"), Toast.LENGTH_SHORT).show()
                         sourcesChanged()
-                    } else Toast.makeText(ctx, "That isn't a subreddit, Pinterest board or TikTok link.", Toast.LENGTH_LONG).show()
+                    } else Toast.makeText(ctx, tr("That isn't a subreddit, Pinterest board or TikTok link.", "Det er ikke et subreddit, en Pinterest-tavle eller en TikTok-lenke."), Toast.LENGTH_LONG).show()
                 }
             },
             enabled = link.isNotBlank() && !busy,
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
-        ) { Text(if (busy) "Adding…" else "Add to my feed") }
+        ) { Text(if (busy) tr("Adding…", "Legger til …") else tr("Add to my feed", "Legg til i feeden")) }
         if (boards.isNotEmpty() || tiktoks.isNotEmpty() || subs.isNotEmpty()) Spacer(Modifier.height(12.dp))
         subs.forEach { r ->
             SourceRow("Reddit · r/$r") { SocialRepository.removeSub(ctx, r); subs = SocialRepository.userSubs(ctx); sourcesChanged() }
@@ -313,7 +340,7 @@ private fun SourcesCard() {
 private fun SourceRow(label: String, onRemove: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
-        TextButton(onClick = onRemove) { Text("Remove", color = Gold) }
+        TextButton(onClick = onRemove) { Text(tr("Remove", "Fjern"), color = Gold) }
     }
 }
 
