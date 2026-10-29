@@ -204,7 +204,8 @@ fun FeedScreen(
                             video = item.video,
                             reason = item.reason,
                             onShared = { Taste.videoAction(ctx, item.video, Taste.Action.SHARE) },
-                            isActive = pager.settledPage == page && !suspended,
+                            isActive = pager.settledPage == page,
+                            suspended = suspended,
                             preload = page == pager.settledPage + 1 && !suspended,
                             saved = state.isVideoSaved(item.video.id),
                             onSave = {

@@ -203,22 +203,26 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.fillMaxWidth()) { tab = i } }
                 }
             }
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+            // The feed stays alive under the other tabs, so you come back to the exact same
+            // card and moment in the video. It just pauses while you're elsewhere.
+            key(tasteVersion) {
+                FeedScreen(
+                    state, feedVideos, social, bottomInset,
+                    suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill,
+                    twoPane = twoPane,
+                    onOpenVideo = { v -> openVideo(v, feedVideos) },
+                    onBeStill = { beStill = true }
+                )
+            }
             AnimatedContent(
                 targetState = tab,
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.fillMaxSize(),
                 label = "tabs"
             ) { t ->
                 when (t) {
-                    0 -> key(tasteVersion, socialVersion) {
-                        FeedScreen(
-                            state, feedVideos, social, bottomInset,
-                            suspended = player != null || widgetVerse != null || onboarding,
-                            twoPane = twoPane,
-                            onOpenVideo = { v -> openVideo(v, feedVideos) },
-                            onBeStill = { beStill = true }
-                        )
-                    }
+                    0 -> Unit // the feed underneath shows through
                     1 -> WatchScreen(library, bottomInset, openVideo)
                     2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
                     else -> WidgetScreen(
@@ -228,6 +232,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                         }
                     ) { onboarding = true }
                 }
+            }
             }
         }
 
