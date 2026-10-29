@@ -112,10 +112,10 @@ fun FeedScreen(
     }
 
     fun itemAt(page: Int): FeedItem {
-        if (videos.isNotEmpty() && page >= videoStart && (page - videoStart) % 4 == 3) {
-            return FeedItem.VideoItem(videos[((page - videoStart) / 4) % videos.size])
+        if (videos.isNotEmpty() && page >= videoStart && (page - videoStart) % 3 == 2) {
+            return FeedItem.VideoItem(videos[((page - videoStart) / 3) % videos.size])
         }
-        val skip = if (page >= videoStart && videos.isNotEmpty()) (page - videoStart + 1) / 4 else 0
+        val skip = if (page >= videoStart && videos.isNotEmpty()) (page - videoStart + 1) / 3 else 0
         return FeedItem.VerseItem(order[(page - skip) % order.size])
     }
 
@@ -156,7 +156,7 @@ fun FeedScreen(
                             isActive = pager.settledPage == page && !suspended,
                             saved = state.isVideoSaved(item.video.id),
                             onSave = { state.toggleVideo(item.video) },
-                            onOpen = { onOpenVideo(item.video) },
+                            onExpand = { onOpenVideo(item.video) },
                             bottomInset = bottomInset
                         )
                     }

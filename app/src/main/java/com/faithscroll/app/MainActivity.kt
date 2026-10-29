@@ -126,10 +126,20 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         ) { t ->
             when (t) {
                 0 -> key(startRef) {
+                    // Testimonies and sermons take turns between the verses.
+                    val feedVideos = remember(library) {
+                        val l = library ?: return@remember emptyList<Video>()
+                        val out = mutableListOf<Video>()
+                        for (i in 0 until maxOf(l.stories.size, l.sermons.size)) {
+                            l.stories.getOrNull(i)?.let(out::add)
+                            l.sermons.getOrNull(i)?.let(out::add)
+                        }
+                        out
+                    }
                     FeedScreen(
-                        state, verses, library?.stories ?: emptyList(), startRef, bottomInset,
+                        state, verses, feedVideos, startRef, bottomInset,
                         suspended = player != null,
-                        onOpenVideo = { v -> openVideo(v, library?.stories ?: listOf(v)) },
+                        onOpenVideo = { v -> openVideo(v, feedVideos) },
                         onReadChapter = { reading = it }
                     )
                 }
