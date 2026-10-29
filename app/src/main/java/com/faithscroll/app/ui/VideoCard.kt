@@ -94,7 +94,11 @@ fun VideoCard(
     // Prepare the stream URL as soon as the card exists, so it starts instantly when swiped to.
     LaunchedEffect(video.id) { StreamResolver.resolve(video.id) }
 
-    val useFill = fill ?: (playback.portrait && !landscape)
+    // Fill the screen when the video's shape matches the screen's (portrait on a phone,
+    // landscape when turned or unfolded); otherwise show it whole over a blurred backdrop.
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenLandscape = cfg.screenWidthDp > cfg.screenHeightDp
+    val useFill = fill ?: (playback.portrait != screenLandscape)
     val showingVideo = (playback.ready && !playback.failed) || embedPlaying
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {

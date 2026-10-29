@@ -107,7 +107,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
     }
     DisposableEffect(landscape) {
         activity?.requestedOrientation =
-            if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         onDispose { }
     }
 

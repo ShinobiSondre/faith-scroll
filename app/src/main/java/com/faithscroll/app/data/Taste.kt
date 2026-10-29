@@ -95,10 +95,10 @@ object Taste {
         if ("sermons" in a.watch) bump(kindScore, Video.KIND_SERMON, 1.5f)
         if ("teaching" in a.watch) bump(channelScore, "BibleProject", 2f)
         videoBias = when {
-            a.watch == setOf("verses") -> -2f
-            "verses" in a.watch -> -0.5f
+            a.watch == setOf("messages") -> -2f
+            "messages" in a.watch -> -0.5f
             a.watch.size >= 2 -> 1f
-            else -> 0f
+            else -> 0.5f
         }
         a.channels.forEach { bump(channelScore, it, 2.5f) }
         onboarded = true
@@ -149,6 +149,37 @@ object Taste {
         save(ctx)
     }
 
+    fun messageSeen(ctx: Context, m: Message, dwellMs: Long) {
+        load(ctx); decay()
+        val d = when { dwellMs < 1200 -> -0.15f; dwellMs < 4000 -> 0.05f; else -> 0.25f }
+        bump(themeScore, m.theme, d)
+        if (dwellMs > 4000) videoBias = (videoBias - 0.05f).coerceIn(-3f, 3f)
+        save(ctx)
+    }
+
+    fun messageAction(ctx: Context, m: Message, a: Action) {
+        load(ctx)
+        bump(themeScore, m.theme, when (a) { Action.LIKE -> 0.6f; Action.SAVE -> 0.8f; Action.SHARE -> 1f; else -> 0.3f })
+        videoBias = (videoBias - 0.15f).coerceIn(-3f, 3f)
+        save(ctx)
+    }
+
+    fun pinSeen(ctx: Context, p: Pin, dwellMs: Long) {
+        load(ctx); decay()
+        val d = when { dwellMs < 1200 -> -0.15f; dwellMs < 4000 -> 0.05f; else -> 0.25f }
+        topicsOf(p.title).forEach { bump(themeScore, it, d) }
+        if (dwellMs > 4000) videoBias = (videoBias - 0.05f).coerceIn(-3f, 3f)
+        save(ctx)
+    }
+
+    fun pinAction(ctx: Context, p: Pin, a: Action) {
+        load(ctx)
+        val d = when (a) { Action.LIKE -> 0.6f; Action.SAVE -> 0.8f; Action.SHARE -> 1f; else -> 0.3f }
+        topicsOf(p.title).forEach { bump(themeScore, it, d) }
+        videoBias = (videoBias - 0.15f).coerceIn(-3f, 3f)
+        save(ctx)
+    }
+
     fun videoSeen(ctx: Context, v: Video, dwellMs: Long) {
         load(ctx); decay()
         val d = when {
@@ -186,18 +217,19 @@ object Taste {
     fun scoreVideo(ctx: Context, v: Video): Float {
         load(ctx)
         val topic = topicsOf(v.title).maxOfOrNull { themeScore[it] ?: 0f } ?: 0f
-        return (channelScore[v.channel] ?: 0f) + (kindScore[v.kind] ?: 0f) * 0.7f + topic * 0.5f
+        val shortBonus = if (v.kind == Video.KIND_SHORT) 0.6f else 0f // TikTok-style clips suit the feed
+        return (channelScore[v.channel] ?: 0f) + (kindScore[v.kind] ?: 0f) * 0.7f + topic * 0.5f + shortBonus
     }
 
-    /** How many verse cards to show between videos (2 = lots of video, 5 = mostly verses). */
-    fun versesBetweenVideos(ctx: Context): Int {
+    /** How many videos to show between illustrated messages (mostly videos, messages sprinkled in). */
+    fun videosBetweenMessages(ctx: Context): Int {
         load(ctx)
         return when {
-            videoBias > 1.5f -> 1
-            videoBias > 0.5f -> 2
+            videoBias > 1.5f -> 6
+            videoBias > 0.5f -> 4
             videoBias > -0.8f -> 3
-            videoBias > -1.8f -> 4
-            else -> 6
+            videoBias > -1.8f -> 2
+            else -> 1
         }
     }
 

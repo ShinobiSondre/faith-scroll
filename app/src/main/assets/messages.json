@@ -1,0 +1,434 @@
+[
+ {
+  "id": "m0",
+  "text": "You are loved more than you know.",
+  "ref": "Jeremiah 31:3",
+  "theme": "love"
+ },
+ {
+  "id": "m1",
+  "text": "He hasn't forgotten you.",
+  "ref": "Isaiah 49:15",
+  "theme": "comfort"
+ },
+ {
+  "id": "m2",
+  "text": "Breathe. He's got this.",
+  "ref": "",
+  "theme": "peace"
+ },
+ {
+  "id": "m3",
+  "text": "Your past is forgiven. Your future is secure.",
+  "ref": "",
+  "theme": "grace"
+ },
+ {
+  "id": "m4",
+  "text": "God isn't finished with you yet.",
+  "ref": "Philippians 1:6",
+  "theme": "hope"
+ },
+ {
+  "id": "m5",
+  "text": "Be still, and know.",
+  "ref": "Psalm 46:10",
+  "theme": "peace"
+ },
+ {
+  "id": "m6",
+  "text": "You were made on purpose, for a purpose.",
+  "ref": "",
+  "theme": "guidance"
+ },
+ {
+  "id": "m7",
+  "text": "Fear knocked. Faith answered.",
+  "ref": "",
+  "theme": "courage"
+ },
+ {
+  "id": "m8",
+  "text": "New mercies. Every morning.",
+  "ref": "Lamentations 3:23",
+  "theme": "grace"
+ },
+ {
+  "id": "m9",
+  "text": "When you can't trace His hand, trust His heart.",
+  "ref": "",
+  "theme": "faith"
+ },
+ {
+  "id": "m10",
+  "text": "Rest is not weakness. It's trust.",
+  "ref": "Matthew 11:28",
+  "theme": "peace"
+ },
+ {
+  "id": "m11",
+  "text": "The same God who parted seas is with you today.",
+  "ref": "",
+  "theme": "strength"
+ },
+ {
+  "id": "m12",
+  "text": "Grace upon grace.",
+  "ref": "John 1:16",
+  "theme": "grace"
+ },
+ {
+  "id": "m13",
+  "text": "Light always wins.",
+  "ref": "John 1:5",
+  "theme": "hope"
+ },
+ {
+  "id": "m14",
+  "text": "You don't have to carry it alone.",
+  "ref": "1 Peter 5:7",
+  "theme": "comfort"
+ },
+ {
+  "id": "m15",
+  "text": "Talk to Him. He's listening.",
+  "ref": "",
+  "theme": "prayer"
+ },
+ {
+  "id": "m16",
+  "text": "Joy comes in the morning.",
+  "ref": "Psalm 30:5",
+  "theme": "joy"
+ },
+ {
+  "id": "m17",
+  "text": "He calls you by name.",
+  "ref": "Isaiah 43:1",
+  "theme": "love"
+ },
+ {
+  "id": "m18",
+  "text": "Small steps of faith still move mountains.",
+  "ref": "",
+  "theme": "faith"
+ },
+ {
+  "id": "m19",
+  "text": "Weeping may last a night. Not forever.",
+  "ref": "",
+  "theme": "comfort"
+ },
+ {
+  "id": "m20",
+  "text": "Your worth was settled at the cross.",
+  "ref": "",
+  "theme": "love"
+ },
+ {
+  "id": "m21",
+  "text": "Pray first. Worry never.",
+  "ref": "",
+  "theme": "prayer"
+ },
+ {
+  "id": "m22",
+  "text": "Strength for today. Hope for tomorrow.",
+  "ref": "",
+  "theme": "strength"
+ },
+ {
+  "id": "m23",
+  "text": "He walks with you through the valley.",
+  "ref": "Psalm 23:4",
+  "theme": "comfort"
+ },
+ {
+  "id": "m24",
+  "text": "Love wins. Always.",
+  "ref": "1 Corinthians 13:8",
+  "theme": "love"
+ },
+ {
+  "id": "m25",
+  "text": "God's timing is never late.",
+  "ref": "",
+  "theme": "faith"
+ },
+ {
+  "id": "m26",
+  "text": "Let go. Let God lead.",
+  "ref": "Proverbs 3:6",
+  "theme": "guidance"
+ },
+ {
+  "id": "m27",
+  "text": "Be brave. He goes before you.",
+  "ref": "Deuteronomy 31:8",
+  "theme": "courage"
+ },
+ {
+  "id": "m28",
+  "text": "Gratitude turns what we have into enough.",
+  "ref": "",
+  "theme": "joy"
+ },
+ {
+  "id": "m29",
+  "text": "You are His masterpiece.",
+  "ref": "Ephesians 2:10",
+  "theme": "love"
+ },
+ {
+  "id": "m30",
+  "text": "Faith over fear.",
+  "ref": "",
+  "theme": "courage"
+ },
+ {
+  "id": "m31",
+  "text": "He is near to the brokenhearted.",
+  "ref": "Psalm 34:18",
+  "theme": "comfort"
+ },
+ {
+  "id": "m32",
+  "text": "Peace that makes no sense. That's His kind.",
+  "ref": "Philippians 4:7",
+  "theme": "peace"
+ },
+ {
+  "id": "m33",
+  "text": "Every sunrise is a reminder: He is faithful.",
+  "ref": "",
+  "theme": "hope"
+ },
+ {
+  "id": "m34",
+  "text": "Start again. Grace allows it.",
+  "ref": "",
+  "theme": "grace"
+ },
+ {
+  "id": "m35",
+  "text": "He fights for you. You can rest.",
+  "ref": "Exodus 14:14",
+  "theme": "peace"
+ },
+ {
+  "id": "m36",
+  "text": "Kindness is love in action.",
+  "ref": "",
+  "theme": "love"
+ },
+ {
+  "id": "m37",
+  "text": "Your story is part of His bigger story.",
+  "ref": "",
+  "theme": "hope"
+ },
+ {
+  "id": "m38",
+  "text": "Seek Him first. The rest follows.",
+  "ref": "Matthew 6:33",
+  "theme": "guidance"
+ },
+ {
+  "id": "m39",
+  "text": "Thank Him for one thing right now.",
+  "ref": "",
+  "theme": "joy"
+ },
+ {
+  "id": "m40",
+  "text": "When you are weak, He is strong.",
+  "ref": "2 Corinthians 12:9",
+  "theme": "strength"
+ },
+ {
+  "id": "m41",
+  "text": "Nothing can separate you from His love.",
+  "ref": "Romans 8:39",
+  "theme": "love"
+ },
+ {
+  "id": "m42",
+  "text": "Prayer changes things. And it changes you.",
+  "ref": "",
+  "theme": "prayer"
+ },
+ {
+  "id": "m43",
+  "text": "The storm is loud. His voice is louder.",
+  "ref": "",
+  "theme": "courage"
+ },
+ {
+  "id": "m44",
+  "text": "Hope is an anchor for the soul.",
+  "ref": "Hebrews 6:19",
+  "theme": "hope"
+ },
+ {
+  "id": "m45",
+  "text": "You are forgiven. Walk free.",
+  "ref": "",
+  "theme": "grace"
+ },
+ {
+  "id": "m46",
+  "text": "He makes all things new.",
+  "ref": "Revelation 21:5",
+  "theme": "hope"
+ },
+ {
+  "id": "m47",
+  "text": "Don't give up. Harvest is coming.",
+  "ref": "Galatians 6:9",
+  "theme": "strength"
+ },
+ {
+  "id": "m48",
+  "text": "Your next step doesn't need to be big. Just faithful.",
+  "ref": "",
+  "theme": "guidance"
+ },
+ {
+  "id": "m49",
+  "text": "He sings over you.",
+  "ref": "Zephaniah 3:17",
+  "theme": "joy"
+ },
+ {
+  "id": "m50",
+  "text": "Trust the One who holds tomorrow.",
+  "ref": "",
+  "theme": "faith"
+ },
+ {
+  "id": "m51",
+  "text": "Be kind. Everyone is fighting a battle.",
+  "ref": "",
+  "theme": "love"
+ },
+ {
+  "id": "m52",
+  "text": "There is no fear in love.",
+  "ref": "1 John 4:18",
+  "theme": "courage"
+ },
+ {
+  "id": "m53",
+  "text": "Slow down. Listen. He speaks in whispers too.",
+  "ref": "1 Kings 19:12",
+  "theme": "prayer"
+ },
+ {
+  "id": "m54",
+  "text": "The cross says you are worth it.",
+  "ref": "",
+  "theme": "love"
+ },
+ {
+  "id": "m55",
+  "text": "Rejoice. Again I say, rejoice.",
+  "ref": "Philippians 4:4",
+  "theme": "joy"
+ },
+ {
+  "id": "m56",
+  "text": "He restores what was broken.",
+  "ref": "",
+  "theme": "comfort"
+ },
+ {
+  "id": "m57",
+  "text": "Walk by faith, not by sight.",
+  "ref": "2 Corinthians 5:7",
+  "theme": "faith"
+ },
+ {
+  "id": "m58",
+  "text": "You were never meant to do life alone.",
+  "ref": "",
+  "theme": "love"
+ },
+ {
+  "id": "m59",
+  "text": "He gives strength to the weary.",
+  "ref": "Isaiah 40:29",
+  "theme": "strength"
+ },
+ {
+  "id": "m60",
+  "text": "Lean in. He's closer than you think.",
+  "ref": "James 4:8",
+  "theme": "prayer"
+ },
+ {
+  "id": "m61",
+  "text": "Today is a gift. Unwrap it with praise.",
+  "ref": "Psalm 118:24",
+  "theme": "joy"
+ },
+ {
+  "id": "m62",
+  "text": "Mercy said no to what you deserved.",
+  "ref": "",
+  "theme": "grace"
+ },
+ {
+  "id": "m63",
+  "text": "His plans for you are good.",
+  "ref": "Jeremiah 29:11",
+  "theme": "hope"
+ },
+ {
+  "id": "m64",
+  "text": "Courage is faith that keeps walking.",
+  "ref": "",
+  "theme": "courage"
+ },
+ {
+  "id": "m65",
+  "text": "Bring Him your questions. He can handle them.",
+  "ref": "",
+  "theme": "faith"
+ },
+ {
+  "id": "m66",
+  "text": "He leads beside still waters.",
+  "ref": "Psalm 23:2",
+  "theme": "peace"
+ },
+ {
+  "id": "m67",
+  "text": "You are chosen.",
+  "ref": "1 Peter 2:9",
+  "theme": "love"
+ },
+ {
+  "id": "m68",
+  "text": "Pain is real. So is His presence.",
+  "ref": "",
+  "theme": "comfort"
+ },
+ {
+  "id": "m69",
+  "text": "Shine. The world needs your light.",
+  "ref": "Matthew 5:16",
+  "theme": "joy"
+ },
+ {
+  "id": "m70",
+  "text": "Wisdom starts with asking Him.",
+  "ref": "James 1:5",
+  "theme": "guidance"
+ },
+ {
+  "id": "m71",
+  "text": "Keep going. Heaven is cheering you on.",
+  "ref": "Hebrews 12:1",
+  "theme": "strength"
+ }
+]

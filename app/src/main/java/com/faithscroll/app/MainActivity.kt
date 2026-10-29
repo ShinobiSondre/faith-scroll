@@ -55,6 +55,17 @@ import com.faithscroll.app.data.Verse
 import com.faithscroll.app.data.VerseRepository
 import com.faithscroll.app.data.Video
 import com.faithscroll.app.data.VideoLibrary
+import com.faithscroll.app.data.SocialLibrary
+import com.faithscroll.app.data.SocialRepository
+import com.faithscroll.app.ui.VerseOverlay
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.platform.LocalConfiguration
 import com.faithscroll.app.data.VideoRepository
 import com.faithscroll.app.ui.AppState
 import com.faithscroll.app.ui.ChapterSheet
@@ -106,12 +117,19 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var tab by remember { mutableIntStateOf(0) }
     var verses by remember { mutableStateOf(VerseRepository.all(ctx)) }
     var library by remember { mutableStateOf<VideoLibrary?>(null) }
+    var social by remember { mutableStateOf<SocialLibrary?>(null) }
+    var socialVersion by remember { mutableIntStateOf(0) }
     var player by remember { mutableStateOf<Pair<Video, List<Video>>?>(null) }
     val openVideo: (Video, List<Video>) -> Unit = { v, q -> player = v to q }
     var reading by remember { mutableStateOf<Verse?>(null) }
+    var widgetVerse by remember { mutableStateOf<Verse?>(null) }
     var onboarding by remember { mutableStateOf(!Taste.isOnboarded(ctx)) }
     var tasteVersion by remember { mutableIntStateOf(0) }
-    LaunchedEffect(openFeedSignal) { if (openFeedSignal > 0) { player = null; tab = 0 } }
+
+    // A tap on the home-screen widget opens that verse.
+    LaunchedEffect(openFeedSignal, startRef) {
+        VerseRepository.byRef(ctx, startRef)?.let { widgetVerse = it; player = null }
+    }
 
     LaunchedEffect(Unit) {
         library = VideoRepository.load(ctx)
@@ -119,52 +137,79 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         verses = VerseRepository.all(ctx)
         if (VerseWidgetProvider.hasWidgets(ctx)) VerseWidgetProvider.refresh(ctx)
     }
+    LaunchedEffect(socialVersion) { social = SocialRepository.load(ctx) }
 
+    // Phone upright: tabs at the bottom. Turned sideways, unfolded or tablet: a rail on the side.
+    val cfg = LocalConfiguration.current
+    val sideNav = cfg.screenWidthDp >= 600 && cfg.screenWidthDp > cfg.screenHeightDp || cfg.screenWidthDp >= 840
+    val twoPane = cfg.screenWidthDp >= 700 && cfg.screenHeightDp >= 560
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomInset = navInset + 64.dp
+    val bottomInset = if (sideNav) navInset + 8.dp else navInset + 64.dp
+
+    val tabs = listOf(
+        Triple(Icons.Filled.Home, "Feed", 0), Triple(Icons.Filled.PlayCircle, "Watch", 1),
+        Triple(Icons.Filled.Bookmarks, "Saved", 2), Triple(Icons.Filled.Person, "Me", 3)
+    )
+
+    // Mostly videos: shorts, testimonies and sermons take turns.
+    val feedVideos = remember(library) {
+        val l = library ?: return@remember emptyList<Video>()
+        val out = mutableListOf<Video>()
+        for (i in 0 until maxOf(l.stories.size, l.sermons.size, l.shorts.size)) {
+            l.shorts.getOrNull(i)?.let(out::add)
+            l.stories.getOrNull(i)?.let(out::add)
+            l.sermons.getOrNull(i)?.let(out::add)
+        }
+        out
+    }
 
     Box(Modifier.fillMaxSize().background(Ink)) {
-        AnimatedContent(
-            targetState = tab,
-            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-            label = "tabs"
-        ) { t ->
-            when (t) {
-                0 -> key(startRef, tasteVersion) {
-                    // Testimonies and sermons take turns between the verses.
-                    val feedVideos = remember(library) {
-                        val l = library ?: return@remember emptyList<Video>()
-                        val out = mutableListOf<Video>()
-                        for (i in 0 until maxOf(l.stories.size, l.sermons.size)) {
-                            l.stories.getOrNull(i)?.let(out::add)
-                            l.sermons.getOrNull(i)?.let(out::add)
-                        }
-                        out
-                    }
-                    FeedScreen(
-                        state, verses, feedVideos, startRef, bottomInset,
-                        suspended = player != null,
-                        onOpenVideo = { v -> openVideo(v, feedVideos) },
-                        onReadChapter = { reading = it }
-                    )
+        Row(Modifier.fillMaxSize()) {
+            if (sideNav) {
+                Column(
+                    Modifier.fillMaxHeight().width(84.dp).background(Color.Black)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
+                    verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("✦", color = Gold, fontSize = 22.sp)
+                    tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.fillMaxWidth()) { tab = i } }
                 }
-                1 -> WatchScreen(library, bottomInset, openVideo)
-                2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
-                else -> WidgetScreen(state, bottomInset) { onboarding = true }
+            }
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                label = "tabs"
+            ) { t ->
+                when (t) {
+                    0 -> key(tasteVersion, socialVersion) {
+                        FeedScreen(
+                            state, feedVideos, social, bottomInset,
+                            suspended = player != null || widgetVerse != null || onboarding,
+                            twoPane = twoPane,
+                            onOpenVideo = { v -> openVideo(v, feedVideos) }
+                        )
+                    }
+                    1 -> WatchScreen(library, bottomInset, openVideo)
+                    2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
+                    else -> WidgetScreen(state, bottomInset, onSourcesChanged = { socialVersion++ }) { onboarding = true }
+                }
             }
         }
 
-        Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
-                .navigationBarsPadding().padding(top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            NavItem(Icons.Filled.Home, "Feed", tab == 0, Modifier.weight(1f)) { tab = 0 }
-            NavItem(Icons.Filled.PlayCircle, "Watch", tab == 1, Modifier.weight(1f)) { tab = 1 }
-            NavItem(Icons.Filled.Bookmarks, "Saved", tab == 2, Modifier.weight(1f)) { tab = 2 }
-            NavItem(Icons.Filled.Person, "Me", tab == 3, Modifier.weight(1f)) { tab = 3 }
+        if (!sideNav) {
+            Row(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                    .navigationBarsPadding().padding(top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.weight(1f)) { tab = i } }
+            }
         }
+
+        widgetVerse?.let { v -> VerseOverlay(v, state, onRead = { reading = it }) { widgetVerse = null } }
 
         player?.let { (v, q) -> PlayerScreen(v, q, state) { player = null } }
 

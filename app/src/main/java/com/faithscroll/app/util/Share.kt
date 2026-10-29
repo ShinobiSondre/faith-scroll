@@ -15,6 +15,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.core.content.FileProvider
+import com.faithscroll.app.data.Message
 import com.faithscroll.app.data.Verse
 import com.faithscroll.app.data.Video
 import java.io.File
@@ -33,6 +34,23 @@ object Share {
             putExtra(Intent.EXTRA_TEXT, text)
         }
         ctx.startActivity(Intent.createChooser(intent, "Share verse").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    fun message(ctx: Context, m: Message, image: Bitmap) {
+        val uri = runCatching {
+            val dir = File(ctx.cacheDir, "share").apply { mkdirs() }
+            val file = File(dir, "message.png")
+            file.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
+        }.getOrNull()
+        val text = m.text + if (m.ref.isNotBlank()) " — ${m.ref}" else ""
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            if (uri != null) {
+                type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } else type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        ctx.startActivity(Intent.createChooser(intent, "Share").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     fun video(ctx: Context, video: Video) {

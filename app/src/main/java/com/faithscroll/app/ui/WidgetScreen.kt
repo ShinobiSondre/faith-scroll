@@ -54,13 +54,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.faithscroll.app.data.Prefs
 import com.faithscroll.app.data.Taste
+import com.faithscroll.app.data.SocialRepository
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.TextButton
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.AutoAwesome
 import com.faithscroll.app.data.VerseRepository
 import com.faithscroll.app.widget.VerseWidgetProvider
 import kotlin.math.roundToInt
 
 @Composable
-fun WidgetScreen(state: AppState, bottomInset: Dp, onPersonalize: () -> Unit) {
+fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit = {}, onPersonalize: () -> Unit) {
+    sourcesChanged = onSourcesChanged
     val ctx = LocalContext.current
     var opacity by remember { mutableFloatStateOf(Prefs.widgetOpacity(ctx).toFloat()) }
     var lightText by remember { mutableStateOf(Prefs.widgetLightText(ctx)) }
@@ -70,8 +75,8 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onPersonalize: () -> Unit) {
 
     fun apply() = VerseWidgetProvider.refresh(ctx)
 
-    Column(
-        Modifier.fillMaxSize().background(Ink).statusBarsPadding().verticalScroll(rememberScrollState())
+    Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.TopCenter) { Column(
+        Modifier.widthIn(max = 680.dp).fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = bottomInset + 24.dp)
     ) {
         Text("Me", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
@@ -102,6 +107,9 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onPersonalize: () -> Unit) {
                 }
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+        SourcesCard()
 
         Spacer(Modifier.height(28.dp))
         Text("Home screen widget", color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
@@ -207,6 +215,69 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onPersonalize: () -> Unit) {
             "Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.",
             color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp
         )
+    }
+}
+}
+
+private var sourcesChanged: () -> Unit = {}
+
+/** Paste a Pinterest board or TikTok link to add it to your feed. */
+@Composable
+private fun SourcesCard() {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var link by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var boards by remember { mutableStateOf(SocialRepository.userBoards(ctx)) }
+    var tiktoks by remember { mutableStateOf(SocialRepository.userTikToks(ctx)) }
+
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text("Your sources", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text("Paste a Pinterest board or a TikTok link and it shows up in your feed.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        androidx.compose.material3.OutlinedTextField(
+            value = link, onValueChange = { link = it }, singleLine = true,
+            placeholder = { Text("pinterest.com/… or tiktok.com/@…/video/…") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Gold, cursorColor = Gold, focusedTextColor = Color.White, unfocusedTextColor = Color.White
+            )
+        )
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = {
+                busy = true
+                scope.launch {
+                    val added = SocialRepository.addFromLink(ctx, link)
+                    busy = false
+                    if (added != null) {
+                        link = ""
+                        boards = SocialRepository.userBoards(ctx); tiktoks = SocialRepository.userTikToks(ctx)
+                        Toast.makeText(ctx, "Added $added", Toast.LENGTH_SHORT).show()
+                        sourcesChanged()
+                    } else Toast.makeText(ctx, "That link isn't a Pinterest board or TikTok video.", Toast.LENGTH_LONG).show()
+                }
+            },
+            enabled = link.isNotBlank() && !busy,
+            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)
+        ) { Text(if (busy) "Adding…" else "Add to my feed") }
+        if (boards.isNotEmpty() || tiktoks.isNotEmpty()) Spacer(Modifier.height(12.dp))
+        boards.forEach { b ->
+            SourceRow("Pinterest · $b") { SocialRepository.removeBoard(ctx, b); boards = SocialRepository.userBoards(ctx); sourcesChanged() }
+        }
+        tiktoks.forEach { t ->
+            SourceRow("TikTok · " + (if (t.author.isNotBlank()) "@${t.author}" else t.id)) {
+                SocialRepository.removeTikTok(ctx, t.id); tiktoks = SocialRepository.userTikToks(ctx); sourcesChanged()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceRow(label: String, onRemove: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+        TextButton(onClick = onRemove) { Text("Remove", color = Gold) }
     }
 }
 

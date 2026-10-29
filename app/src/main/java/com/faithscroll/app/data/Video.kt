@@ -17,6 +17,7 @@ data class Video(val id: String, val title: String, val channel: String, val kin
     companion object {
         const val KIND_STORY = "story"
         const val KIND_SERMON = "sermon"
+        const val KIND_SHORT = "short"
     }
     val thumbnail: String get() = "https://i.ytimg.com/vi/$id/hqdefault.jpg"
     val url: String get() = "https://www.youtube.com/watch?v=$id"
@@ -24,8 +25,8 @@ data class Video(val id: String, val title: String, val channel: String, val kin
 }
 
 /** Testimonies for the swipe feed, sermons for the Watch tab. */
-data class VideoLibrary(val stories: List<Video>, val sermons: List<Video>) {
-    val all: List<Video> get() = (sermons + stories).distinctBy { it.id }
+data class VideoLibrary(val stories: List<Video>, val sermons: List<Video>, val shorts: List<Video> = emptyList()) {
+    val all: List<Video> get() = (shorts + sermons + stories).distinctBy { it.id }
 }
 
 /**
@@ -44,12 +45,18 @@ object VideoRepository {
         "UCXL6kvDyoQpvtaeafC4pLyg" to "In Touch Ministries",
         "UCQmUmqrMGfnesNpdL7T282Q" to "Gospel in Life"
     )
+    private val defaultShorts = listOf(
+        "UCZ0KUV-ZqQ6BaAsWqeE9Lpw" to "Jesus Shorts",
+        "UCkJZbuKUpf9GUuSHUgFhQGA" to "Christian Daily Devotional",
+        "UCmoPSaYFVw7IuQJPc1KCQvw" to "Our Daily Bread"
+    )
     private val fallback = listOf(Video("dDYbiukIFBc", "Best CBN Testimonies", "CBN"))
 
     suspend fun load(ctx: Context): VideoLibrary = withContext(Dispatchers.IO) {
         val cacheFile = File(ctx.filesDir, "videos_cache_v2.json")
         var stories = defaultStories
         var sermons = defaultSermons
+        var shorts = defaultShorts
         var pinned = emptyList<Video>()
 
         val repo = BuildConfig.CONTENT_REPO
@@ -59,22 +66,25 @@ object VideoRepository {
                     val o = JSONObject(body)
                     channelList(o.optJSONArray("channels"))?.let { stories = it }
                     channelList(o.optJSONArray("sermons"))?.let { sermons = it }
+                    channelList(o.optJSONArray("shorts"))?.let { shorts = it }
                     o.optJSONArray("videos")?.let { a -> pinned = parseVideos(a) }
                 }
             }
         }
 
-        val (storyLists, sermonLists) = coroutineScope {
+        val (storyLists, sermonLists, shortLists) = coroutineScope {
             val a = stories.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_STORY) } }
             val b = sermons.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_SERMON) } }
-            a.awaitAll() to b.awaitAll()
+            val c = shorts.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_SHORT) } }
+            Triple(a.awaitAll(), b.awaitAll(), c.awaitAll())
         }
         val lib = VideoLibrary(
             stories = (pinned + interleave(storyLists)).distinctBy { it.id },
-            sermons = interleave(sermonLists).distinctBy { it.id }
+            sermons = interleave(sermonLists).distinctBy { it.id },
+            shorts = interleave(shortLists).distinctBy { it.id }
         )
 
-        if (lib.stories.size + lib.sermons.size > pinned.size) {
+        if (lib.stories.size + lib.sermons.size + lib.shorts.size > pinned.size) {
             val a = JSONArray()
             lib.all.forEach { a.put(it.toJson()) }
             cacheFile.writeText(a.toString())
@@ -82,7 +92,10 @@ object VideoRepository {
         }
         val cached = if (cacheFile.exists()) runCatching { parseVideos(JSONArray(cacheFile.readText())) }.getOrDefault(emptyList()) else emptyList()
         if (cached.isEmpty()) VideoLibrary(pinned.ifEmpty { fallback }, emptyList())
-        else VideoLibrary(cached.filter { it.kind == Video.KIND_STORY }, cached.filter { it.kind == Video.KIND_SERMON })
+        else VideoLibrary(
+            cached.filter { it.kind == Video.KIND_STORY }, cached.filter { it.kind == Video.KIND_SERMON },
+            cached.filter { it.kind == Video.KIND_SHORT }
+        )
     }
 
     private fun channelList(a: JSONArray?): List<Pair<String, String>>? {

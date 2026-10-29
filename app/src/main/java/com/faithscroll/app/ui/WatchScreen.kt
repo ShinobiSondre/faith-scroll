@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -64,8 +67,8 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
             return@Column
         }
 
-        val channels = remember(library) { (library.sermons + library.stories).map { it.channel }.distinct() }
-        val chips = listOf("For you", "Sermons", "Stories") + channels
+        val channels = remember(library) { library.all.map { it.channel }.distinct() }
+        val chips = listOf("For you", "Shorts", "Sermons", "Stories") + channels
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(chips) { c -> FilterChip(c, c == filter) { filter = c } }
         }
@@ -76,6 +79,7 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
                     val r = kotlin.random.Random(System.currentTimeMillis() / 600_000)
                     library.all.sortedByDescending { com.faithscroll.app.data.Taste.scoreVideo(ctx, it) + r.nextFloat() * 1.5f }
                 }
+                "Shorts" -> library.shorts
                 "Sermons" -> library.sermons
                 "Stories" -> library.stories
                 else -> library.all.filter { it.channel == filter }
@@ -88,9 +92,13 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
             }
             return@Column
         }
-        LazyColumn(contentPadding = PaddingValues(top = 12.dp, bottom = bottomInset + 16.dp)) {
-            item(key = "hero-" + list.first().id) { Hero(list.first()) { onOpen(list.first(), list) } }
-            items(list.drop(1), key = { it.id }) { v -> VideoRow(v) { onOpen(v, list) } }
+        // One column on a phone, more when turned sideways or unfolded.
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(340.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = bottomInset + 16.dp)
+        ) {
+            item(key = "hero-" + list.first().id, span = { GridItemSpan(minOf(maxLineSpan, 2)) }) { Hero(list.first()) { onOpen(list.first(), list) } }
+            gridItems(list.drop(1), key = { it.id }) { v -> VideoRow(v) { onOpen(v, list) } }
         }
     }
 }

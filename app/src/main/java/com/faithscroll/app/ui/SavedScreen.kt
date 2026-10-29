@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -48,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.faithscroll.app.data.Verse
+import com.faithscroll.app.data.MessageRepository
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import com.faithscroll.app.data.Video
 import com.faithscroll.app.util.Share
 
@@ -56,41 +58,21 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
     val ctx = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
     val savedVerses = remember(state.saved, verses) { verses.filter { it.ref in state.saved } }
+    val savedMessages = remember(state.savedMessages) { MessageRepository.all(ctx).filter { it.id in state.savedMessages } }
 
     Column(Modifier.fillMaxSize().background(Ink).statusBarsPadding()) {
         Text("Saved", color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp))
-        TabRow(
-            selectedTabIndex = tab, containerColor = Ink, contentColor = Gold
-        ) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Verses (${savedVerses.size})") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Stories (${state.savedVideos.size})") })
+        TabRow(selectedTabIndex = tab, containerColor = Ink, contentColor = Gold) {
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Videos (${state.savedVideos.size})") })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Messages (${savedMessages.size + state.savedPins.size})") })
+            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Verses (${savedVerses.size})") })
         }
         val pad = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomInset + 24.dp)
-        if (tab == 0) {
-            if (savedVerses.isEmpty()) Empty("Tap the bookmark on any verse to keep it here.")
-            else LazyColumn(contentPadding = pad, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                items(savedVerses, key = { it.ref }) { v ->
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                            .background(Brush.linearGradient(Palettes.forTheme(v.theme)))
-                            .background(Color.Black.copy(alpha = 0.25f))
-                            .padding(18.dp)
-                    ) {
-                        Text("“${v.text}”", color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, lineHeight = 24.sp)
-                        Spacer(Modifier.height(10.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("— ${v.ref}", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { onRead(v) }) { Icon(Icons.AutoMirrored.Filled.MenuBook, "Read chapter", tint = Color.White) }
-                            IconButton(onClick = { Share.verse(ctx, v, Palettes.argb(v.theme)) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
-                            IconButton(onClick = { state.toggleSave(v.ref) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
-                        }
-                    }
-                }
-            }
-        } else {
-            if (state.savedVideos.isEmpty()) Empty("Save testimony videos from the feed to watch again later.")
-            else LazyColumn(contentPadding = pad, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        val grid = GridCells.Adaptive(340.dp)
+        when (tab) {
+            0 -> if (state.savedVideos.isEmpty()) Empty("Save sermons and stories from the feed to watch again.")
+            else LazyVerticalGrid(grid, contentPadding = pad, verticalArrangement = Arrangement.spacedBy(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(state.savedVideos, key = { it.id }) { v ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Plum)
@@ -106,6 +88,51 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
                         }
                         IconButton(onClick = { Share.video(ctx, v) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
                         IconButton(onClick = { state.toggleVideo(v) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
+                    }
+                }
+            }
+            1 -> if (savedMessages.isEmpty() && state.savedPins.isEmpty()) Empty("Tap the bookmark on an illustrated message to keep it here.")
+            else LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = pad, verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(state.savedPins, key = { "pin-" + it.id }) { pn ->
+                    Box(Modifier.fillMaxWidth().aspectRatio(0.8f).clip(RoundedCornerShape(18.dp)).background(Plum)) {
+                        AsyncImage(pn.image, pn.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        IconButton(onClick = { state.togglePin(pn) }, modifier = Modifier.align(Alignment.BottomEnd)) {
+                            Icon(Icons.Filled.Bookmark, "Remove", tint = Gold)
+                        }
+                    }
+                }
+                items(savedMessages, key = { it.id }) { m ->
+                    Box(Modifier.fillMaxWidth().aspectRatio(0.8f).clip(RoundedCornerShape(18.dp))) {
+                        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                            drawScene(m.scene, Palettes.forTheme(m.theme), 0.3f)
+                            drawRect(Color.Black.copy(alpha = 0.25f))
+                        }
+                        Text(m.text, color = Color.White, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
+                            lineHeight = 21.sp, modifier = Modifier.align(Alignment.Center).padding(14.dp))
+                        Row(Modifier.align(Alignment.BottomEnd)) {
+                            IconButton(onClick = { Share.message(ctx, m, renderMessage(m)) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
+                            IconButton(onClick = { state.toggleMessageSave(m.id) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
+                        }
+                    }
+                }
+            }
+            else -> if (savedVerses.isEmpty()) Empty("Verses you save from the widget appear here.")
+            else LazyVerticalGrid(grid, contentPadding = pad, verticalArrangement = Arrangement.spacedBy(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(savedVerses, key = { it.ref }) { v ->
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                            .background(Brush.linearGradient(Palettes.forTheme(v.theme)))
+                            .background(Color.Black.copy(alpha = 0.25f))
+                            .padding(18.dp)
+                    ) {
+                        Text("“${v.text}”", color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, lineHeight = 24.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("— ${v.ref}", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { onRead(v) }) { Icon(Icons.AutoMirrored.Filled.MenuBook, "Read chapter", tint = Color.White) }
+                            IconButton(onClick = { Share.verse(ctx, v, Palettes.argb(v.theme)) }) { Icon(Icons.Filled.Share, "Share", tint = Color.White) }
+                            IconButton(onClick = { state.toggleSave(v.ref) }) { Icon(Icons.Filled.Bookmark, "Remove", tint = Gold) }
+                        }
                     }
                 }
             }

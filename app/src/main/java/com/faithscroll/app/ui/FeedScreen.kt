@@ -74,13 +74,21 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import com.faithscroll.app.data.Encouragement
 import com.faithscroll.app.data.FeedEngine
+import com.faithscroll.app.data.MessageRepository
+import com.faithscroll.app.data.SocialLibrary
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.faithscroll.app.data.FeedItem
 import com.faithscroll.app.data.Taste
 import com.faithscroll.app.data.Verse
 import com.faithscroll.app.data.Video
 import com.faithscroll.app.util.Share
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -91,23 +99,26 @@ import kotlin.math.sin
 @Composable
 fun FeedScreen(
     state: AppState,
-    verses: List<Verse>,
     videos: List<Video>,
-    startRef: String?,
+    social: SocialLibrary?,
     bottomInset: androidx.compose.ui.unit.Dp,
     suspended: Boolean = false,
-    onOpenVideo: (Video) -> Unit = {},
-    onReadChapter: (Verse) -> Unit
+    twoPane: Boolean = false,
+    onOpenVideo: (Video) -> Unit = {}
 ) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val latestVideos by rememberUpdatedState(videos)
-    val engine = remember(verses, startRef) { FeedEngine(ctx, verses, { latestVideos }, startRef) }
-    val items = remember(engine) { mutableStateListOf<FeedItem>().apply { repeat(6) { add(engine.next()) } } }
+    val latestSocial by rememberUpdatedState(social)
+    val engine = remember { FeedEngine(ctx, MessageRepository.all(ctx), { latestVideos }, { latestSocial }) }
+    val items = remember(engine) { mutableStateListOf<FeedItem>().apply { add(engine.next()) } }
     val pager = rememberPagerState(pageCount = { items.size })
 
-    // Keep a few cards ready ahead; each batch reflects what you've just engaged with.
-    LaunchedEffect(pager.currentPage, items.size) {
-        if (pager.currentPage >= items.size - 4) repeat(6) { items.add(engine.next()) }
+    // Keep cards ready ahead. While videos are still loading, only one card is made,
+    // so the feed doesn't fill up with illustrations before the videos arrive.
+    LaunchedEffect(pager.currentPage, items.size, videos.isNotEmpty()) {
+        val ahead = if (videos.isEmpty()) 1 else 5
+        while (items.size <= pager.currentPage + ahead) items.add(engine.next())
     }
 
     // Learn from time spent on each card.
@@ -118,8 +129,10 @@ fun FeedScreen(
             if (page != lastPage) {
                 val dwell = System.currentTimeMillis() - since
                 when (val it = items.getOrNull(lastPage)) {
-                    is FeedItem.VerseItem -> Taste.verseSeen(ctx, it.verse, dwell)
+                    is FeedItem.MessageItem -> Taste.messageSeen(ctx, it.message, dwell)
                     is FeedItem.VideoItem -> Taste.videoSeen(ctx, it.video, dwell)
+                    is FeedItem.PinItem -> Taste.pinSeen(ctx, it.pin, dwell)
+                    is FeedItem.TikTokItem -> Unit
                     null -> Unit
                 }
                 lastPage = page
@@ -128,8 +141,8 @@ fun FeedScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Ink)) {
-        if (items.isNotEmpty()) {
+    val feed: @Composable (Modifier) -> Unit = { mod ->
+        Box(mod.background(Ink)) {
             VerticalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
@@ -143,34 +156,35 @@ fun FeedScreen(
                         .fillMaxSize()
                         .graphicsLayer {
                             val o = abs(offset).coerceIn(0f, 1f)
-                            val s = 1f - 0.08f * o
-                            scaleX = s; scaleY = s
+                            val sc = 1f - 0.08f * o
+                            scaleX = sc; scaleY = sc
                             alpha = 1f - 0.35f * o
                         }
                 ) {
                     when (item) {
-                        is FeedItem.VerseItem -> VerseCard(
-                            verse = item.verse,
-                            reason = item.reason,
-                            isCurrent = pager.currentPage == page,
-                            saved = item.verse.ref in state.saved,
-                            liked = item.verse.ref in state.liked,
-                            onLike = {
-                                if (item.verse.ref !in state.liked) Taste.verseAction(ctx, item.verse, Taste.Action.LIKE)
-                                state.toggleLike(item.verse.ref)
-                            },
-                            onDoubleTapLike = {
-                                if (item.verse.ref !in state.liked) Taste.verseAction(ctx, item.verse, Taste.Action.LIKE)
-                                state.like(item.verse.ref)
-                            },
-                            onSave = {
-                                if (item.verse.ref !in state.saved) Taste.verseAction(ctx, item.verse, Taste.Action.SAVE)
-                                state.toggleSave(item.verse.ref)
-                            },
-                            onShared = { Taste.verseAction(ctx, item.verse, Taste.Action.SHARE) },
-                            onRead = { Taste.verseAction(ctx, item.verse, Taste.Action.READ); onReadChapter(item.verse) },
-                            bottomInset = bottomInset
-                        )
+                        is FeedItem.MessageItem -> {
+                            val m = item.message
+                            MessageCard(
+                                message = m,
+                                reason = item.reason,
+                                isCurrent = pager.currentPage == page,
+                                saved = m.id in state.savedMessages,
+                                liked = m.id in state.likedMessages,
+                                onLike = {
+                                    if (m.id !in state.likedMessages) Taste.messageAction(ctx, m, Taste.Action.LIKE)
+                                    state.toggleMessageLike(m.id)
+                                },
+                                onDoubleTapLike = {
+                                    if (m.id !in state.likedMessages) { Taste.messageAction(ctx, m, Taste.Action.LIKE); state.toggleMessageLike(m.id) }
+                                },
+                                onSave = {
+                                    if (m.id !in state.savedMessages) Taste.messageAction(ctx, m, Taste.Action.SAVE)
+                                    state.toggleMessageSave(m.id)
+                                },
+                                onShared = { Taste.messageAction(ctx, m, Taste.Action.SHARE) },
+                                bottomInset = bottomInset
+                            )
+                        }
                         is FeedItem.VideoItem -> VideoCard(
                             video = item.video,
                             reason = item.reason,
@@ -184,27 +198,213 @@ fun FeedScreen(
                             onExpand = { Taste.videoAction(ctx, item.video, Taste.Action.EXPAND); onOpenVideo(item.video) },
                             bottomInset = bottomInset
                         )
+                        is FeedItem.PinItem -> {
+                            val pn = item.pin
+                            PinCard(
+                                pin = pn, reason = item.reason,
+                                saved = state.isPinSaved(pn.id), liked = pn.id in state.likedPins,
+                                onLike = {
+                                    if (pn.id !in state.likedPins) Taste.pinAction(ctx, pn, Taste.Action.LIKE)
+                                    state.togglePinLike(pn.id)
+                                },
+                                onDoubleTapLike = { if (pn.id !in state.likedPins) { Taste.pinAction(ctx, pn, Taste.Action.LIKE); state.togglePinLike(pn.id) } },
+                                onSave = {
+                                    if (!state.isPinSaved(pn.id)) Taste.pinAction(ctx, pn, Taste.Action.SAVE)
+                                    state.togglePin(pn)
+                                },
+                                onShared = { Taste.pinAction(ctx, pn, Taste.Action.SHARE) },
+                                bottomInset = bottomInset
+                            )
+                        }
+                        is FeedItem.TikTokItem -> TikTokCard(
+                            tiktok = item.tiktok, reason = item.reason,
+                            isActive = pager.settledPage == page && !suspended,
+                            bottomInset = bottomInset
+                        )
+                    }
+                }
+            }
+            FeedHeader(state)
+        }
+    }
+
+    if (!twoPane) {
+        feed(Modifier.fillMaxSize())
+    } else {
+        // Unfolded / tablet: the feed plus a side panel with details and what's next.
+        Row(Modifier.fillMaxSize().background(Ink)) {
+            feed(Modifier.weight(1.4f).fillMaxHeight())
+            SidePanel(
+                current = items.getOrNull(pager.currentPage),
+                upcoming = (pager.currentPage + 1 until items.size).map { it to items[it] },
+                state = state,
+                onJump = { scope.launch { pager.animateScrollToPage(it) } },
+                onOpenVideo = onOpenVideo,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
+    }
+}
+
+@Composable
+private fun FeedHeader(state: AppState) {
+    Row(
+        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("FaithScroll", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif)
+        Spacer(Modifier.weight(1f))
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f)).padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.LocalFireDepartment, null, tint = Gold, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("${state.streak.current} day${if (state.streak.current == 1) "" else "s"}", color = Color.White, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun SidePanel(
+    current: FeedItem?,
+    upcoming: List<Pair<Int, FeedItem>>,
+    state: AppState,
+    onJump: (Int) -> Unit,
+    onOpenVideo: (Video) -> Unit,
+    modifier: Modifier
+) {
+    val ctx = LocalContext.current
+    LazyColumn(
+        modifier.background(Plum.copy(alpha = 0.6f)).statusBarsPadding().navigationBarsPadding(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)
+    ) {
+        item {
+            when (current) {
+                is FeedItem.VideoItem -> {
+                    val v = current.video
+                    Text(if (v.kind == Video.KIND_SERMON) "SERMON" else "STORY OF FAITH", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(v.title, color = Color.White, fontSize = 22.sp, lineHeight = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(v.channel, color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+                    current.reason?.let { Spacer(Modifier.height(12.dp)); ReasonTag(it) }
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        val saved = state.isVideoSaved(v.id)
+                        PanelButton(if (saved) "Saved" else "Save") { state.toggleVideo(v) }
+                        PanelButton("Share") { Share.video(ctx, v) }
+                        PanelButton("Full screen") { onOpenVideo(v) }
+                    }
+                }
+                is FeedItem.MessageItem -> {
+                    val m = current.message
+                    Text("A WORD FOR YOU", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(m.text, color = Color.White, fontSize = 24.sp, lineHeight = 30.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)
+                    if (m.ref.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(m.ref, color = Gold, fontSize = 14.sp) }
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PanelButton(if (m.id in state.savedMessages) "Saved" else "Save") { state.toggleMessageSave(m.id) }
+                        PanelButton("Share") { Share.message(ctx, m, renderMessage(m)) }
+                    }
+                }
+                is FeedItem.PinItem -> {
+                    val pn = current.pin
+                    Text("FROM PINTEREST", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Spacer(Modifier.height(8.dp))
+                    if (pn.title.isNotBlank()) Text(pn.title, color = Color.White, fontSize = 20.sp, lineHeight = 26.sp, fontFamily = FontFamily.Serif)
+                    Text(pn.board, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+                    Spacer(Modifier.height(16.dp))
+                    PanelButton(if (state.isPinSaved(pn.id)) "Saved" else "Save") { state.togglePin(pn) }
+                }
+                is FeedItem.TikTokItem -> {
+                    Text("FROM TIKTOK", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    if (current.tiktok.author.isNotBlank()) Text("@${current.tiktok.author}", color = Color.White, fontSize = 20.sp)
+                }
+                null -> Unit
+            }
+            Spacer(Modifier.height(28.dp))
+            Text("Up next", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+        }
+        items(upcoming, key = { it.first }) { (index, item) ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onJump(index) }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when (item) {
+                    is FeedItem.VideoItem -> {
+                        coil.compose.AsyncImage(
+                            item.video.thumbnail, null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp)).background(Plum)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(item.video.title, color = Color.White, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(item.video.channel, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        }
+                    }
+                    is FeedItem.PinItem -> {
+                        coil.compose.AsyncImage(
+                            item.pin.image, null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp)).background(Plum)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(item.pin.title.ifBlank { "Illustrated message" }, color = Color.White, fontSize = 14.sp, maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    }
+                    is FeedItem.TikTokItem -> {
+                        Box(Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black), contentAlignment = Alignment.Center) {
+                            Text("TikTok", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(if (item.tiktok.author.isNotBlank()) "@${item.tiktok.author}" else "TikTok video", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    }
+                    is FeedItem.MessageItem -> {
+                        Box(
+                            Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp))
+                                .background(Brush.linearGradient(Palettes.forTheme(item.message.theme))),
+                            contentAlignment = Alignment.Center
+                        ) { Text("✦", color = Color.White, fontSize = 22.sp) }
+                        Spacer(Modifier.width(12.dp))
+                        Text(item.message.text, color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Serif, maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     }
                 }
             }
         }
+    }
+}
 
-        // Header
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("FaithScroll", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif)
-            Spacer(Modifier.weight(1f))
-            Row(
-                Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f)).padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.LocalFireDepartment, null, tint = Gold, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("${state.streak.current} day${if (state.streak.current == 1) "" else "s"}", color = Color.White, fontSize = 13.sp)
-            }
-        }
+@Composable
+private fun PanelButton(label: String, onClick: () -> Unit) {
+    Text(
+        label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.12f))
+            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp)
+    )
+}
+
+/** A verse opened from the home-screen widget, shown full screen over the app. */
+@Composable
+fun VerseOverlay(verse: Verse, state: AppState, onRead: (Verse) -> Unit, onClose: () -> Unit) {
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    Box(
+        Modifier.fillMaxSize().background(Ink)
+            .clickable(remember { MutableInteractionSource() }, null) { }
+    ) {
+        VerseCard(
+            verse = verse, reason = "From your widget", isCurrent = true,
+            saved = verse.ref in state.saved, liked = verse.ref in state.liked,
+            onLike = { state.toggleLike(verse.ref) }, onDoubleTapLike = { state.like(verse.ref) },
+            onSave = { state.toggleSave(verse.ref) }, onShared = {}, onRead = { onRead(verse) },
+            bottomInset = 24.dp
+        )
+        androidx.compose.material3.IconButton(
+            onClick = onClose,
+            modifier = Modifier.statusBarsPadding().padding(8.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.3f))
+        ) { Icon(Icons.Filled.Close, "Close", tint = Color.White) }
     }
 }
 
@@ -323,7 +523,7 @@ private fun VerseCard(
             RailButton(Icons.Filled.Share, "Share", false, Color.White) { onShared(); Share.verse(ctx, verse, Palettes.argb(verse.theme)) }
         }
 
-        burstAt?.let { pos -> HeartBurst(pos, burstKey) }
+        burstAt?.let { pos -> HeartBurstAt(pos, burstKey) }
     }
 }
 
@@ -373,7 +573,7 @@ fun RailButton(icon: ImageVector, label: String, active: Boolean, tint: Color, o
 }
 
 @Composable
-private fun HeartBurst(pos: Offset, key: Int) {
+fun HeartBurstAt(pos: Offset, key: Int) {
     val scale = remember(key) { Animatable(0f) }
     val alpha = remember(key) { Animatable(1f) }
     LaunchedEffect(key) {

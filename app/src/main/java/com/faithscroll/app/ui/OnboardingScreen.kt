@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -70,7 +71,7 @@ private val watchOptions = listOf(
     Opt("stories", "🎥  Real-life testimonies"),
     Opt("sermons", "⛪  Sermons & preaching"),
     Opt("teaching", "📖  Bible explained"),
-    Opt("verses", "✨  Mostly verses, few videos")
+    Opt("messages", "🎨  Illustrated messages")
 )
 private val voiceOptions = listOf(
     Opt("Desiring God", "John Piper · Desiring God"),
@@ -103,7 +104,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { }
     ) {
         LivingBackground(Palettes.forTheme(listOf("prayer", "grace", "hope", "peace", "joy")[step.coerceIn(0, 4)]))
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp)) {
+        Column(Modifier.align(Alignment.TopCenter).widthIn(max = 640.dp).fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp)) {
             // Progress dots
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 repeat(5) { i ->

@@ -10,6 +10,16 @@ object Prefs {
     private fun p(ctx: Context): SharedPreferences =
         ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE)
 
+    fun set(ctx: Context, key: String): Set<String> = p(ctx).getStringSet(key, emptySet())!!.toSet()
+    fun putSet(ctx: Context, key: String, s: Set<String>) = p(ctx).edit().putStringSet(key, s).apply()
+
+    fun savedPins(ctx: Context): List<Pin> = runCatching {
+        val a = JSONArray(p(ctx).getString("saved_pins", "[]"))
+        (0 until a.length()).map { Pin.from(a.getJSONObject(it)) }
+    }.getOrDefault(emptyList())
+    fun setSavedPins(ctx: Context, l: List<Pin>) =
+        p(ctx).edit().putString("saved_pins", JSONArray().apply { l.forEach { put(it.toJson()) } }.toString()).apply()
+
     fun savedVerses(ctx: Context): Set<String> = p(ctx).getStringSet("saved_verses", emptySet())!!.toSet()
     fun setSavedVerses(ctx: Context, s: Set<String>) = p(ctx).edit().putStringSet("saved_verses", s).apply()
 

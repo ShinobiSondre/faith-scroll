@@ -14,6 +14,35 @@ class AppState(private val ctx: Context, val streak: Prefs.Streak) {
         private set
     var savedVideos by mutableStateOf(Prefs.savedVideos(ctx))
         private set
+    var savedMessages by mutableStateOf(Prefs.set(ctx, "saved_messages"))
+        private set
+    var likedMessages by mutableStateOf(Prefs.set(ctx, "liked_messages"))
+        private set
+
+    var savedPins by mutableStateOf(Prefs.savedPins(ctx))
+        private set
+    var likedPins by mutableStateOf(Prefs.set(ctx, "liked_pins"))
+        private set
+
+    fun isPinSaved(id: String) = savedPins.any { it.id == id }
+    fun togglePin(p: com.faithscroll.app.data.Pin) {
+        savedPins = if (isPinSaved(p.id)) savedPins.filterNot { it.id == p.id } else listOf(p) + savedPins
+        Prefs.setSavedPins(ctx, savedPins)
+    }
+    fun togglePinLike(id: String) {
+        likedPins = if (id in likedPins) likedPins - id else likedPins + id
+        Prefs.putSet(ctx, "liked_pins", likedPins)
+    }
+
+    fun toggleMessageSave(id: String) {
+        savedMessages = if (id in savedMessages) savedMessages - id else savedMessages + id
+        Prefs.putSet(ctx, "saved_messages", savedMessages)
+    }
+
+    fun toggleMessageLike(id: String) {
+        likedMessages = if (id in likedMessages) likedMessages - id else likedMessages + id
+        Prefs.putSet(ctx, "liked_messages", likedMessages)
+    }
 
     fun toggleSave(ref: String) {
         saved = if (ref in saved) saved - ref else saved + ref
