@@ -94,6 +94,14 @@ object LangFilter {
         return ok
     }
 
+    /** Most likely language of a longer text (e.g. captions), or null if unsure. Blocking. */
+    fun detect(text: String): String? {
+        if (text.length < 40) return null
+        val tag = runCatching { Tasks.await(client.identifyLanguage(text.take(1500)), 3, TimeUnit.SECONDS) }.getOrNull() ?: return null
+        if (tag == "und") return null
+        return tag.substringBefore('-').let { if (it == "nb" || it == "nn") "no" else it }
+    }
+
     suspend fun videos(list: List<Video>): List<Video> = withContext(Dispatchers.Default) {
         list.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
     }

@@ -92,7 +92,7 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
         }
         if (list.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
-                Text(tr("Couldn't load videos right now. Check your connection and reopen the app.", "Kunne ikke laste videoer nå. Sjekk nettforbindelsen og åpne appen på nytt."),
+                Text(tr("Checking videos for captions and language… they appear here as they pass.", "Sjekker videoer for undertekster og språk … de dukker opp her når de er godkjent."),
                     color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
             }
             return@Column

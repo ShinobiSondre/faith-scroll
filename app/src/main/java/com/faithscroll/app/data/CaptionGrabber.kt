@@ -37,6 +37,9 @@ object CaptionGrabber {
     private var web: WebView? = null
     private var ready = CompletableDeferred<Unit>()
     private val links = ConcurrentHashMap<String, Pair<Long, String>>()
+    /** Caption tracks per video: (language code, kind) where kind "asr" = YouTube's automatic captions from the audio. */
+    private val trackLists = ConcurrentHashMap<String, List<Pair<String, String>>>()
+    fun tracks(videoId: String): List<Pair<String, String>> = trackLists[videoId].orEmpty()
     private val none = ConcurrentHashMap<String, Long>()
     private val waiting = ConcurrentHashMap<String, CompletableDeferred<String?>>()
     private val queue = ArrayDeque<String>() // video ids, front = most urgent
@@ -107,10 +110,10 @@ object CaptionGrabber {
     private suspend fun ensurePlayer(): Boolean = withContext(Dispatchers.Main) {
         if (web == null) {
             val activity = host?.get() ?: return@withContext false
-            val root = activity.window?.decorView as? ViewGroup ?: return@withContext false
+            // Behind the app's own content: a normal-sized player YouTube treats as visible, but you never see or touch it.
+            val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return@withContext false
             ready = CompletableDeferred()
             web = WebView(activity).apply {
-                alpha = 0.01f
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
@@ -127,7 +130,7 @@ object CaptionGrabber {
                 }
                 addJavascriptInterface(Bridge, "Grab")
             }
-            root.addView(web, FrameLayout.LayoutParams(4, 4))
+            root.addView(web, 0, FrameLayout.LayoutParams(320, 180))
             web!!.loadDataWithBaseURL("https://www.youtube.com", HTML, "text/html", "utf-8", null)
         }
         withTimeoutOrNull(15_000) { ready.await() } != null
@@ -136,6 +139,12 @@ object CaptionGrabber {
     private object Bridge {
         @JavascriptInterface fun ready() { ready.complete(Unit) }
         @JavascriptInterface fun none(id: String) { if (id == foundFor) found?.complete(null) }
+        @JavascriptInterface fun tracks(id: String, json: String) {
+            runCatching {
+                val a = org.json.JSONArray(json)
+                trackLists[id] = (0 until a.length()).map { a.getJSONObject(it).let { t -> t.optString("c") to t.optString("k") } }
+            }
+        }
     }
 
     /** Frees the hidden player (e.g. when the app is closed); it's rebuilt when needed. */
@@ -172,7 +181,7 @@ object CaptionGrabber {
 var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
 var p,cur=null,tries=0;
 function onYouTubeIframeAPIReady(){
- p=new YT.Player('p',{width:4,height:4,playerVars:{autoplay:1,mute:1,playsinline:1,controls:0,cc_load_policy:1},
+ p=new YT.Player('p',{width:320,height:180,playerVars:{autoplay:1,mute:1,playsinline:1,controls:0,cc_load_policy:1},
   events:{onReady:function(){Grab.ready();},
    onApiChange:function(){caps();},
    onStateChange:function(e){if(e.data==1){caps();}}}});
@@ -180,7 +189,8 @@ function onYouTubeIframeAPIReady(){
 function caps(){
  if(!cur)return;
  try{p.loadModule('captions');var tl=p.getOption('captions','tracklist')||[];
-  if(tl.length){p.setOption('captions','track',{languageCode:tl[0].languageCode});}
+  if(tl.length){Grab.tracks(cur,JSON.stringify(tl.map(function(t){return {c:t.languageCode||'',k:t.kind||''};})));
+   p.setOption('captions','track',{languageCode:tl[0].languageCode});}
   else if(++tries>3){Grab.none(cur);}
  }catch(x){}
 }

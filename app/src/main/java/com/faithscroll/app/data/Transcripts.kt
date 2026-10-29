@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 data class Cue(val start: Long, val end: Long, val text: String)
 
 /** Captions for a video, in the original language and (if needed) translated on the phone. */
-data class Transcript(val lang: String, val cues: List<Cue>, val translated: Boolean)
+data class Transcript(val lang: String, val cues: List<Cue>, val translated: Boolean, val spoken: String = "")
 
 object Transcripts {
     private val cache = ConcurrentHashMap<String, Transcript>()
@@ -28,30 +28,38 @@ object Transcripts {
     suspend fun original(videoId: String, urgent: Boolean = false): Transcript? = withContext(Dispatchers.IO) {
         cache["o|$videoId"]?.let { return@withContext it }
         missing[videoId]?.let { if (System.currentTimeMillis() - it < 10 * 60_000) return@withContext null }
-        val r = StreamResolver.resolve(videoId) ?: return@withContext null
-        if (r.subtitles.isEmpty()) {
-            val link = CaptionGrabber.grab(videoId, urgent) ?: run { missing[videoId] = System.currentTimeMillis(); return@withContext null }
-            captureTimedText(videoId, link)
-            return@withContext cache["o|$videoId"]
-        }
-        val want = target()
+        // Works the same for every YouTube video: the caption link comes from YouTube's own player.
+        val link = CaptionGrabber.grab(videoId, urgent) ?: run { missing[videoId] = System.currentTimeMillis(); return@withContext null }
+        val tracks = CaptionGrabber.tracks(videoId)
         fun base(l: String) = l.substringBefore('-').lowercase().let { if (it == "nb" || it == "nn") "no" else it }
-        val track = r.subtitles.sortedWith(
-            compareByDescending<SubTrack> { base(it.lang) == want }
-                .thenByDescending { !it.auto }
-                .thenByDescending { base(it.lang) == "en" }
-        ).first()
-        // YouTube sometimes refuses caption downloads outside its own player (empty reply).
-        // Then the phone makes its own transcript instead (see Asr).
-        val raw = Http.get(track.url, 15_000)
-        val body = raw?.takeIf { it.contains("-->") } ?: run {
-            Diag.log("subs", "$videoId: YouTube captions blocked/empty (${raw?.length ?: -1} chars) → phone transcript")
-            return@withContext null
+        val want = target()
+        // YouTube's automatic captions are made from the audio: their language is the spoken one.
+        val spoken = tracks.firstOrNull { it.second == "asr" }?.first?.let(::base).orEmpty()
+        val chosen = tracks.firstOrNull { base(it.first) == want && it.second != "asr" }
+            ?: tracks.firstOrNull { it.second == "asr" }
+            ?: tracks.firstOrNull()
+        val t = fetchTrack(link, chosen?.first, chosen?.second, null)
+        if (t == null || t.isEmpty()) { missing[videoId] = System.currentTimeMillis(); Diag.log("subs", "$videoId: caption file empty"); return@withContext null }
+        val lang = chosen?.first?.let(::base) ?: base(android.net.Uri.parse(link).getQueryParameter("lang") ?: "")
+        Transcript(lang, t, false, spoken).also {
+            cache["o|$videoId"] = it
+            Diag.log("subs", "$videoId: ${t.size} caption lines ($lang${if (chosen?.second == "asr") ", auto" else ""}), spoken=${spoken.ifBlank { "?" }}")
         }
-        Diag.log("subs", "$videoId: YouTube captions OK (${track.lang}${if (track.auto) ", auto" else ""})")
-        val cues = parseVtt(body, track.auto)
-        if (cues.isEmpty()) return@withContext null
-        Transcript(base(track.lang), cues, false).also { cache["o|$videoId"] = it }
+    }
+
+    /** Fetches one caption track (any language/kind, optionally YouTube-translated) using a link from YouTube's player. */
+    private fun fetchTrack(link: String, lang: String?, kind: String?, tlang: String?): List<Cue>? {
+        val u = android.net.Uri.parse(link)
+        val b = u.buildUpon().clearQuery()
+        val skip = setOf("fmt", "tlang", "lang", "kind")
+        for (k in u.queryParameterNames) if (k !in skip) u.getQueryParameters(k).forEach { b.appendQueryParameter(k, it) }
+        b.appendQueryParameter("lang", lang ?: (u.getQueryParameter("lang") ?: "en"))
+        val k = kind ?: u.getQueryParameter("kind")
+        if (!k.isNullOrBlank()) b.appendQueryParameter("kind", k)
+        if (tlang != null) b.appendQueryParameter("tlang", tlang)
+        b.appendQueryParameter("fmt", "json3")
+        val body = Http.get(b.build().toString(), 15_000) ?: return null
+        return parseJson3(body)
     }
 
     /** Captions in the app language: translated on the phone when the video is in another language. */
@@ -62,7 +70,8 @@ object Transcripts {
         if (orig.lang == want) return@withContext orig
         // Like YouTube's "Auto-translate": ask YouTube for the captions already translated.
         CaptionGrabber.known(videoId)?.let { link ->
-            youtubeTranslated(link, want)?.let { t ->
+            val tr = CaptionGrabber.tracks(videoId).let { tl -> tl.firstOrNull { it.second == "asr" } ?: tl.firstOrNull() }
+            fetchTrack(link, tr?.first, tr?.second, if (want == "no") "no" else want)?.takeIf { it.isNotEmpty() }?.let { Transcript(want, it, true, orig.spoken) }?.let { t ->
                 Diag.log("subs", "$videoId: YouTube auto-translated captions → $want (${t.cues.size} lines)")
                 return@withContext t.also { cache["t|$want|$videoId"] = it }
             }

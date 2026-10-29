@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -247,6 +248,10 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     }
 
     androidx.compose.runtime.CompositionLocalProvider(com.faithscroll.app.ui.LocalOpenPage provides { url -> webPage = url }) {
+    // Check videos in the background: feed candidates first, then the rest of Watch.
+    LaunchedEffect(feedVideos, library) {
+        com.faithscroll.app.data.VideoCheck.queue(ctx, (feedVideos + (library?.all ?: emptyList())).distinctBy { it.id })
+    }
     Box(Modifier.fillMaxSize().background(Ink)) {
         Row(Modifier.fillMaxSize()) {
             if (sideNav) {
@@ -264,8 +269,10 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             // The feed stays alive under the other tabs, so you come back to the exact same
             // card and moment in the video. It just pauses while you're elsewhere.
             key(tasteVersion) {
+                val ok by com.faithscroll.app.data.VideoCheck.verified.collectAsState()
+                val verifiedFeed = remember(feedVideos, ok) { feedVideos.filter { it.id in ok } }
                 FeedScreen(
-                    state, feedVideos, social, bottomInset,
+                    state, verifiedFeed, social, bottomInset,
                     suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null,
                     twoPane = twoPane,
                     onOpenVideo = { v -> openVideo(v, feedVideos) },
@@ -280,7 +287,13 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             ) { t ->
                 when (t) {
                     0 -> Unit // the feed underneath shows through
-                    1 -> WatchScreen(library, bottomInset, openVideo)
+                    1 -> {
+                        val ok by com.faithscroll.app.data.VideoCheck.verified.collectAsState()
+                        val checkedLibrary = remember(library, ok) {
+                            library?.let { l -> VideoLibrary(l.stories.filter { it.id in ok }, l.sermons.filter { it.id in ok }, l.shorts.filter { it.id in ok }) }
+                        }
+                        WatchScreen(checkedLibrary, bottomInset, openVideo)
+                    }
                     2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
                     else -> WidgetScreen(
                         state, bottomInset, onSourcesChanged = { socialVersion++ }, onBeStill = { beStill = true },
