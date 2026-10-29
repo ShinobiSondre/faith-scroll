@@ -22,6 +22,11 @@ object PoTokenProviderImpl : PoTokenProvider {
     private var webPoTokenStreamingPot: String? = null
     private var webPoTokenGenerator: PoTokenGenerator? = null
 
+    // Only the web client needs a token here (same as NewPipe).
+    override fun getWebEmbedClientPoToken(videoId: String): PoTokenResult? = null
+    override fun getAndroidClientPoToken(videoId: String): PoTokenResult? = null
+    override fun getIosClientPoToken(videoId: String): PoTokenResult? = null
+
     override fun getWebClientPoToken(videoId: String): PoTokenResult? {
         if (!webViewSupported || webViewBadImpl) {
             return null
