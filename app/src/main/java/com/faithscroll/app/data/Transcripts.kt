@@ -48,7 +48,7 @@ object Transcripts {
     }
 
     /** Fetches one caption track (any language/kind, optionally YouTube-translated) using a link from YouTube's player. */
-    private fun fetchTrack(link: String, lang: String?, kind: String?, tlang: String?): List<Cue>? {
+    private suspend fun fetchTrack(link: String, lang: String?, kind: String?, tlang: String?): List<Cue>? {
         val u = android.net.Uri.parse(link)
         val b = u.buildUpon().clearQuery()
         val skip = setOf("fmt", "tlang", "lang", "kind")
@@ -58,7 +58,10 @@ object Transcripts {
         if (!k.isNullOrBlank()) b.appendQueryParameter("kind", k)
         if (tlang != null) b.appendQueryParameter("tlang", tlang)
         b.appendQueryParameter("fmt", "json3")
-        val body = Http.get(b.build().toString(), 15_000) ?: return null
+        val url = b.build().toString()
+        val body = CaptionGrabber.fetchText(url)?.takeIf { it.contains("events") }
+            ?: Http.get(url, 15_000)?.takeIf { it.contains("events") }
+            ?: run { Diag.log("subs", "caption file refused (lang=${lang ?: "?"} kind=${kind ?: "-"} tlang=${tlang ?: "-"})"); return null }
         return parseJson3(body)
     }
 

@@ -40,6 +40,29 @@ object CaptionGrabber {
     /** Caption tracks per video: (language code, kind) where kind "asr" = YouTube's automatic captions from the audio. */
     private val trackLists = ConcurrentHashMap<String, List<Pair<String, String>>>()
     fun tracks(videoId: String): List<Pair<String, String>> = trackLists[videoId].orEmpty()
+
+    /** How many grabs worked / failed, to tell "this video has no captions" from "captions don't work on this phone". */
+    @Volatile var successes = 0
+    @Volatile var failures = 0
+    val working: Boolean get() = successes > 0 || failures < 6
+
+    private val texts = ConcurrentHashMap<Int, CompletableDeferred<String?>>()
+    private var nextReq = 0
+
+    /**
+     * Downloads a caption file *inside* YouTube's player page (same site, same session and cookies),
+     * so YouTube treats it like normal playback. Returns null if that fails.
+     */
+    suspend fun fetchText(url: String): String? {
+        if (!ensurePlayer()) return null
+        val d = CompletableDeferred<String?>()
+        val id = synchronized(this) { ++nextReq }
+        texts[id] = d
+        withContext(Dispatchers.Main) {
+            web?.evaluateJavascript("getText($id, ${JSONObject.quote(url)})", null)
+        }
+        return withTimeoutOrNull(15_000) { d.await() }.also { texts.remove(id) }
+    }
     private val none = ConcurrentHashMap<String, Long>()
     private val waiting = ConcurrentHashMap<String, CompletableDeferred<String?>>()
     private val queue = ArrayDeque<String>() // video ids, front = most urgent
@@ -84,8 +107,8 @@ object CaptionGrabber {
             val started = System.currentTimeMillis()
             val url = runCatching { load(id) }.getOrNull()
             val secs = "%.1f".format((System.currentTimeMillis() - started) / 1000f)
-            if (url != null) { remember(id, url); Diag.log("subs", "$id: YouTube caption link in $secs s") }
-            else { none[id] = System.currentTimeMillis(); Diag.log("subs", "$id: no YouTube captions ($secs s)") }
+            if (url != null) { successes++; remember(id, url); Diag.log("subs", "$id: YouTube caption link in $secs s") }
+            else { failures++; none[id] = System.currentTimeMillis(); Diag.log("subs", "$id: no YouTube captions ($secs s)") }
             waiting.remove(id)?.complete(url)
             current = null
         }
@@ -139,6 +162,7 @@ object CaptionGrabber {
     private object Bridge {
         @JavascriptInterface fun ready() { ready.complete(Unit) }
         @JavascriptInterface fun none(id: String) { if (id == foundFor) found?.complete(null) }
+        @JavascriptInterface fun text(req: Int, body: String?) { texts[req]?.complete(body?.takeIf { it.isNotBlank() }) }
         @JavascriptInterface fun tracks(id: String, json: String) {
             runCatching {
                 val a = org.json.JSONArray(json)
@@ -194,7 +218,11 @@ function caps(){
   else if(++tries>3){Grab.none(cur);}
  }catch(x){}
 }
-function go(id){cur=id;tries=0;p.mute();p.loadVideoById({videoId:id,startSeconds:0});
+function getText(req,url){
+ fetch(url,{credentials:'include'}).then(function(r){return r.text();})
+  .then(function(t){Grab.text(req,t);}).catch(function(){Grab.text(req,null);});
+}
+function go(id){cur=id;tries=0;p.mute();p.loadVideoById({videoId:id,startSeconds:0});setTimeout(function(){try{p.playVideo();}catch(x){}},300);
  setTimeout(function(){if(cur==id)caps();},1500);setTimeout(function(){if(cur==id)caps();},3000);
  setTimeout(function(){if(cur==id&&tries>0)Grab.none(id);},6000);}
 </script></body></html>

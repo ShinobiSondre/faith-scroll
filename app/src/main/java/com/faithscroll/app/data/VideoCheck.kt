@@ -42,7 +42,7 @@ object VideoCheck {
 
     /** Checks these videos in order, in the background (replaces any earlier list). */
     @Synchronized fun queue(ctx: Context, videos: List<Video>) {
-        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks.json"); runCatching { load() }; publish() }
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v2.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
         if (todo.isEmpty()) return
         job?.cancel()
@@ -52,7 +52,10 @@ object VideoCheck {
                 if (!isActive) break
                 if (known(v.id)) continue
                 val ok = runCatching { check(v) }.getOrElse { Diag.err("check", "${v.id} failed", it); false }
-                results[v.id] = Result(ok, mode(), System.currentTimeMillis())
+                // Don't remember "no captions" verdicts until captions have worked at least once on this phone
+                // (otherwise a temporary problem would hide videos for a whole day).
+                if (ok || CaptionGrabber.successes > 0 || !softReject) results[v.id] = Result(ok, mode(), System.currentTimeMillis())
+                softReject = false
                 publish(); save()
             }
             checking.value = false
@@ -60,7 +63,16 @@ object VideoCheck {
     }
 
     private suspend fun check(v: Video): Boolean {
-        val t = Transcripts.original(v.id) ?: return reject(v, "no working captions")
+        val t = Transcripts.original(v.id)
+        if (t == null) {
+            if (CaptionGrabber.working) return reject(v, "no working captions")
+            // Captions aren't working on this phone at all: fall back to the language of the
+            // video's original audio track (from YouTube's stream info). Unknown still means out.
+            val spoken = StreamResolver.resolve(v.id)?.spoken.orEmpty()
+            val ok = spoken.isNotBlank() && (spoken == "en" || (Lang.no && spoken == "no"))
+            return if (ok) { Diag.log("check", "${v.id}: OK by audio language $spoken (captions unavailable)"); true }
+            else reject(v, "captions unavailable and audio language '${spoken.ifBlank { "?" }}'")
+        }
         val sample = t.cues.take(60).joinToString(" ") { it.text }
         // Spoken language: YouTube's automatic captions; double-checked against what the captions actually say.
         var spoken = t.spoken.ifBlank { StreamResolver.cached(v.id)?.spoken.orEmpty() }
@@ -79,7 +91,10 @@ object VideoCheck {
         return true
     }
 
+    @Volatile private var softReject = false
+
     private fun reject(v: Video, why: String): Boolean {
+        softReject = why.startsWith("no working captions") || why.startsWith("captions unavailable")
         Diag.log("check", "${v.id}: left out – $why (${v.title.take(40)})")
         return false
     }
