@@ -149,6 +149,11 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         if (VerseWidgetProvider.hasWidgets(ctx)) VerseWidgetProvider.refresh(ctx)
     }
     LaunchedEffect(socialVersion) { social = SocialRepository.load(ctx) }
+    // Existing users get the one-time prayer reminder invitation too.
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(4000)
+        if (!onboarding && !com.faithscroll.app.prayer.Reminders.asked(ctx)) askReminders = true
+    }
     // Always looking for something new: fresh searches every launch, new subreddits now and then.
     var discovered by remember { mutableStateOf<List<Video>>(emptyList()) }
     LaunchedEffect(Unit) {
