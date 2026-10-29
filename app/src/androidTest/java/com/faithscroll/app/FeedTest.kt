@@ -68,7 +68,7 @@ class FeedTest {
                     val info = WatchPage.info(v.id)
                     val page = secs(t)
                     if (info == null) { log("FAIL ${v.id} page unreadable ($page) – ${v.title.take(40)}"); return@withPermit false }
-                    val tracks = info.tracks.joinToString { it.lang + if (it.kind == "asr") "(auto)" else "" }
+                    val tracks = info.tracks.joinToString { it.lang + (if (it.kind == "asr") "(auto)" else "") + (if (it.plain) "" else "(web)") }
                     val orig = Transcripts.original(v.id)
                     val tr = info.tracks.firstOrNull { it.kind == "asr" } ?: info.tracks.firstOrNull()
                     val no = tr?.let { WatchPage.fetch(v.id, it, "no") }
@@ -80,6 +80,7 @@ class FeedTest {
             }
         }.awaitAll()
         log("== Captions: ${res.count { it }}/${res.size} working, all done in ${secs(t0)}")
+        com.faithscroll.app.data.Diag.lines.value.filter { "[page]" in it }.take(12).forEach { log("diag $it") }
     }
 
     @Test fun b_feedVerification() = runBlocking<Unit> {
