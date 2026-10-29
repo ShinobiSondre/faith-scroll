@@ -80,7 +80,8 @@ fun VideoCard(
     onExpand: (() -> Unit)? = null,
     loop: Boolean = true,
     onRotate: (() -> Unit)? = null,
-    landscape: Boolean = false
+    landscape: Boolean = false,
+    preload: Boolean = false // the next card: player ready & paused so it starts instantly
 ) {
     val ctx = LocalContext.current
     var paused by remember(video.id) { mutableStateOf(false) }
@@ -111,13 +112,13 @@ fun VideoCard(
         )
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (showingVideo) 0.55f else 0.3f)))
 
-        if (isActive) {
+        if (isActive || preload) {
             if (!playback.failed) {
                 NativeVideo(
-                    videoId = video.id, paused = paused, muted = muted, loop = loop, fill = useFill,
+                    videoId = video.id, paused = paused || !isActive, muted = muted || !isActive, loop = loop, fill = useFill,
                     state = playback, modifier = Modifier.fillMaxSize()
                 )
-            } else if (!embedFailed) {
+            } else if (!embedFailed && isActive) {
                 // Fallback: YouTube's own player, still full screen inside the app.
                 YouTubePlayer(
                     videoId = video.id, paused = paused, muted = muted,

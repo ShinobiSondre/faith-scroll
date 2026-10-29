@@ -1,6 +1,18 @@
 package com.faithscroll.app.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import kotlin.coroutines.coroutineContext
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -33,18 +45,70 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-/** Direct media URLs for one video. */
+/** One downloadable track. */
+data class StreamOption(val url: String, val height: Int, val bitrate: Int, val avc: Boolean = true)
+
+/** Every usable track for a video, so quality can be chosen at play time. */
 data class ResolvedStream(
-    val video: String?, // video-only track
-    val audio: String?, // audio-only track
-    val muxed: String?, // single file with both
+    val videos: List<StreamOption>, // video-only tracks
+    val audios: List<StreamOption>, // audio-only tracks
+    val muxed: List<StreamOption>, // single files with both
     val hls: String?
 )
 
+/** Video quality: Auto (720p Wi-Fi, 480p mobile data, 360p with Data Saver), Data saver, or High. */
+object VideoQuality {
+    enum class Mode { AUTO, SAVER, HIGH }
+
+    private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("quality", Context.MODE_PRIVATE)
+    fun mode(ctx: Context): Mode = runCatching { Mode.valueOf(prefs(ctx).getString("mode", "AUTO")!!) }.getOrDefault(Mode.AUTO)
+    fun setMode(ctx: Context, m: Mode) = prefs(ctx).edit().putString("mode", m.name).apply()
+
+    private fun cm(ctx: Context) = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    fun onMobileData(ctx: Context): Boolean = runCatching { cm(ctx).isActiveNetworkMetered }.getOrDefault(true)
+    private fun systemDataSaver(ctx: Context): Boolean = runCatching {
+        cm(ctx).restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
+    }.getOrDefault(false)
+
+    /** Highest video height to load right now. */
+    fun targetHeight(ctx: Context): Int = when (mode(ctx)) {
+        Mode.SAVER -> 360
+        Mode.HIGH -> if (onMobileData(ctx)) 720 else 1080
+        Mode.AUTO -> when {
+            systemDataSaver(ctx) -> 360
+            onMobileData(ctx) -> 480
+            else -> 720
+        }
+    }
+
+    /** How many videos ahead to get ready. */
+    fun preloadDepth(ctx: Context): Int = when {
+        targetHeight(ctx) <= 360 -> 1
+        onMobileData(ctx) -> 2
+        else -> 3
+    }
+
+    /** Bytes of each upcoming video to download in advance (a few seconds of playback). */
+    fun preloadBytes(ctx: Context): Long = when (targetHeight(ctx)) {
+        in 0..360 -> 500_000L
+        in 361..480 -> 1_000_000L
+        in 481..720 -> 1_800_000L
+        else -> 3_000_000L
+    }
+
+    fun maxBitrate(height: Int): Int = when {
+        height <= 360 -> 900_000
+        height <= 480 -> 1_600_000
+        height <= 720 -> 3_200_000
+        else -> 6_500_000
+    }
+}
+
 /**
  * Finds the direct stream URLs behind a video so it can play in our own native player,
- * full screen, without the YouTube player or app. Results are cached for 4 hours
- * (stream links expire after ~6).
+ * full screen, without the YouTube player or app. Results are kept for 4 hours, also
+ * across app restarts (stream links expire after ~6), and downloaded video is cached
+ * on the phone so preloaded seconds and rewatches aren't fetched twice.
  */
 object StreamResolver {
     private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
@@ -53,6 +117,8 @@ object StreamResolver {
     private val cache = ConcurrentHashMap<String, Pair<Long, ResolvedStream>>()
     private val locks = ConcurrentHashMap<String, Mutex>()
     private const val TTL = 4 * 60 * 60 * 1000L
+    private var diskFile: File? = null
+    @Volatile private var media: SimpleCache? = null
 
     private class NpDownloader : Downloader() {
         override fun execute(request: Request): Response {
@@ -70,6 +136,26 @@ object StreamResolver {
         }
     }
 
+    /** Called once at app start. */
+    @OptIn(UnstableApi::class)
+    fun setup(ctx: Context) {
+        val app = ctx.applicationContext
+        if (media == null) synchronized(this) {
+            if (media == null) media = SimpleCache(
+                File(app.cacheDir, "media"),
+                LeastRecentlyUsedCacheEvictor(300L * 1024 * 1024),
+                StandaloneDatabaseProvider(app)
+            )
+        }
+        if (diskFile == null) {
+            diskFile = File(app.filesDir, "streams.json")
+            runCatching { loadDisk() }
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    fun cacheSizeMb(): Long = (media?.cacheSpace ?: 0L) / (1024 * 1024)
+
     private fun init() {
         if (initialised) return
         synchronized(this) {
@@ -86,13 +172,17 @@ object StreamResolver {
 
     suspend fun resolve(id: String): ResolvedStream? {
         direct[id]?.let { u ->
-            return if (u.contains(".m3u8")) ResolvedStream(null, null, null, u) else ResolvedStream(null, null, u, null)
+            return if (u.contains(".m3u8")) ResolvedStream(emptyList(), emptyList(), emptyList(), u)
+            else ResolvedStream(emptyList(), emptyList(), listOf(StreamOption(u, 720, 0)), null)
         }
         cached(id)?.let { return it }
         val lock = locks.getOrPut(id) { Mutex() }
         return lock.withLock {
             cached(id) ?: withContext(Dispatchers.IO) {
-                runCatching { extract(id) }.getOrNull()?.also { cache[id] = System.currentTimeMillis() to it }
+                runCatching { extract(id) }.getOrNull()?.also {
+                    cache[id] = System.currentTimeMillis() to it
+                    runCatching { saveDisk() }
+                }
             }
         }
     }
@@ -100,45 +190,129 @@ object StreamResolver {
     private fun extract(id: String): ResolvedStream? {
         init()
         val info = StreamInfo.getInfo("https://www.youtube.com/watch?v=$id")
-
-        val video = info.videoOnlyStreams
-            .filter { it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.format == MediaFormat.MPEG_4 && it.height in 1..1080 }
-            .sortedWith(compareByDescending<org.schabi.newpipe.extractor.stream.VideoStream> {
-                // H.264 plays on every phone; prefer it over AV1/VP9.
-                if ((it.codec ?: "").startsWith("avc")) 1 else 0
-            }.thenByDescending { it.height })
-            .firstOrNull()?.content
-
-        val audio = info.audioStreams
+        val videos = info.videoOnlyStreams
+            .filter { it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.format == MediaFormat.MPEG_4 && it.height > 0 }
+            .map { StreamOption(it.content, it.height, it.bitrate, (it.codec ?: "avc").startsWith("avc")) }
+        val audios = info.audioStreams
             .filter { it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.format == MediaFormat.M4A }
-            .maxByOrNull { it.averageBitrate }?.content
-
+            .map { StreamOption(it.content, 0, it.averageBitrate) }
         val muxed = info.videoStreams
             .filter { it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && !it.isVideoOnly }
-            .maxByOrNull { it.height }?.content
-
+            .map { StreamOption(it.content, it.height, it.bitrate) }
         val hls = info.hlsUrl?.takeIf { it.isNotBlank() }
-        if (video == null && muxed == null && hls == null) return null
-        return ResolvedStream(video, audio, muxed, hls)
+        if (videos.isEmpty() && muxed.isEmpty() && hls == null) return null
+        return ResolvedStream(videos, audios, muxed, hls)
+    }
+
+    // ---- Quality choice ----
+
+    /** The tracks to play: (video, audio) or (single file, null) or (null, null) for HLS. */
+    data class Choice(val video: StreamOption?, val audio: StreamOption?, val single: StreamOption?, val hls: String?)
+
+    fun choose(r: ResolvedStream, target: Int): Choice {
+        if (r.hls != null && r.videos.isEmpty() && r.muxed.isEmpty()) return Choice(null, null, null, r.hls)
+        // At low quality one combined file starts fastest (one connection instead of two).
+        if (target <= 360) r.muxed.filter { it.height <= target }.maxByOrNull { it.height }?.let { return Choice(null, null, it, null) }
+        val fit = r.videos.filter { it.height <= target }
+        val video = (fit.ifEmpty { listOfNotNull(r.videos.minByOrNull { it.height }) })
+            .sortedWith(compareByDescending<StreamOption> { it.height }.thenByDescending { if (it.avc) 1 else 0 })
+            .firstOrNull()
+        val audio = if (target <= 480) r.audios.minByOrNull { it.bitrate } else
+            r.audios.filter { it.bitrate <= 160 }.maxByOrNull { it.bitrate } ?: r.audios.maxByOrNull { it.bitrate }
+        if (video != null && audio != null) return Choice(video, audio, null, null)
+        r.muxed.maxByOrNull { it.height }?.let { return Choice(null, null, it, null) }
+        return Choice(null, null, null, r.hls)
     }
 
     @OptIn(UnstableApi::class)
-    fun mediaSource(r: ResolvedStream): MediaSource {
-        val http = DefaultHttpDataSource.Factory()
-            .setUserAgent(UA)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
-        val chunked = DataSource.Factory { RangeParamDataSource(http) }
-        val progressive = ProgressiveMediaSource.Factory(chunked)
+    private fun httpFactory() = DefaultHttpDataSource.Factory()
+        .setUserAgent(UA)
+        .setAllowCrossProtocolRedirects(true)
+        .setConnectTimeoutMs(10_000)
+        .setReadTimeoutMs(15_000)
+
+    /** Reads through the on-phone cache first; fetches the rest in growing pieces. */
+    @OptIn(UnstableApi::class)
+    private fun cachedFactory(): DataSource.Factory {
+        val chunked = DataSource.Factory { RangeParamDataSource(httpFactory()) }
+        val c = media ?: return chunked
+        return CacheDataSource.Factory()
+            .setCache(c)
+            .setUpstreamDataSourceFactory(chunked)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
+    private fun item(url: String, key: String) = MediaItem.Builder().setUri(url).setCustomCacheKey(key).build()
+
+    @OptIn(UnstableApi::class)
+    fun mediaSource(id: String, r: ResolvedStream, target: Int): MediaSource {
+        val c = choose(r, target)
+        val progressive = ProgressiveMediaSource.Factory(cachedFactory())
         return when {
-            r.video != null && r.audio != null -> MergingMediaSource(
-                true, progressive.createMediaSource(MediaItem.fromUri(r.video)),
-                progressive.createMediaSource(MediaItem.fromUri(r.audio))
+            c.video != null && c.audio != null -> MergingMediaSource(
+                true,
+                progressive.createMediaSource(item(c.video.url, "$id-v${c.video.height}")),
+                progressive.createMediaSource(item(c.audio.url, "$id-a${c.audio.bitrate}"))
             )
-            r.muxed != null -> progressive.createMediaSource(MediaItem.fromUri(r.muxed))
-            r.hls != null -> HlsMediaSource.Factory(http).createMediaSource(MediaItem.fromUri(r.hls))
-            else -> progressive.createMediaSource(MediaItem.fromUri(r.video!!))
+            c.single != null -> progressive.createMediaSource(item(c.single.url, "$id-m${c.single.height}"))
+            else -> HlsMediaSource.Factory(httpFactory()).createMediaSource(MediaItem.fromUri(c.hls ?: r.hls!!))
+        }
+    }
+
+    /** Downloads the first seconds of a video into the cache so it starts instantly later. */
+    @OptIn(UnstableApi::class)
+    suspend fun preload(ctx: Context, id: String) = withContext(Dispatchers.IO) {
+        val r = resolve(id) ?: return@withContext
+        val c = choose(r, VideoQuality.targetHeight(ctx))
+        val bytes = VideoQuality.preloadBytes(ctx)
+        val jobs = listOfNotNull(
+            c.video?.let { Triple(it.url, "$id-v${it.height}", bytes) },
+            c.audio?.let { Triple(it.url, "$id-a${it.bitrate}", bytes / 6) },
+            c.single?.let { Triple(it.url, "$id-m${it.height}", bytes) }
+        )
+        for ((url, key, len) in jobs) {
+            if (!isActive) return@withContext
+            val ds = cachedFactory().createDataSource() as? CacheDataSource ?: return@withContext
+            val spec = DataSpec.Builder().setUri(url).setPosition(0).setLength(len).setKey(key).build()
+            val writer = CacheWriter(ds, spec, null, null)
+            val job = coroutineContext[Job]
+            val handle = job?.invokeOnCompletion { writer.cancel() }
+            try { writer.cache() } catch (_: Exception) { } finally { handle?.dispose() }
+        }
+    }
+
+    // ---- Remember stream links across restarts ----
+
+    private fun optJson(o: StreamOption) = JSONObject().put("u", o.url).put("h", o.height).put("b", o.bitrate).put("a", o.avc)
+    private fun optFrom(o: JSONObject) = StreamOption(o.getString("u"), o.optInt("h"), o.optInt("b"), o.optBoolean("a", true))
+
+    @Synchronized private fun saveDisk() {
+        val f = diskFile ?: return
+        val now = System.currentTimeMillis()
+        val root = JSONObject()
+        cache.entries.filter { now - it.value.first < TTL }.forEach { (id, v) ->
+            val r = v.second
+            root.put(id, JSONObject().put("t", v.first)
+                .put("v", JSONArray().apply { r.videos.forEach { put(optJson(it)) } })
+                .put("a", JSONArray().apply { r.audios.forEach { put(optJson(it)) } })
+                .put("m", JSONArray().apply { r.muxed.forEach { put(optJson(it)) } })
+                .put("h", r.hls ?: ""))
+        }
+        f.writeText(root.toString())
+    }
+
+    private fun loadDisk() {
+        val f = diskFile ?: return
+        if (!f.exists()) return
+        val root = JSONObject(f.readText())
+        val now = System.currentTimeMillis()
+        root.keys().forEach { id ->
+            val o = root.getJSONObject(id)
+            val t = o.getLong("t")
+            if (now - t < TTL) {
+                fun list(k: String) = o.getJSONArray(k).let { a -> (0 until a.length()).map { optFrom(a.getJSONObject(it)) } }
+                cache[id] = t to ResolvedStream(list("v"), list("a"), list("m"), o.optString("h").ifBlank { null })
+            }
         }
     }
 }
@@ -149,7 +323,9 @@ object StreamResolver {
  */
 @OptIn(UnstableApi::class)
 private class RangeParamDataSource(private val upstream: DataSource.Factory) : BaseDataSource(true) {
-    private val chunk = 4L * 1024 * 1024
+    // Start small so the first frame arrives fast, then grow to fewer, bigger requests.
+    private var chunk = 512L * 1024
+    private val maxChunk = 4L * 1024 * 1024
     private var spec: DataSpec? = null
     private var current: DataSource? = null
     private var pos = 0L
@@ -188,6 +364,7 @@ private class RangeParamDataSource(private val upstream: DataSource.Factory) : B
         }
         current = ds
         chunkLeft = last - pos + 1
+        chunk = minOf(maxChunk, chunk * 2)
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {

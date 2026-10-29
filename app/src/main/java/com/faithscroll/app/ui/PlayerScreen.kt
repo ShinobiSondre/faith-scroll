@@ -79,6 +79,10 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
 
     BackHandler { if (landscape) landscape = false else onClose() }
 
+    LaunchedEffect(pager.settledPage) {
+        Prefetcher.ahead(ctx, list.drop(pager.settledPage + 1).take(4).map { com.faithscroll.app.data.FeedItem.VideoItem(it, null) })
+    }
+
     // Learn from how long each video is watched.
     LaunchedEffect(pager) {
         var last = pager.settledPage
@@ -126,6 +130,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onClose: () 
             VideoCard(
                 video = v,
                 isActive = pager.settledPage == page,
+                preload = page == pager.settledPage + 1,
                 saved = state.isVideoSaved(v.id),
                 onSave = {
                     if (!state.isVideoSaved(v.id)) Taste.videoAction(ctx, v, Taste.Action.SAVE)

@@ -74,6 +74,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import com.faithscroll.app.data.Encouragement
 import com.faithscroll.app.data.FeedEngine
+import com.faithscroll.app.data.Prefetcher
 import com.faithscroll.app.data.MessageRepository
 import com.faithscroll.app.data.SocialLibrary
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -119,6 +120,11 @@ fun FeedScreen(
     LaunchedEffect(pager.currentPage, items.size, videos.isNotEmpty()) {
         val ahead = if (videos.isEmpty()) 1 else 5
         while (items.size <= pager.currentPage + ahead) items.add(engine.next())
+    }
+
+    // Like TikTok: get the next few videos ready while you watch this one.
+    LaunchedEffect(pager.settledPage, items.size) {
+        Prefetcher.ahead(ctx, (pager.settledPage + 1 until minOf(items.size, pager.settledPage + 7)).map { items[it] })
     }
 
     // Learn from time spent on each card.
@@ -190,6 +196,7 @@ fun FeedScreen(
                             reason = item.reason,
                             onShared = { Taste.videoAction(ctx, item.video, Taste.Action.SHARE) },
                             isActive = pager.settledPage == page && !suspended,
+                            preload = page == pager.settledPage + 1 && !suspended,
                             saved = state.isVideoSaved(item.video.id),
                             onSave = {
                                 if (!state.isVideoSaved(item.video.id)) Taste.videoAction(ctx, item.video, Taste.Action.SAVE)

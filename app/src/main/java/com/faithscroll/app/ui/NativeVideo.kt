@@ -26,6 +26,9 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.faithscroll.app.R
 import com.faithscroll.app.data.StreamResolver
+import com.faithscroll.app.data.VideoQuality
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import kotlinx.coroutines.delay
 
 /** Observable playback state the overlay (progress bar, buttons) draws from. */
@@ -60,8 +63,17 @@ fun NativeVideo(
 ) {
     val ctx = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val target = remember(videoId) { VideoQuality.targetHeight(ctx) }
     val player = remember(videoId) {
-        ExoPlayer.Builder(ctx).build().apply {
+        // Start playing after half a second of video instead of the default 2.5 s.
+        val load = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(8_000, if (target <= 360) 20_000 else 40_000, 500, 1_500)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+        val selector = DefaultTrackSelector(ctx).apply {
+            setParameters(buildUponParameters().setMaxVideoBitrate(VideoQuality.maxBitrate(target)))
+        }
+        ExoPlayer.Builder(ctx).setLoadControl(load).setTrackSelector(selector).build().apply {
             repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         }
     }
@@ -92,7 +104,7 @@ fun NativeVideo(
     LaunchedEffect(videoId) {
         val stream = StreamResolver.resolve(videoId)
         if (stream == null) { state.failed = true; return@LaunchedEffect }
-        player.setMediaSource(StreamResolver.mediaSource(stream))
+        player.setMediaSource(StreamResolver.mediaSource(videoId, stream, target))
         player.prepare()
     }
     LaunchedEffect(paused, player) { player.playWhenReady = !paused }

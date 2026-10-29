@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.faithscroll.app.data.Prefs
 import com.faithscroll.app.data.Taste
+import com.faithscroll.app.data.VideoQuality
 import com.faithscroll.app.data.SocialRepository
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.TextButton
@@ -108,6 +109,8 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
             }
         }
 
+        Spacer(Modifier.height(16.dp))
+        QualityCard()
         Spacer(Modifier.height(16.dp))
         SourcesCard()
 
@@ -220,6 +223,35 @@ fun WidgetScreen(state: AppState, bottomInset: Dp, onSourcesChanged: () -> Unit 
 }
 
 private var sourcesChanged: () -> Unit = {}
+
+/** Video quality / data saver. */
+@Composable
+private fun QualityCard() {
+    val ctx = LocalContext.current
+    var mode by remember { mutableStateOf(VideoQuality.mode(ctx)) }
+    val now = remember(mode) { VideoQuality.targetHeight(ctx) }
+    val mobile = remember { VideoQuality.onMobileData(ctx) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text("Video quality", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip("Auto", mode == VideoQuality.Mode.AUTO) { mode = VideoQuality.Mode.AUTO; VideoQuality.setMode(ctx, mode) }
+            Chip("Data saver", mode == VideoQuality.Mode.SAVER) { mode = VideoQuality.Mode.SAVER; VideoQuality.setMode(ctx, mode) }
+            Chip("High", mode == VideoQuality.Mode.HIGH) { mode = VideoQuality.Mode.HIGH; VideoQuality.setMode(ctx, mode) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            when (mode) {
+                VideoQuality.Mode.AUTO -> "720p on Wi-Fi, 480p on mobile data, 360p when your phone's Data Saver is on."
+                VideoQuality.Mode.SAVER -> "Always 360p and only the next video is preloaded. Uses the least data."
+                VideoQuality.Mode.HIGH -> "1080p on Wi-Fi, 720p on mobile data."
+            } + " Right now: ${now}p on ${if (mobile) "mobile data" else "Wi-Fi"}.",
+            color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp
+        )
+        Text("Video cache: ${com.faithscroll.app.data.StreamResolver.cacheSizeMb()} MB of 300 MB",
+            color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+    }
+}
 
 /** Paste a Pinterest board or TikTok link to add it to your feed. */
 @Composable

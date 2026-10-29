@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
         startRef.value = intent?.getStringExtra(EXTRA_REF)
         val streak = Prefs.recordOpen(this)
         Updater.start(this)
+        com.faithscroll.app.data.StreamResolver.setup(this)
         setContent {
             val appCtx = applicationContext
             val state = remember { AppState(appCtx, streak) }
