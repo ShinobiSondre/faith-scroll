@@ -96,7 +96,7 @@ object LangFilter {
 
     // Words that only (or mostly) Norwegian uses – tells it apart from Danish/Swedish.
     private val norwegianOnly = Regex(
-        "\\b(hva|hvem|hvorfor|bønn|bønner|preken|vitnesbyrd|kirka|ikkje|kva|korleis|eg|frelst|tilgivelse|hjerte|kjærlighet|kjærleik|herren|ånd|ånden|nåde|også|veldig|møte|gudstjeneste|menigheten|lovsang|andakt|fortelling|livet mitt|jeg)\\b",
+        "\\b(hva|hvem|hvorfor|bønn|bønner|preken|vitnesbyrd|kirka|ikkje|kva|korleis|eg|frelst|tilgivelse|hjerte|kjærlighet|kjærleik|herren|ånd|ånden|nåde|også|veldig|møte|gudstjeneste|menigheten|lovsang|andakt|fortelling|livet mitt|jeg|mitt|forandret|forandra|helbredet)\\b",
         RegexOption.IGNORE_CASE
     )
 
