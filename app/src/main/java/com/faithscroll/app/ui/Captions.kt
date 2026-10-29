@@ -74,7 +74,7 @@ fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modif
         if (line == null) status = when (state) {
             Asr.State.DOWNLOADING_MODEL -> tr("Getting subtitles ready (one-time download ${(progress * 100).toInt()} %)…", "Gjør klar undertekster (engangsnedlasting ${(progress * 100).toInt()} %) …")
             Asr.State.LOADING_AUDIO, Asr.State.IDLE -> tr("Preparing subtitles…", "Lager undertekster …")
-            Asr.State.FAILED -> tr("No subtitles for this video", "Ingen undertekster for denne videoen")
+            Asr.State.FAILED -> tr("Subtitles failed", "Undertekster feilet") + (live.error?.let { ": $it" } ?: "")
             else -> null
         }
     }

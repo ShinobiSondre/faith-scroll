@@ -49,6 +49,7 @@ object Asr {
         @Volatile var coveredTo = 0L
         @Volatile var runMax = 0L // how far the current/last run was allowed to go
         @Volatile var finished = false // reached the end of the video
+        @Volatile var error: String? = null
         var job: Job? = null
     }
 
@@ -124,7 +125,7 @@ object Asr {
             cpu.acquire()
             try { transcribe(app, videoId, live, start, maxMs) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: Throwable) { live.state.value = State.FAILED }
+            catch (e: Throwable) { live.error = "${e.javaClass.simpleName}: ${e.message?.take(120)}"; Diag.err("asr", "$videoId failed", e); live.state.value = State.FAILED }
             finally { cpu.release() }
         }
     }
@@ -136,8 +137,11 @@ object Asr {
         val f = File(dir, "$videoId.m4a")
         if (f.exists() && f.length() > 10_000) return@withContext f
         val r = StreamResolver.resolve(videoId) ?: return@withContext null
-        // Smallest audio track: speech recognition only needs 16 kHz mono.
-        val url = r.audios.minByOrNull { it.bitrate }?.url ?: r.muxed.minByOrNull { it.height }?.url ?: return@withContext null
+        // A small, widely decodable audio track (AAC-LC ~128k if the tiny HE-AAC one is all there is otherwise).
+        val url = (r.audios.filter { it.bitrate >= 64 }.minByOrNull { it.bitrate } ?: r.audios.minByOrNull { it.bitrate })?.url
+            ?: r.muxed.minByOrNull { it.height }?.url
+            ?: run { Diag.log("asr", "$videoId: no audio track"); return@withContext null }
+        Diag.log("asr", "$videoId: downloading audio")
         val part = File(dir, "$videoId.part")
         part.outputStream().use { out ->
             var pos = 0L
@@ -157,12 +161,14 @@ object Asr {
             }
         }
         part.renameTo(f)
+        Diag.log("asr", "$videoId: audio ${f.length() / 1024} KB")
         f
     }
 
     private suspend fun transcribe(ctx: Context, videoId: String, live: Live, fromMs: Long, maxMs: Long) {
-        if (!modelReady(ctx)) live.state.value = State.DOWNLOADING_MODEL
+        if (!modelReady(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading speech model") }
         val m = model(ctx)
+        Diag.log("asr", "$videoId: model ready, transcribing from ${fromMs / 1000}s")
         live.state.value = State.LOADING_AUDIO
         val file = audioFile(ctx, videoId) ?: run { live.state.value = State.FAILED; return }
         live.state.value = State.LISTENING
@@ -174,6 +180,7 @@ object Asr {
         ex.selectTrack(track)
         val fmt = ex.getTrackFormat(track)
         ex.seekTo(fromMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+        Diag.log("asr", "$videoId: ${fmt.getString(MediaFormat.KEY_MIME)} ${fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)} Hz")
         val codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
         codec.configure(fmt, null, null, 0)
         codec.start()
@@ -209,6 +216,7 @@ object Asr {
             if (cur.isNotEmpty()) newCues += toCue(cur, offsetMs)
             val merged = (live.cues.value.filter { c -> newCues.none { it.start <= c.end && c.start <= it.end } } + newCues).sortedBy { it.start }
             live.cues.value = merged
+            if (merged.size <= newCues.size) Diag.log("asr", "$videoId: first subtitles ready")
         }
 
         try {

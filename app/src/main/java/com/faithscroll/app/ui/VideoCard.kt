@@ -116,7 +116,11 @@ fun VideoCard(
     }
 
     // Prepare the stream URL as soon as the card exists, so it starts instantly when swiped to.
-    LaunchedEffect(video.id) { StreamResolver.resolve(video.id) }
+    LaunchedEffect(video.id) {
+        StreamResolver.resolve(video.id)?.let { r ->
+            if (video.direct.isBlank() && !com.faithscroll.app.data.LangFilter.spokenOk(r.spoken)) com.faithscroll.app.data.LangFilter.block(video.id, r.spoken)
+        }
+    }
 
     // Fill the screen when the video's shape matches the screen's (portrait on a phone,
     // landscape when turned or unfolded); otherwise show it whole over a blurred backdrop.

@@ -76,6 +76,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import com.faithscroll.app.data.Encouragement
 import com.faithscroll.app.data.FeedEngine
+import androidx.compose.runtime.collectAsState
 import com.faithscroll.app.data.Seen
 import com.faithscroll.app.data.Discovery
 import com.faithscroll.app.data.Prefetcher
@@ -130,6 +131,20 @@ fun FeedScreen(
     // Like TikTok: get the next few videos ready while you watch this one.
     LaunchedEffect(pager.settledPage, items.size) {
         Prefetcher.ahead(ctx, (pager.settledPage + 1 until minOf(items.size, pager.settledPage + 7)).map { items[it] })
+    }
+
+    // Videos found to be in another language are swapped for something else.
+    val blocked by com.faithscroll.app.data.LangFilter.blocked.collectAsState()
+    LaunchedEffect(blocked, items.size) {
+        for (i in pager.currentPage + 1 until items.size) {
+            val it = items[i]
+            if (it is FeedItem.VideoItem && it.video.id in blocked) items[i] = engine.next()
+        }
+        val cur = items.getOrNull(pager.currentPage)
+        if (cur is FeedItem.VideoItem && cur.video.id in blocked && !suspended) {
+            if (pager.currentPage + 1 >= items.size) items.add(engine.next())
+            pager.animateScrollToPage(pager.currentPage + 1)
+        }
     }
 
     // Learn from time spent on each card.

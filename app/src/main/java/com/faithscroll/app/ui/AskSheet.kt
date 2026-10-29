@@ -91,6 +91,7 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
                 while (wait > 0) { kotlinx.coroutines.delay(1000); wait-- }
                 continue
             }
+            res.onFailure { com.faithscroll.app.data.Diag.err("ai", "ask failed", it) }
             res.onSuccess { turns += Ai.Turn(false, it) }
                 .onFailure { error = it.message ?: tr("Something went wrong.", "Noe gikk galt."); turns.removeAt(turns.size - 1) }
             break

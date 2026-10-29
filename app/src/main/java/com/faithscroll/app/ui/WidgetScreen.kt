@@ -39,6 +39,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -230,6 +231,8 @@ fun WidgetScreen(
             }
         }
         Spacer(Modifier.height(16.dp))
+        DiagnosticsCard()
+        Spacer(Modifier.height(16.dp))
         Text(
             tr("Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.", "Bibeltekst: Bibelen 1930, Det Norske Bibelselskap (fri bruk). Videoene strømmes fra YouTube-kanaler med vitnesbyrd og bibelundervisning."),
             color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp
@@ -239,6 +242,33 @@ fun WidgetScreen(
 }
 
 private var sourcesChanged: () -> Unit = {}
+
+/** What the app has been doing (subtitles, language checks, connections), to copy and send. */
+@Composable
+private fun DiagnosticsCard() {
+    val lines by com.faithscroll.app.data.Diag.lines.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+    val ctx = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Plum.copy(alpha = 0.6f)).clickable { open = !open }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(tr("Diagnostics", "Diagnostikk") + " (${lines.size})", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, modifier = Modifier.weight(1f))
+        TextButton(onClick = {
+            clip.setText(androidx.compose.ui.text.AnnotatedString("FaithScroll ${com.faithscroll.app.BuildConfig.VERSION_NAME}\n" + com.faithscroll.app.data.Diag.text()))
+            Toast.makeText(ctx, tr("Copied. Paste it in your message.", "Kopiert. Lim det inn i meldingen din."), Toast.LENGTH_SHORT).show()
+        }) { Text(tr("Copy", "Kopier"), color = Gold) }
+    }
+    if (open) {
+        Text(
+            lines.takeLast(60).joinToString("\n").ifBlank { tr("Nothing logged yet. Watch a few videos first.", "Ingenting logget ennå. Se noen videoer først.") },
+            color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, lineHeight = 14.sp,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+        )
+    }
+}
 
 /** Prayer reminders (2–3 a day, adjustable times) and the Be still space. */
 @Composable

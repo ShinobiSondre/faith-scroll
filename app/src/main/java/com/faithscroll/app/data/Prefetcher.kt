@@ -33,7 +33,12 @@ object Prefetcher {
         jobs.keys.filter { it !in wanted }.forEach { jobs.remove(it)?.cancel() }
         videos.forEach { v ->
             if (jobs[v.id]?.isActive == true) return@forEach
-            jobs[v.id] = scope.launch { gate.withPermit { StreamResolver.preload(app, v.id) } }
+            jobs[v.id] = scope.launch {
+                gate.withPermit {
+                    StreamResolver.resolve(v.id)?.let { r -> if (!LangFilter.spokenOk(r.spoken)) { LangFilter.block(v.id, r.spoken); return@withPermit } }
+                    StreamResolver.preload(app, v.id)
+                }
+            }
         }
 
         // Subtitles: if the next video has no usable YouTube captions, transcribe its first 90 s now.

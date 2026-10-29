@@ -27,7 +27,7 @@ object Transcripts {
     suspend fun original(videoId: String): Transcript? = withContext(Dispatchers.IO) {
         cache["o|$videoId"]?.let { return@withContext it }
         val r = StreamResolver.resolve(videoId) ?: return@withContext null
-        if (r.subtitles.isEmpty()) return@withContext null
+        if (r.subtitles.isEmpty()) { Diag.log("subs", "$videoId: YouTube has no caption tracks → phone transcript"); return@withContext null }
         val want = target()
         fun base(l: String) = l.substringBefore('-').lowercase().let { if (it == "nb" || it == "nn") "no" else it }
         val track = r.subtitles.sortedWith(
@@ -37,7 +37,12 @@ object Transcripts {
         ).first()
         // YouTube sometimes refuses caption downloads outside its own player (empty reply).
         // Then the phone makes its own transcript instead (see Asr).
-        val body = Http.get(track.url, 15_000)?.takeIf { it.contains("-->") } ?: return@withContext null
+        val raw = Http.get(track.url, 15_000)
+        val body = raw?.takeIf { it.contains("-->") } ?: run {
+            Diag.log("subs", "$videoId: YouTube captions blocked/empty (${raw?.length ?: -1} chars) → phone transcript")
+            return@withContext null
+        }
+        Diag.log("subs", "$videoId: YouTube captions OK (${track.lang}${if (track.auto) ", auto" else ""})")
         val cues = parseVtt(body, track.auto)
         if (cues.isEmpty()) return@withContext null
         Transcript(base(track.lang), cues, false).also { cache["o|$videoId"] = it }

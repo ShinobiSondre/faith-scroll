@@ -61,6 +61,7 @@ fun YouTubeCard(onChanged: () -> Unit) {
     var setupHelp by remember { mutableStateOf<String?>(null) }
 
     fun afterImport(n: Int) {
+        com.faithscroll.app.data.Diag.log("youtube", "imported $n channels")
         subs = YouTubeSubs.all(ctx)
         Toast.makeText(ctx, tr("Found $n channels. Pick your favourites.", "Fant $n kanaler. Velg favorittene dine."), Toast.LENGTH_SHORT).show()
         picking = true
@@ -71,14 +72,14 @@ fun YouTubeCard(onChanged: () -> Unit) {
         scope.launch {
             runCatching { YouTubeSubs.fetchWithToken(ctx, token) }
                 .onSuccess { afterImport(it) }
-                .onFailure { setupHelp = it.message }
+                .onFailure { com.faithscroll.app.data.Diag.err("youtube", "reading subscriptions failed", it); setupHelp = it.message }
             busy = false
         }
     }
 
     val signIn = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
         val token = runCatching { activity?.let { Identity.getAuthorizationClient(it).getAuthorizationResultFromIntent(res.data).accessToken } }.getOrNull()
-        if (token == null) busy = false
+        if (token == null) { busy = false; com.faithscroll.app.data.Diag.log("youtube", "sign-in returned no token (resultCode=${res.resultCode})") }
         fetch(token)
     }
 
@@ -88,7 +89,7 @@ fun YouTubeCard(onChanged: () -> Unit) {
         scope.launch {
             runCatching { YouTubeSubs.importTakeout(ctx, uri) }
                 .onSuccess { afterImport(it) }
-                .onFailure { Toast.makeText(ctx, it.message ?: "Error", Toast.LENGTH_LONG).show() }
+                .onFailure { com.faithscroll.app.data.Diag.err("youtube", "Takeout import failed", it); Toast.makeText(ctx, it.message ?: "Error", Toast.LENGTH_LONG).show() }
             busy = false
         }
     }
@@ -112,7 +113,7 @@ fun YouTubeCard(onChanged: () -> Unit) {
                         if (r.hasResolution() && pi != null) signIn.launch(IntentSenderRequest.Builder(pi.intentSender).build())
                         else fetch(r.accessToken)
                     }
-                    .addOnFailureListener { e -> busy = false; setupHelp = e.message ?: e.toString() }
+                    .addOnFailureListener { e -> busy = false; com.faithscroll.app.data.Diag.err("youtube", "Google sign-in failed", e); setupHelp = e.message ?: e.toString() }
             },
             enabled = !busy,
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink),

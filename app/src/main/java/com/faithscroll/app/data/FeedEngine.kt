@@ -85,7 +85,8 @@ class FeedEngine(
     }
 
     private fun pickVideo(all: List<Video>): FeedItem? {
-        val notShown = all.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); all }
+        val usable = all.filter { it.id !in LangFilter.blocked.value }
+        val notShown = usable.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); usable }
         val pool = Seen.freshFirst(ctx, notShown, { it.id })
         if (pool.isEmpty()) return null
         val random = rnd.nextDouble() < explore
