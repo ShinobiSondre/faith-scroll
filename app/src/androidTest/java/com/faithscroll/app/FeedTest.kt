@@ -56,7 +56,7 @@ class FeedTest {
         com.faithscroll.app.potoken.AppContext.set(ctx)
     }
 
-    @Test fun a_captionsPerVideo() = runBlocking {
+    @Test fun a_captionsPerVideo() = runBlocking<Unit> {
         val vids = videos()
         log("== Captions: ${vids.size} videos from ${channels.size} channels (3 at a time)")
         val t0 = System.currentTimeMillis()
@@ -82,7 +82,7 @@ class FeedTest {
         log("== Captions: ${res.count { it }}/${res.size} working, all done in ${secs(t0)}")
     }
 
-    @Test fun b_feedVerification() = runBlocking {
+    @Test fun b_feedVerification() = runBlocking<Unit> {
         for (mode in listOf(Lang.Mode.EN, Lang.Mode.NO)) {
             Lang.setMode(ctx, mode)
             File(ctx.filesDir, "video_checks_v2.json").delete()
@@ -103,7 +103,7 @@ class FeedTest {
         Lang.setMode(ctx, Lang.Mode.AUTO)
     }
 
-    @Test fun c_audioLanguage() = runBlocking {
+    @Test fun c_audioLanguage() = runBlocking<Unit> {
         // Videos with many dubbed audio tracks: we must pick English (or Norwegian), never e.g. Spanish.
         for (id in listOf("La6T0NEXP8g", "KUJ3DxCZXlY")) {
             val r = runCatching { StreamResolver.resolve(id) }.getOrNull()
@@ -113,7 +113,7 @@ class FeedTest {
         }
     }
 
-    @Test fun d_christianChannels() = runBlocking {
+    @Test fun d_christianChannels() = runBlocking<Unit> {
         val list = listOf(
             "UCVfwlh9XpX2Y_tQfjeln9QA" to "BibleProject", "UC9dK4qKU8-5xiqFoI9BGVmQ" to "I Am Second",
             "UCIQqvZbHSwX0yKNVK1MyYjQ" to "Elevation Church", "UCBJycsmduvYEL83R_U4JriQ" to "Marques Brownlee",
