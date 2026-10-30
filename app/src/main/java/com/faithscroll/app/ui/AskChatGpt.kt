@@ -46,6 +46,7 @@ object AskChatGpt {
                 .apply { if (cues.isNullOrEmpty()) appendQueryParameter("hints", "search") } // no captions: let it look the video up
                 .appendQueryParameter("q", q)
                 .build()
+            Diag.log("ask", "${video.id}: question ready after ${(System.currentTimeMillis() - t0) / 1000.0} s, sending to ChatGPT")
             onBusy(null)
             onReady(url.toString()) // asked in the background; the answer appears in the app's own panel
         }

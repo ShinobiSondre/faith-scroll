@@ -211,7 +211,7 @@ object Asr {
                         val n = reader.read(start, start + PIECE, pcm)
                         val tRead = System.currentTimeMillis() - t0
                         val cues = if (n == 0) emptyList() else if (norwegian) {
-                            val threads = 2 // per worker; leaves cores free for the video itself
+                            val threads = 3 // per worker
                             Whisper.transcribePiece(pcm, n, "no", threads).filterNot { looksLikeNoise(it.third) }
                                 .flatMap { (a, b, t) -> splitLine(start + a, start + b, collapseRepeats(t)) }
                         } else voskPiece(vosk!!, pcm, n, start)

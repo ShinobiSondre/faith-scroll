@@ -115,6 +115,7 @@ object ChatGptBridge {
                         if (ans.isNotEmpty()) list += Turn(false, ans)
                     }
                     turns.value = list
+                    if (last.isEmpty()) Diag.log("ask", "ChatGPT started answering after ${(System.currentTimeMillis() - t0) / 1000.0} s")
                     if (text != last) { last = text; stableSince = System.currentTimeMillis() }
                     val busy = o.optBoolean("busy")
                     if (!busy && System.currentTimeMillis() - stableSince > 1500) {

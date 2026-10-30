@@ -110,7 +110,8 @@ object Transcripts {
      * just that slice of audio is downloaded and recognised, so an answer comes quickly.
      */
     suspend fun transcribeWindow(ctx: android.content.Context, videoId: String, atMs: Long): String {
-        val from = (atMs - 60_000).coerceAtLeast(0) // the last minute is enough context and twice as quick
+        // The piece right before the pause first (that's what you're asking about), then further back.
+        val from = (atMs - 15_000).coerceAtLeast(0)
         Asr.ensure(ctx, videoId, from, atMs + 5_000, allowDownload = true)
         kotlinx.coroutines.withTimeoutOrNull(60_000) {
             Asr.cues(videoId).first { cues -> cues.any { it.end >= atMs - 4_000 } }
