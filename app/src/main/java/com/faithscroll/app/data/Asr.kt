@@ -317,7 +317,7 @@ object Asr {
         // Otherwise straight from YouTube: only the parts that are needed are fetched.
         val url = live.source ?: audioUrl(videoId)?.also { live.source = it }
         if (url != null) {
-            runCatching { open { it.setDataSource(url, mapOf("User-Agent" to "Mozilla/5.0")) } }
+            runCatching { open { it.setDataSource(BlockSource(url)) } }
                 .onSuccess { return@withContext it }
                 .onFailure { Diag.err("asr", "$videoId: streaming audio", it) }
         }
@@ -325,6 +325,49 @@ object Asr {
         if (!live.allowDownload) { Diag.log("asr", "$videoId: couldn't stream the audio; subtitles skipped"); return@withContext null }
         val f = audioFile(ctx, videoId) ?: return@withContext null
         runCatching { open { it.setDataSource(f.absolutePath) } }.getOrNull()
+    }
+
+    /**
+     * Reads the audio file straight from YouTube, but only the bytes the decoder asks for: 256 KB
+     * blocks fetched with YouTube's fast "range" parameter, kept in memory. Opening takes one or two
+     * small requests instead of Android's slow streaming.
+     */
+    private class BlockSource(private val url: String) : android.media.MediaDataSource() {
+        private val block = 256 * 1024
+        private val blocks = object : LinkedHashMap<Long, ByteArray>(16, 0.75f, true) {
+            override fun removeEldestEntry(e: MutableMap.MutableEntry<Long, ByteArray>?) = size > 48 // ~12 MB
+        }
+        @Volatile private var total: Long = android.net.Uri.parse(url).getQueryParameter("clen")?.toLongOrNull() ?: -1L
+
+        private fun fetch(index: Long): ByteArray {
+            synchronized(blocks) { blocks[index]?.let { return it } }
+            val start = index * block
+            val end = (if (total > 0) minOf(start + block, total) else start + block) - 1
+            val bytes = http.newCall(Request.Builder().url("$url&range=$start-$end").header("User-Agent", "Mozilla/5.0").build())
+                .execute().use { r -> if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}") else r.body!!.bytes() }
+            synchronized(blocks) { blocks[index] = bytes }
+            return bytes
+        }
+
+        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+            if (total in 1..position) return -1
+            var done = 0
+            while (done < size) {
+                val pos = position + done
+                if (total in 1..pos) break
+                val b = fetch(pos / block)
+                val inBlock = (pos % block).toInt()
+                if (inBlock >= b.size) break
+                val n = minOf(size - done, b.size - inBlock)
+                System.arraycopy(b, inBlock, buffer, offset + done, n)
+                done += n
+                if (b.size < block) { if (total < 0) total = pos / block * block + b.size; if (inBlock + n >= b.size) break }
+            }
+            return if (done == 0) -1 else done
+        }
+
+        override fun getSize(): Long = total
+        override fun close() { synchronized(blocks) { blocks.clear() } }
     }
 
     /** A small, widely decodable audio track for listening. */

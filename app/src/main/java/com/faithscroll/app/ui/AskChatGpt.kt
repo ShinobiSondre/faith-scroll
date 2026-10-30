@@ -33,7 +33,8 @@ object AskChatGpt {
             if (cues.isNullOrEmpty()) {
                 // No YouTube captions: use what the phone already transcribed, or transcribe the last 90 s now.
                 val have = com.faithscroll.app.data.Asr.cues(video.id).value
-                cues = if (have.any { it.start <= atMs && it.end >= atMs - 60_000 }) have else {
+                // Already gathered in the background while you watched? Then it's instant.
+                cues = if (have.any { it.end >= atMs - 8_000 && it.start <= atMs + 2_000 }) have else {
                     onBusy(tr("Transcribing the last minute…", "Transkriberer det siste minuttet …"))
                     withTimeoutOrNull(65_000) { Transcripts.transcribeWindow(ctx, video.id, atMs) }
                     com.faithscroll.app.data.Asr.cues(video.id).value

@@ -190,7 +190,7 @@ fun VideoCard(
                 // Fallback: YouTube's own player, still full screen inside the app.
                 YouTubePlayer(
                     startSec = remember(video.id) { (playback.position / 1000).toInt() },
-                    captions = CaptionSettings.on || asking != null,
+                    captions = false,
                     onTimedText = { url -> cardScope.launch { com.faithscroll.app.data.Transcripts.captureTimedText(video.id, url) } },
                     onTime = { embedPos = it },
                     videoId = video.id, paused = paused || suspended, muted = muted,
@@ -240,12 +240,16 @@ fun VideoCard(
 
         if (uiAlpha > 0f) Box(Modifier.fillMaxSize().then(uiMod).background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f))))
 
-        // Subtitles (live, in the app language)
-        if (isActive && isYouTube && CaptionSettings.on && hasCaptions == true && !playback.failed) {
-            CaptionOverlay(
-                video.id, playback.position,
-                Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = bottomInset + 190.dp)
-            )
+        // No subtitles on screen. In the background, the words around where you're watching are
+        // gathered (YouTube's captions if it has them, otherwise the phone listens), so
+        // "What do they mean here?" can ask right away.
+        if (isActive && isYouTube && !suspended) {
+            var ytCaptions by remember(video.id) { mutableStateOf<Boolean?>(null) }
+            LaunchedEffect(video.id) { ytCaptions = com.faithscroll.app.data.Transcripts.original(video.id) != null }
+            val pos = if (playback.failed) embedPos else playback.position
+            LaunchedEffect(video.id, pos / 5000, paused, ytCaptions) {
+                if (ytCaptions == false && !paused && pos >= 300) com.faithscroll.app.data.Asr.ensure(ctx, video.id, pos)
+            }
         }
 
         // Caption: tap to see the full title, description and a link to the original page
@@ -295,10 +299,7 @@ fun VideoCard(
                     }
                 }
             }
-            if (isYouTube && hasCaptions == true) RailButton(
-                if (CaptionSettings.on) Icons.Filled.ClosedCaption else Icons.Filled.ClosedCaptionOff,
-                tr("Subtitles", "Tekst"), CaptionSettings.on, if (CaptionSettings.on) Gold else Color.White
-            ) { CaptionSettings.toggle(ctx) }
+
             if (onRotate != null) RailButton(Icons.Filled.ScreenRotation, tr("Rotate", "Roter"), landscape, Color.White, onRotate)
             if (onExpand != null) RailButton(Icons.Filled.OpenInFull, tr("Full", "Full"), false, Color.White) {
                 com.faithscroll.app.data.PlaybackMemory.put(video.id, if (playback.failed) embedPos else playback.position)

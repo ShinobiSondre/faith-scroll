@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
         // audio for subtitles and captions aren't cut off with HTTP 403.
         com.faithscroll.app.potoken.AppContext.set(this)
         // Subtitles are on by default: fetch the speech model in the background now, not on first use.
-        if (getSharedPreferences("captions", MODE_PRIVATE).getBoolean("on", true)) com.faithscroll.app.data.Asr.prepare(this)
+        com.faithscroll.app.data.Asr.prepare(this) // speech model ready for "What do they mean here?"
         org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
             .setPoTokenProvider(com.faithscroll.app.potoken.PoTokenProviderImpl)
         setContent {
