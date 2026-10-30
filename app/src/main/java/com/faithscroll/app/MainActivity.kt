@@ -171,6 +171,13 @@ class MainActivity : ComponentActivity() {
 private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     val ctx = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
+    // Back gesture: return to the tab you came from (Watch → Feed …); it never closes the app.
+    // (Full screen, web pages and other overlays handle Back themselves first.)
+    val tabHistory = remember { mutableListOf<Int>() }
+    val goTab: (Int) -> Unit = { i -> if (i != tab) { tabHistory.remove(i); tabHistory.add(tab); tab = i } }
+    androidx.activity.compose.BackHandler {
+        tab = tabHistory.removeLastOrNull() ?: 0
+    }
     var verses by remember { mutableStateOf(VerseRepository.all(ctx)) }
     var library by remember { mutableStateOf<VideoLibrary?>(null) }
     var social by remember { mutableStateOf<SocialLibrary?>(null) }
@@ -266,7 +273,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text("✦", color = Gold, fontSize = 22.sp)
-                    tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.fillMaxWidth()) { tab = i } }
+                    tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.fillMaxWidth()) { goTab(i) } }
                 }
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -317,7 +324,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     .navigationBarsPadding().padding(top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.weight(1f)) { tab = i } }
+                tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.weight(1f)) { goTab(i) } }
             }
         }
 
