@@ -32,7 +32,7 @@ Java_com_faithscroll_app_data_Whisper_nativeTranscribe(JNIEnv *env, jobject, jlo
         // Speed: one greedy pass (no retries at higher temperature), and only as much of Whisper's
         // 30-second window as the chunk needs (it otherwise pads every chunk to 30 s).
         p.greedy.best_of = 1;
-        p.temperature_inc = 0.0f;
+        p.temperature_inc = 0.2f; /* retry when the output loops or is unsure */
         p.audio_ctx = audioCtx;
         if (whisper_full(ctx, p, data, n) == 0) {
             int ns = whisper_full_n_segments(ctx);
@@ -70,7 +70,7 @@ Java_com_faithscroll_app_data_Whisper_nativeTranscribeState(JNIEnv *env, jobject
         whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
         p.print_realtime = false; p.print_progress = false; p.print_timestamps = false; p.print_special = false;
         p.translate = false; p.language = l; p.n_threads = threads; p.no_context = true; p.suppress_blank = true;
-        p.greedy.best_of = 1; p.temperature_inc = 0.0f; p.audio_ctx = audioCtx;
+        p.greedy.best_of = 1; p.temperature_inc = 0.2f; /* retry when the output loops or is unsure */ p.audio_ctx = audioCtx;
         if (whisper_full_with_state(ctx, st, p, data, n) == 0) {
             int ns = whisper_full_n_segments_from_state(st);
             for (int i = 0; i < ns; i++) {

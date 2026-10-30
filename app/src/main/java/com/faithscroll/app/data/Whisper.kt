@@ -89,7 +89,7 @@ object Whisper {
         val st = states.receive()
         try {
             val f = FloatArray(n) { pcm[it] / 32768f }
-            val audioCtx = (n / 16000.0 * 50 + 64).toInt().coerceIn(256, 1500)
+            val audioCtx = 0 // Whisper's full window: trimming it made it loop ("M Mitt M Mitt …")
             val t0 = System.currentTimeMillis()
             val text = withContext(Dispatchers.Default) {
                 // Lower priority than the video player, so playback and loading stay smooth.
@@ -118,7 +118,7 @@ object Whisper {
         val f = FloatArray(n) { pcm[it] / 32768f }
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4) // the fast cores
         // Whisper's window is 1500 steps for 30 s; use just enough for this chunk (+ a little margin).
-        val audioCtx = (n / 16000.0 * 50 + 64).toInt().coerceIn(256, 1500)
+        val audioCtx = 0 // Whisper's full window: trimming it made it loop ("M Mitt M Mitt …")
         val t0 = System.currentTimeMillis()
         val text = nativeTranscribe(ctx, f, lang, threads, audioCtx).toString(Charsets.UTF_8)
         Diag.log("whisper", "${n / 16000} s of audio in ${(System.currentTimeMillis() - t0) / 1000.0} s")

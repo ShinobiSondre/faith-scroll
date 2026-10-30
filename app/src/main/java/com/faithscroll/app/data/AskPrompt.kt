@@ -13,6 +13,7 @@ object AskPrompt {
      */
     fun excerpt(cues: List<Cue>, atMs: Long, maxChars: Int = 4500): String {
         val lines = cues.filter { it.end >= atMs - 240_000 && it.start <= atMs + 60_000 }
+            .distinctBy { it.text.lowercase() }
             .map { "[${time(it.start)}] ${it.text}" }.toMutableList()
         while (lines.isNotEmpty() && lines.sumOf { it.length + 1 } > maxChars) lines.removeAt(0)
         return lines.joinToString("\n")

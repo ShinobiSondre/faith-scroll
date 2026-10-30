@@ -49,7 +49,7 @@ object Asr {
 
     enum class State { IDLE, DOWNLOADING_MODEL, LOADING_AUDIO, LISTENING, DONE, FAILED }
 
-    private const val PIECE = 4_000L // short pieces: the first subtitle is ready sooner
+    private const val PIECE = 15_000L // long enough for Whisper to understand the context
 
     /** Live captions for one video, growing as pieces are transcribed. */
     class Live {
@@ -212,7 +212,8 @@ object Asr {
                         val tRead = System.currentTimeMillis() - t0
                         val cues = if (n == 0) emptyList() else if (norwegian) {
                             val threads = 2 // per worker; leaves cores free for the video itself
-                            Whisper.transcribePiece(pcm, n, "no", threads).flatMap { (a, b, t) -> splitLine(start + a, start + b, t) }
+                            Whisper.transcribePiece(pcm, n, "no", threads).filterNot { looksLikeNoise(it.third) }
+                                .flatMap { (a, b, t) -> splitLine(start + a, start + b, collapseRepeats(t)) }
                         } else voskPiece(vosk!!, pcm, n, start)
                         live.done += i
                         if (cues.isNotEmpty()) {
@@ -459,6 +460,35 @@ object Asr {
 
     /** Language of the subtitles made for this video (Norwegian = NB-Whisper, otherwise English). */
     val engineLang = ConcurrentHashMap<String, String>()
+
+    /** Lines that are just repeated syllables or symbols ("M Mitt M Mitt", "j j j", "' ' '"). */
+    fun looksLikeNoise(text: String): Boolean {
+        val words = text.lowercase().split(Regex("\\s+")).map { it.trim('.', ',', '!', '?', '\'', '"', '-', '…') }.filter { it.isNotEmpty() }
+        if (words.isEmpty()) return true
+        val letters = text.count { it.isLetter() }
+        if (letters < text.length * 0.5) return true
+        if (words.size >= 4 && words.toSet().size.toFloat() / words.size < 0.4f) return true
+        if (words.size >= 4 && words.count { it.length <= 2 } > words.size * 0.7) return true
+        return false
+    }
+
+    /** "som sitter og sitter og sitter" → "som sitter og sitter": drops a phrase repeated 3+ times in a row. */
+    private fun collapseRepeats(text: String): String {
+        val w = text.split(" ").toMutableList()
+        for (len in 1..4) {
+            var i = 0
+            while (i + len * 3 <= w.size) {
+                val a = w.subList(i, i + len).map { it.lowercase() }
+                if ((1..2).all { k -> w.subList(i + k * len, i + (k + 1) * len).map { it.lowercase() } == a }) {
+                    var j = i + len * 3
+                    while (j + len <= w.size && w.subList(j, j + len).map { it.lowercase() } == a) j += len
+                    repeat(j - i - len) { w.removeAt(i + len) }
+                }
+                i++
+            }
+        }
+        return w.joinToString(" ")
+    }
 
     /** Long Whisper segments become readable lines of up to ~8 words, time split evenly. */
     private fun splitLine(start: Long, end: Long, text: String): List<Cue> {
