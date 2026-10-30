@@ -201,10 +201,27 @@ object Asr {
         return live
     }
 
+    /** Spoken language of a video: YouTube's automatic-caption label, else its title/description. */
+    private suspend fun spokenLanguage(videoId: String): String {
+        val info = WatchPage.info(videoId) ?: return "en"
+        return WatchPage.spoken(info).ifBlank { LangFilter.spokenFromText(info.title + "\n" + info.description).orEmpty() }.ifBlank { "en" }
+    }
+
+    /** Language of the subtitles made for this video (Norwegian = NB-Whisper, otherwise English). */
+    val engineLang = ConcurrentHashMap<String, String>()
+
     private suspend fun transcribe(ctx: Context, videoId: String, live: Live, fromMs: Long, maxMs: Long, localFile: File? = null) {
-        if (!modelReady(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading speech model") }
-        val m = model(ctx)
-        Diag.log("asr", "$videoId: model ready, transcribing from ${fromMs / 1000}s")
+        val lang = engineLang.getOrPut(videoId) { if (spokenLanguage(videoId) == "no") "no" else "en" }
+        val norwegian = lang == "no"
+        val m: Model? = if (norwegian) {
+            if (!Whisper.ready(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading Norwegian speech model") }
+            if (!Whisper.load(ctx)) { live.error = "Norwegian model unavailable"; live.state.value = State.FAILED; return }
+            null
+        } else {
+            if (!modelReady(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading speech model") }
+            model(ctx)
+        }
+        Diag.log("asr", "$videoId: ${if (norwegian) "Norwegian (NB-Whisper)" else "English (Vosk)"}, transcribing from ${fromMs / 1000}s")
         live.state.value = State.LOADING_AUDIO
         val file = localFile ?: audioFile(ctx, videoId) ?: run { live.state.value = State.FAILED; return }
         live.state.value = State.LISTENING
@@ -220,12 +237,32 @@ object Asr {
         val codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
         codec.configure(fmt, null, null, 0)
         codec.start()
-        val rec = Recognizer(m, RATE.toFloat()).apply { setWords(true) }
+        val rec = m?.let { Recognizer(it, RATE.toFloat()).apply { setWords(true) } }
+        // Whisper works on chunks: a short first one so subtitles appear quickly, then longer ones.
+        val chunk = ShortArray(RATE * 20)
+        var baseOffset = 0L
+        var chunkN = 0
+        var chunkStartMs = 0L
+        fun whisperChunk() {
+            if (chunkN == 0) return
+            val segs = Whisper.transcribe(chunk, chunkN)
+            val base = baseOffset + chunkStartMs
+            val newCues = segs.flatMap { (a, b, t) -> splitLine(base + a, base + b, t) }
+            if (newCues.isNotEmpty()) {
+                val merged = (live.cues.value.filter { c -> newCues.none { it.start <= c.end && c.start <= it.end } } + newCues).sortedBy { it.start }
+                val first = live.cues.value.isEmpty()
+                live.cues.value = merged
+                if (first) Diag.log("asr", "$videoId: first subtitles ready")
+            }
+            chunkStartMs += chunkN * 1000L / RATE
+            chunkN = 0
+        }
 
         var srcRate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         var channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         val startUs = maxOf(0L, ex.sampleTime)
         val offsetMs = startUs / 1000
+        baseOffset = offsetMs
         if (live.coveredTo < offsetMs - 5000 || live.coveredFrom > offsetMs + 5000) live.coveredFrom = offsetMs
         live.coveredFrom = minOf(live.coveredFrom, offsetMs)
         val info = MediaCodec.BufferInfo()
@@ -286,7 +323,12 @@ object Asr {
                         out16[outN++] = (s / channels).toShort()
                         resamplePos += step
                         if (outN == out16.size) {
-                            if (rec.acceptWaveForm(out16, outN)) handleResult(rec.result)
+                            if (rec != null) { if (rec.acceptWaveForm(out16, outN)) handleResult(rec.result) }
+                            else {
+                                System.arraycopy(out16, 0, chunk, chunkN, outN); chunkN += outN
+                                val target = if (chunkStartMs == 0L) RATE * 6 else chunk.size
+                                if (chunkN >= target) whisperChunk()
+                            }
                             fedMs += outN * 1000L / RATE; outN = 0
                             live.coveredTo = offsetMs + fedMs
                         }
@@ -296,13 +338,27 @@ object Asr {
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                 }
             }
-            if (outN > 0) rec.acceptWaveForm(out16, outN)
-            handleResult(rec.finalResult)
+            if (rec != null) {
+                if (outN > 0) rec.acceptWaveForm(out16, outN)
+                handleResult(rec.finalResult)
+            } else {
+                if (outN > 0 && chunkN + outN <= chunk.size) { System.arraycopy(out16, 0, chunk, chunkN, outN); chunkN += outN }
+                whisperChunk()
+            }
             live.coveredTo = offsetMs + fedMs
             if (coroutineContext.isActive) live.state.value = State.DONE
         } finally {
-            runCatching { codec.stop() }; codec.release(); ex.release(); rec.close()
+            runCatching { codec.stop() }; codec.release(); ex.release(); rec?.close()
         }
+    }
+
+    /** Long Whisper segments become readable lines of up to ~8 words, time split evenly. */
+    private fun splitLine(start: Long, end: Long, text: String): List<Cue> {
+        val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }
+        if (words.size <= 9) return listOf(Cue(start, maxOf(end, start + 800), text))
+        val parts = words.chunked(8)
+        val per = (end - start).coerceAtLeast(1000) / parts.size
+        return parts.mapIndexed { i, p -> Cue(start + i * per, start + (i + 1) * per, p.joinToString(" ")) }
     }
 
     private fun toCue(words: List<JSONObject>, offsetMs: Long): Cue = Cue(

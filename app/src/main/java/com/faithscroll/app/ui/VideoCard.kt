@@ -110,7 +110,8 @@ fun VideoCard(
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
     // Captions available for this video? If they don't load, subtitles are simply turned off for it.
     var hasCaptions by remember(video.id) { mutableStateOf<Boolean?>(null) }
-    if (isYouTube) LaunchedEffect(video.id) { hasCaptions = com.faithscroll.app.data.Transcripts.original(video.id, urgent = true) != null }
+    // Subtitles come from YouTube, or the phone makes them (English and Norwegian speech).
+    if (isYouTube) LaunchedEffect(video.id) { hasCaptions = true }
     // Subscribe: follow this channel to get more of its videos.
     val subScope = rememberCoroutineScope()
     var channelId by remember(video.id) { mutableStateOf<String?>(null) }

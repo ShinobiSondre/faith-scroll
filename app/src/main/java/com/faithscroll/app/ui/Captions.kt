@@ -53,7 +53,7 @@ fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modif
     var useAsr by remember(videoId) { mutableStateOf(false) }
     LaunchedEffect(videoId) {
         val t = Transcripts.inAppLanguage(videoId, urgent = true) { partial -> youtube = partial }
-        if (t != null) youtube = t // no captions: nothing is shown (the subtitle button hides too)
+        if (t == null) useAsr = true else youtube = t // no YouTube captions: the phone listens and makes them
     }
 
     var line: String? = null
@@ -69,7 +69,7 @@ fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modif
         val progress by Asr.modelProgress.collectAsState()
         val raw = cues.lastOrNull { it.start <= positionMs && positionMs <= it.end + 900 }?.text
         var shown by remember(videoId) { mutableStateOf<Pair<String, String>?>(null) }
-        LaunchedEffect(raw) { if (raw != null) shown = raw to Transcripts.translateLine(raw) }
+        LaunchedEffect(raw) { if (raw != null) shown = raw to Transcripts.translateLine(raw, Asr.engineLang[videoId] ?: "en") }
         line = shown?.takeIf { it.first == raw }?.second ?: raw
         if (line == null) status = when (state) {
             Asr.State.DOWNLOADING_MODEL -> tr("Getting subtitles ready (one-time download ${(progress * 100).toInt()} %)…", "Gjør klar undertekster (engangsnedlasting ${(progress * 100).toInt()} %) …")

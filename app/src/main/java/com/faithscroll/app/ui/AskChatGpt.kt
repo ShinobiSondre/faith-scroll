@@ -28,7 +28,16 @@ object AskChatGpt {
         scope.launch {
             Toast.makeText(ctx, tr("Opening ChatGPT…", "Åpner ChatGPT …"), Toast.LENGTH_SHORT).show()
             val t0 = System.currentTimeMillis()
-            val cues = withTimeoutOrNull(5_000) { Transcripts.original(video.id, urgent = true) }?.cues
+            var cues = withTimeoutOrNull(4_000) { Transcripts.original(video.id, urgent = true) }?.cues
+            if (cues.isNullOrEmpty()) {
+                // No YouTube captions: use what the phone already transcribed, or transcribe the last 90 s now.
+                val have = com.faithscroll.app.data.Asr.cues(video.id).value
+                cues = if (have.any { it.start <= atMs && it.end >= atMs - 60_000 }) have else {
+                    Toast.makeText(ctx, tr("Transcribing the last 90 seconds…", "Transkriberer de siste 90 sekundene …"), Toast.LENGTH_LONG).show()
+                    withTimeoutOrNull(65_000) { Transcripts.transcribeWindow(ctx, video.id, atMs) }
+                    com.faithscroll.app.data.Asr.cues(video.id).value
+                }
+            }
             val q = AskPrompt.build(video.id, video.title, video.channel, atMs, cues, Lang.no)
             Diag.log("ask", "${video.id} at ${AskPrompt.time(atMs)}: ${cues?.size ?: 0} caption lines, question ${q.length} chars in ${(System.currentTimeMillis() - t0) / 1000.0} s")
             val url = Uri.parse("https://chatgpt.com/").buildUpon()
@@ -40,8 +49,20 @@ object AskChatGpt {
         }
     }
 
+    /** Phone transcription test: 60–90 s into a video, with the engine for its language. */
+    private suspend fun speechTest(ctx: Context, id: String?): List<String> {
+        id ?: return emptyList()
+        val t0 = System.currentTimeMillis()
+        withTimeoutOrNull(90_000) { Transcripts.transcribeWindow(ctx, id, 90_000) }
+        val cues = com.faithscroll.app.data.Asr.cues(id).value.filter { it.start <= 95_000 }
+        val lang = com.faithscroll.app.data.Asr.engineLang[id] ?: "?"
+        val secs = "%.1f s".format((System.currentTimeMillis() - t0) / 1000.0)
+        return listOf((if (cues.isNotEmpty()) "PASS" else "FAIL") + " phone transcription $id ($lang, $secs): ${cues.size} lines: '${cues.lastOrNull()?.text?.take(80).orEmpty()}'")
+            .onEach { Diag.log("test", it) }
+    }
+
     /** Self-test on this phone: do real videos give a transcript excerpt for the question? */
-    suspend fun selfTest(ids: List<Pair<String, String>>): List<String> = ids.map { (id, title) ->
+    suspend fun selfTest(ctx: Context, ids: List<Pair<String, String>>): List<String> = speechTest(ctx, ids.firstOrNull()?.first) + ids.map { (id, title) ->
         val t0 = System.currentTimeMillis()
         val t = withTimeoutOrNull(10_000) { Transcripts.original(id, urgent = true) }
         val secs = "%.1f s".format((System.currentTimeMillis() - t0) / 1000.0)

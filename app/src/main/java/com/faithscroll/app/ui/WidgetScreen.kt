@@ -274,7 +274,7 @@ private fun DiagnosticsCard() {
             val ids = com.faithscroll.app.data.VideoCheck.verified.value.take(6).map { it to it }.ifEmpty {
                 listOf("dDYbiukIFBc" to "Best CBN Testimonies")
             }
-            results = com.faithscroll.app.ui.AskChatGpt.selfTest(ids)
+            results = com.faithscroll.app.ui.AskChatGpt.selfTest(ctx, ids)
             testing = false
         }
     }) { Text(if (testing) tr("Testing transcripts…", "Tester tekster …") else tr("Test transcripts", "Test tekster"), color = Gold) }

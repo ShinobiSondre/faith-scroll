@@ -112,7 +112,7 @@ object Transcripts {
     suspend fun transcribeWindow(ctx: android.content.Context, videoId: String, atMs: Long): String {
         val from = (atMs - 90_000).coerceAtLeast(0)
         Asr.ensure(ctx, videoId, from, atMs + 5_000)
-        kotlinx.coroutines.withTimeoutOrNull(24_000) {
+        kotlinx.coroutines.withTimeoutOrNull(60_000) {
             Asr.cues(videoId).first { cues -> cues.any { it.end >= atMs - 4_000 } }
         }
         return Asr.cues(videoId).value.filter { it.end >= from && it.start <= atMs + 10_000 }.joinToString(" ") { it.text }

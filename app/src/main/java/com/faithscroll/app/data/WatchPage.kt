@@ -94,7 +94,17 @@ object WatchPage {
     fun spoken(info: Info): String = info.tracks.firstOrNull { it.kind == "asr" }?.lang.orEmpty()
 
     /** Downloads one track as cues, optionally translated by YouTube (tlang). Tries with a proof-of-origin token first. */
+    /** YouTube answered "429 Sorry" (too many requests): leave its captions alone for a while. */
+    @Volatile private var blockedUntil = 0L
+    private fun noteBlocked(body: String) {
+        if (body.startsWith("429") || "<title>Sorry" in body) {
+            if (System.currentTimeMillis() > blockedUntil) Diag.log("page", "YouTube is limiting caption downloads – pausing them for 30 min (the phone transcribes instead)")
+            blockedUntil = System.currentTimeMillis() + 30 * 60_000
+        }
+    }
+
     suspend fun fetch(videoId: String, track: Track, tlang: String? = null): List<Cue>? = withContext(Dispatchers.IO) {
+        if (System.currentTimeMillis() < blockedUntil) return@withContext null
         if (track.plain) {
             val url = track.baseUrl.replace("&fmt=srv3", "") + (tlang?.let { "&tlang=$it" } ?: "")
             val body = runCatching {
@@ -102,6 +112,8 @@ object WatchPage {
             }.getOrNull().orEmpty()
             val cues = if (body.trimStart().startsWith("{")) parseJson3(body) else parseXml(body)
             if (cues.isNotEmpty()) return@withContext cues
+            noteBlocked(body)
+            if (System.currentTimeMillis() < blockedUntil) return@withContext null
             Diag.log("page", "$videoId: android caption link gave ${body.length} chars (${track.lang}${if ("exp=xpe" in url) ", locked" else ""}): ${body.take(90).replace("\n", " ")}")
         }
         // The website's link for the same track, with a freshly made proof-of-origin token.
@@ -131,6 +143,8 @@ object WatchPage {
                 return@withContext parseJson3(body.substringAfter(' '))
             }
             last = body
+            noteBlocked(body)
+            if (System.currentTimeMillis() < blockedUntil) break
         }
         Diag.log("page", "$videoId: caption download refused (${track.lang}/${track.kind.ifBlank { "manual" }}${tlang?.let { " → $it" } ?: ""}, token=${pot != null}, xpe=${"exp=xpe" in webTrack.baseUrl}): ${last.take(90).replace("\n", " ")}")
         null

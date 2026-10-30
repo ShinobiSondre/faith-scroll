@@ -91,7 +91,7 @@ object VideoCheck {
         val ok = when {
             spoken == want -> true // already in your language: no subtitles needed
             Lang.no && Lang.alsoEnglish && spoken == "en" ->
-                t != null && Transcripts.inAppLanguage(v.id)?.let { it.translated || it.lang == "no" } == true
+                true // the phone transcribes English speech and translates it to Norwegian
             else -> false
         }
         // Strict Norwegian: if YouTube's automatic captions exist they decide; a Norwegian guess from the
