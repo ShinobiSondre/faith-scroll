@@ -40,11 +40,19 @@ object ChatGptBridge {
     private var host: WeakReference<Activity>? = null
     private var poll: Job? = null
 
+    // Reads ChatGPT's answers (two ways, in case the page layout differs), whether it's still
+    // writing, and whether our question is still sitting unsent in the input box.
     private const val READ = "(function(){var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
+        "if(!out.length){var m=document.querySelectorAll('article .markdown, .markdown.prose');for(var j=0;j<m.length;j++)out.push(m[j].innerText);}" +
         "var busy=!!document.querySelector('[data-testid=\"stop-button\"]');" +
-        "return JSON.stringify({a:out,busy:busy,url:location.href,title:document.title," +
-        "body:(document.body?document.body.innerText:'').slice(0,200)});})()"
+        "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
+        "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
+        "return JSON.stringify({a:out,busy:busy,pending:pending,url:location.href,title:document.title," +
+        "body:(document.body?document.body.innerText:'').slice(0,240)});})()"
+    private const val SEND = "(function(){var b=document.querySelector('[data-testid=\"send-button\"]')||document.querySelector('button[aria-label*=\"end\"]');" +
+        "if(b&&!b.disabled){b.click();return 'clicked';}var e=document.querySelector('#prompt-textarea');" +
+        "if(e){e.focus();e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));return 'enter';}return 'none';})()"
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun webView(a: Activity): WebView? {
@@ -97,6 +105,7 @@ object ChatGptBridge {
             val t0 = System.currentTimeMillis()
             var last = ""
             var stableSince = 0L
+            var nudged = 0L
             while (true) {
                 delay(600)
                 val w = web ?: return@launch
@@ -123,11 +132,19 @@ object ChatGptBridge {
                         Diag.log("ask", "ChatGPT answered in ${(System.currentTimeMillis() - t0) / 1000.0} s (${text.length} chars)")
                         return@launch
                     }
-                } else if (System.currentTimeMillis() - t0 > 45_000) {
-                    Diag.log("ask", "ChatGPT gave no answer: ${o.optString("title")} | ${o.optString("body").replace("\n", " ").take(150)}")
-                    fail(com.faithscroll.app.util.tr("ChatGPT didn't answer (it may want you to log in or be busy).",
-                        "ChatGPT svarte ikke (den vil kanskje at du logger inn, eller er opptatt)."))
-                    return@launch
+                } else {
+                    // The question is filled in but wasn't sent (happens when the page isn't on screen): press send.
+                    val waited = System.currentTimeMillis() - t0
+                    if (o.optInt("pending") > 0 && waited > 4_000 && System.currentTimeMillis() - nudged > 5_000) {
+                        nudged = System.currentTimeMillis()
+                        w.evaluateJavascript(SEND) { r -> Diag.log("ask", "question was waiting unsent – pressed send ($r)") }
+                    }
+                    if (waited > 45_000) {
+                        val seen = "${o.optString("title")} | ${o.optString("body").replace("\n", " ").take(160)}"
+                        Diag.log("ask", "ChatGPT gave no answer: $seen")
+                        fail(com.faithscroll.app.util.tr("ChatGPT didn't answer. The page showed: ", "ChatGPT svarte ikke. Siden viste: ") + seen)
+                        return@launch
+                    }
                 }
             }
         }
