@@ -39,13 +39,15 @@ object ChatGptBridge {
     private var web: WebView? = null
     private var host: WeakReference<Activity>? = null
     private var poll: Job? = null
+    @Volatile private var firstQuestion = ""
 
     // Reads ChatGPT's answers (two ways, in case the page layout differs), whether it's still
     // writing, and whether our question is still sitting unsent in the input box.
     private const val READ = "(function(){" +
         // Cookie banner (Norway/EU): choose "reject non-essential" (or close it) so it never blocks or gets read.
-        "var bs=document.querySelectorAll('button');for(var x=0;x<bs.length;x++){var bt=(bs[x].innerText||'').trim();" +
-        "if(/^(Avvis ikke nødvendige|Reject non-essential|Avvis alle|Reject all)$/i.test(bt)){bs[x].click();break;}}" +
+        // Cookie banner and "log in" pop-ups: reject non-essential cookies / stay logged out.
+        "var bs=document.querySelectorAll('button, a, [role=\"button\"]');for(var x=0;x<bs.length;x++){var bt=(bs[x].innerText||'').trim();" +
+        "if(bt.length<45&&/(avvis|reject|forbli utlogget|stay logged out|fortsett uten|continue without|ikke nå|not now|maybe later|kanskje senere)/i.test(bt)){bs[x].click();}}" +
         "var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
         "if(!a.length)a=document.querySelectorAll('[data-turn=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
@@ -57,7 +59,8 @@ object ChatGptBridge {
         "var busy=!!document.querySelector('[data-testid=\"stop-button\"]');" +
         "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
         "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
-        "return JSON.stringify({a:out,busy:busy,pending:pending,url:location.href,title:document.title," +
+        "var users=document.querySelectorAll('[data-message-author-role=\"user\"]').length;" +
+        "return JSON.stringify({a:out,busy:busy,pending:pending,users:users,input:!!c,url:location.href,title:document.title," +
         "body:(document.body?document.body.innerText:'').slice(0,240)});})()"
     private const val SEND = "(function(){var b=document.querySelector('[data-testid=\"send-button\"]')||document.querySelector('button[aria-label*=\"end\"]');" +
         "if(b&&!b.disabled){b.click();return 'clicked';}var e=document.querySelector('#prompt-textarea');" +
@@ -97,6 +100,7 @@ object ChatGptBridge {
     fun ask(a: Activity, url: String, question: String, videoId: String, atMs: Long) {
         if (session.value?.let { it.videoId == videoId && it.atMs == atMs } == true && turns.value.isNotEmpty()) return
         session.value = Session(videoId, atMs, url)
+        firstQuestion = android.net.Uri.parse(url).getQueryParameter("q").orEmpty()
         val w = webView(a) ?: run { fail("No window"); return }
         turns.value = listOf(Turn(true, question))
         error.value = null
@@ -118,7 +122,17 @@ object ChatGptBridge {
         error.value = null
         // The page is invisible and has no keyboard focus, so the text is put into ChatGPT's input
         // box directly (and announced as typed), then the send button is pressed.
-        val js = "(function(q){var e=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
+        val js = typeJs(send)
+        w.evaluateJavascript(js) { r ->
+            Diag.log("ask", "follow-up typed: $r")
+            if (r?.contains("noinput") == true) fail(com.faithscroll.app.util.tr("Couldn't type the question into ChatGPT.", "Klarte ikke å skrive spørsmålet inn i ChatGPT."))
+        }
+        watch(expected = turns.value.count { it.user })
+    }
+
+    /** Puts [text] into ChatGPT's input box (no keyboard focus needed) and presses send. */
+    private fun typeJs(text: String): String =
+        "(function(q){var e=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
             "if(!e)return 'noinput';" +
             "if(e.tagName==='TEXTAREA'){var set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(e,q);" +
             "e.dispatchEvent(new Event('input',{bubbles:true}));}" +
@@ -129,13 +143,7 @@ object ChatGptBridge {
             "var tries=0;(function send(){var b=document.querySelector('[data-testid=\"send-button\"]')||document.querySelector('#composer-submit-button');" +
             "if(b&&!b.disabled){b.click();return;}if(++tries<8)setTimeout(send,400);" +
             "else e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));})();" +
-            "return 'ok';})(${JSONObject.quote(send)})"
-        w.evaluateJavascript(js) { r ->
-            Diag.log("ask", "follow-up typed: $r")
-            if (r?.contains("noinput") == true) fail(com.faithscroll.app.util.tr("Couldn't type the question into ChatGPT.", "Klarte ikke å skrive spørsmålet inn i ChatGPT."))
-        }
-        watch(expected = turns.value.count { it.user })
-    }
+            "return 'ok';})(${JSONObject.quote(text)})"
 
     /** Does ChatGPT's latest answer say it needs more context? */
     fun wantsMoreContext(): Boolean = turns.value.lastOrNull()?.takeIf { !it.user }?.text?.let {
@@ -183,6 +191,12 @@ object ChatGptBridge {
                     if (o.optInt("pending") > 0 && waited > 4_000 && System.currentTimeMillis() - nudged > 5_000) {
                         nudged = System.currentTimeMillis()
                         w.evaluateJavascript(SEND) { r -> Diag.log("ask", "question was waiting unsent – pressed send ($r)") }
+                    } else if (expected == 1 && o.optInt("users") == 0 && o.optInt("pending") == 0 && o.optBoolean("input") &&
+                        waited > 6_000 && System.currentTimeMillis() - nudged > 8_000 && firstQuestion.isNotBlank()) {
+                        // The link's question never arrived (e.g. a pop-up was in the way): type it in ourselves.
+                        nudged = System.currentTimeMillis()
+                        Diag.log("ask", "question didn't arrive from the link – typing it in")
+                        w.evaluateJavascript(typeJs(firstQuestion), null)
                     }
                     if (waited > 45_000) {
                         val seen = "${o.optString("title")} | ${o.optString("body").replace("\n", " ").take(160)}"
