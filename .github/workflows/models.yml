@@ -1,0 +1,22 @@
+name: Mirror speech model
+# Copies the open-source Vosk speech model (Apache 2.0) into this repo's releases, so the app can
+# download it from GitHub (works behind ad-blocking DNS that blocks alphacephei.com).
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/models.yml"]
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download model
+        run: curl -fL -o vosk-model-small-en-us-0.15.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+      - name: Publish to the "models" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view models -R ${{ github.repository }} >/dev/null 2>&1 || \
+            gh release create models -R ${{ github.repository }} --title "Speech models" --notes "Vosk small English model (Apache 2.0), mirrored for the app." --latest=false
+          gh release upload models vosk-model-small-en-us-0.15.zip -R ${{ github.repository }} --clobber

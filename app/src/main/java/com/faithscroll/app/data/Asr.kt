@@ -35,7 +35,11 @@ import kotlin.coroutines.coroutineContext
  * watching, faster than real time, and pre-transcribes the start of upcoming videos.
  */
 object Asr {
-    private const val MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+    // GitHub copy first (gets past ad-blocking DNS), the original site as backup.
+    private val MODEL_URLS = listOf(
+        "https://github.com/ShinobiSondre/faith-scroll/releases/download/models/vosk-model-small-en-us-0.15.zip",
+        "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+    )
     private const val MODEL_DIR = "vosk-model-small-en-us-0.15"
     private const val RATE = 16000
 
@@ -84,7 +88,17 @@ object Asr {
     private fun downloadModel(ctx: Context) {
         val root = File(ctx.filesDir, "vosk").apply { mkdirs() }
         val tmp = File(root, "model.zip")
-        http.newCall(Request.Builder().url(MODEL_URL).build()).execute().use { r ->
+        var lastError: Throwable? = null
+        val ok = MODEL_URLS.any { url ->
+            runCatching { downloadFrom(url, tmp); Diag.log("asr", "speech model from ${android.net.Uri.parse(url).host}"); true }
+                .getOrElse { lastError = it; Diag.err("asr", "speech model from ${android.net.Uri.parse(url).host}", it); false }
+        }
+        if (!ok) throw lastError ?: IllegalStateException("Model download failed")
+        unzipModel(tmp, root)
+    }
+
+    private fun downloadFrom(url: String, tmp: File) {
+        http.newCall(Request.Builder().url(url).build()).execute().use { r ->
             if (!r.isSuccessful) error("Model download failed: HTTP ${r.code}")
             val total = r.body!!.contentLength().coerceAtLeast(1)
             var got = 0L
@@ -101,6 +115,9 @@ object Asr {
                 }
             }
         }
+    }
+
+    private fun unzipModel(tmp: File, root: File) {
         ZipInputStream(tmp.inputStream().buffered()).use { zip ->
             while (true) {
                 val e = zip.nextEntry ?: break
