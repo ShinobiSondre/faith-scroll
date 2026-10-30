@@ -154,7 +154,7 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
     LaunchedEffect(turns.size, turns.lastOrNull()?.text?.length) { if (turns.isNotEmpty()) list.animateScrollToItem(turns.size - 1) }
 
     val close: () -> Unit = { closing = true; scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum, sheetGesturesEnabled = false) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
         androidx.activity.compose.BackHandler { close() }
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 20.dp).imePadding()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
