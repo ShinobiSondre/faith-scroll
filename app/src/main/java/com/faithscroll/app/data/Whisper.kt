@@ -95,7 +95,7 @@ object Whisper {
                 // Lower priority than the video player, so playback and loading stay smooth.
                 val tid = android.os.Process.myTid()
                 val old = android.os.Process.getThreadPriority(tid)
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_LESS_FAVORABLE) // just below the player, still on the fast cores
                 try { nativeTranscribeState(ctx, st, f, lang, threads, audioCtx) }
                 finally { android.os.Process.setThreadPriority(old) }
             }.toString(Charsets.UTF_8)

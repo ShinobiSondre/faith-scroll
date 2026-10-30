@@ -49,7 +49,7 @@ object Asr {
 
     enum class State { IDLE, DOWNLOADING_MODEL, LOADING_AUDIO, LISTENING, DONE, FAILED }
 
-    private const val PIECE = 6_000L
+    private const val PIECE = 4_000L // short pieces: the first subtitle is ready sooner
 
     /** Live captions for one video, growing as pieces are transcribed. */
     class Live {
@@ -63,7 +63,8 @@ object Asr {
         val busy = java.util.Collections.newSetFromMap(ConcurrentHashMap<Int, Boolean>())
         val workers = mutableListOf<Job>()
         @Volatile var source: String? = null // audio URL (or local file path)
-        @Volatile var allowDownload = false // fall back to downloading the whole audio (only when you ask)
+        @Volatile var allowDownload = false
+        val readers = java.util.concurrent.ConcurrentLinkedQueue<AudioReader>() // open audio connections, reused // fall back to downloading the whole audio (only when you ask)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -76,9 +77,15 @@ object Asr {
     fun live(videoId: String): Live = lives.getOrPut(videoId) { Live() }
 
     /** Downloads/loads the speech model ahead of time. */
+    /** Loads the speech model for the app's language in the background at start-up, so the first subtitle doesn't wait for it. */
     fun prepare(ctx: Context) {
         val app = ctx.applicationContext
-        scope.launch { runCatching { model(app) }.onFailure { Diag.err("asr", "speech model", it) } }
+        scope.launch {
+            val t0 = System.currentTimeMillis()
+            if (com.faithscroll.app.util.Lang.no) runCatching { Whisper.load(app) }.onFailure { Diag.err("asr", "Norwegian model", it) }
+            else runCatching { model(app) }.onFailure { Diag.err("asr", "speech model", it) }
+            Diag.log("asr", "speech model loaded at start-up in ${(System.currentTimeMillis() - t0) / 1000.0} s")
+        }
     }
     fun cues(videoId: String): StateFlow<List<Cue>> = live(videoId).cues
 
@@ -146,6 +153,8 @@ object Asr {
         if (allowDownload) live.allowDownload = true
         live.focus = fromMs
         live.until = minOf(maxMs, fromMs + 30_000)
+        // Only one video at a time: stop the others and free their connections.
+        lives.forEach { (id, other) -> if (id != videoId && (other.workers.any { it.isActive } || other.readers.isNotEmpty())) release(other) }
         synchronized(live) {
             live.workers.removeAll { !it.isActive }
             val app = ctx.applicationContext
@@ -155,7 +164,12 @@ object Asr {
         }
     }
 
-    fun stop(videoId: String) { lives[videoId]?.workers?.forEach { it.cancel() } }
+    fun stop(videoId: String) { lives[videoId]?.let(::release) }
+
+    private fun release(live: Live) {
+        live.workers.forEach { it.cancel() }
+        scope.launch(Dispatchers.IO) { while (true) { val r = live.readers.poll() ?: break; runCatching { r.close() } } }
+    }
 
     /** The most useful piece not done yet: where you are, then ahead, then just behind. */
     private fun nextPiece(live: Live, peek: Boolean = false): Int? = synchronized(live) {
@@ -180,7 +194,11 @@ object Asr {
                 model(ctx)
             }
             if (live.state.value != State.LISTENING) live.state.value = State.LOADING_AUDIO
-            val reader = openReader(ctx, videoId, live) ?: run { live.error = "no audio"; live.state.value = State.FAILED; return }
+            val tOpen = System.currentTimeMillis()
+            val reused = live.readers.poll()
+            val reader = reused ?: openReader(ctx, videoId, live) ?: run { live.error = "no audio"; live.state.value = State.FAILED; return }
+            if (reused == null) Diag.log("asr", "$videoId: audio opened in ${(System.currentTimeMillis() - tOpen) / 1000.0} s")
+            var keep = true
             try {
                 live.durationMs = reader.durationMs
                 live.state.value = State.LISTENING
@@ -191,6 +209,7 @@ object Asr {
                         val start = i * PIECE
                         val t0 = System.currentTimeMillis()
                         val n = reader.read(start, start + PIECE, pcm)
+                        val tRead = System.currentTimeMillis() - t0
                         val cues = if (n == 0) emptyList() else if (norwegian) {
                             val threads = 2 // per worker; leaves cores free for the video itself
                             Whisper.transcribePiece(pcm, n, "no", threads).flatMap { (a, b, t) -> splitLine(start + a, start + b, t) }
@@ -199,11 +218,12 @@ object Asr {
                         if (cues.isNotEmpty()) {
                             val first = live.cues.value.isEmpty()
                             live.cues.value = (live.cues.value.filter { c -> c.start < start || c.start >= start + PIECE } + cues).sortedBy { it.start }
-                            if (first) Diag.log("asr", "$videoId: first subtitles after ${(System.currentTimeMillis() - t0) / 1000.0} s (${if (norwegian) "Norwegian" else "English"})")
+                            if (first) Diag.log("asr", "$videoId: first subtitles: audio ${tRead / 1000.0} s + recognition ${(System.currentTimeMillis() - t0 - tRead) / 1000.0} s (${if (norwegian) "Norwegian" else "English"})")
                         }
                     } finally { live.busy -= i }
                 }
-            } finally { reader.close() }
+            } catch (e: Throwable) { keep = false; throw e
+            } finally { if (keep && coroutineContext.isActive) live.readers.offer(reader) else runCatching { reader.close() } }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e
         } catch (e: Throwable) {
             live.error = "${e.javaClass.simpleName}: ${e.message?.take(120)}"; Diag.err("asr", "$videoId failed", e); live.state.value = State.FAILED
@@ -231,7 +251,7 @@ object Asr {
     // ---- Reading audio at any spot ----
 
     /** Decodes a stretch of the audio track to 16 kHz mono. Opens the stream straight from YouTube. */
-    private class AudioReader(private val ex: MediaExtractor, private val codec: MediaCodec, val durationMs: Long, var srcRate: Int, var channels: Int) {
+    class AudioReader(private val ex: MediaExtractor, private val codec: MediaCodec, val durationMs: Long, var srcRate: Int, var channels: Int) {
         fun read(fromMs: Long, toMs: Long, out: ShortArray): Int {
             ex.seekTo(fromMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             codec.flush()
