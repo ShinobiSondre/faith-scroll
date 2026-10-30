@@ -119,6 +119,30 @@ object Transcripts {
         return Asr.cues(videoId).value.filter { it.end >= from && it.start <= atMs + 10_000 }.joinToString(" ") { it.text }
     }
 
+    /**
+     * The 5 minutes before [atMs] (+15 s after) as timestamped lines: YouTube's captions if there are
+     * any, otherwise transcribed on the phone (pieces you've already watched are reused).
+     */
+    suspend fun fiveMinutes(ctx: android.content.Context, videoId: String, atMs: Long, onProgress: (Int) -> Unit = {}): String {
+        val from = (atMs - 300_000).coerceAtLeast(0)
+        val to = atMs + 15_000
+        val cues = original(videoId)?.cues ?: run {
+            Asr.ensure(ctx, videoId, from, to, allowDownload = true, ahead = to - from)
+            kotlinx.coroutines.withTimeoutOrNull(150_000) {
+                while (true) {
+                    val c = Asr.cues(videoId).value.filter { it.end >= from && it.start <= to }
+                    onProgress(c.size)
+                    val covered = c.isNotEmpty() && c.minOf { it.start } <= from + 20_000 && c.maxOf { it.end } >= atMs - 5_000
+                    if (covered) break
+                    kotlinx.coroutines.delay(1000)
+                }
+            }
+            Asr.cues(videoId).value
+        }
+        return cues.filter { it.end >= from && it.start <= to }.distinctBy { it.text.lowercase() }
+            .joinToString("\n") { "[${AskPrompt.time(it.start)}] ${it.text}" }
+    }
+
     suspend fun textAround(videoId: String, atMs: Long): String {
         original(videoId, urgent = true)?.let { return window(it, atMs) }
         val cues = Asr.cues(videoId).value

@@ -96,19 +96,40 @@ object ChatGptBridge {
     }
 
     /** Types a follow-up question into the same conversation. */
-    fun followUp(text: String) {
+    /**
+     * A follow-up in the same conversation. [shown] is what the panel shows (short), [send] what
+     * ChatGPT gets (e.g. with 5 minutes of transcript).
+     */
+    fun followUp(shown: String, send: String = shown) {
         val w = web ?: return
-        turns.value = turns.value + Turn(true, text)
+        turns.value = turns.value + Turn(true, shown)
         status.value = Status.THINKING
         error.value = null
+        // The page is invisible and has no keyboard focus, so the text is put into ChatGPT's input
+        // box directly (and announced as typed), then the send button is pressed.
         val js = "(function(q){var e=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
-            "if(!e)return 'noinput';e.focus();document.execCommand('insertText',false,q);" +
-            "setTimeout(function(){var b=document.querySelector('[data-testid=\"send-button\"]');if(b)b.click();" +
-            "else{var k=new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true});e.dispatchEvent(k);}},400);" +
-            "return 'ok';})(${JSONObject.quote(text)})"
-        w.evaluateJavascript(js) { r -> if (r?.contains("noinput") == true) fail("Couldn't type the question") }
+            "if(!e)return 'noinput';" +
+            "if(e.tagName==='TEXTAREA'){var set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(e,q);" +
+            "e.dispatchEvent(new Event('input',{bubbles:true}));}" +
+            "else{try{e.focus();}catch(x){}var ok=false;try{ok=document.execCommand('insertText',false,q);}catch(x){}" +
+            "if(!ok||!(e.innerText||'').trim()){var esc=q.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');" +
+            "e.innerHTML=esc.split('\\n').map(function(l){return '<p>'+(l||'<br>')+'</p>';}).join('');" +
+            "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:q}));}}" +
+            "var tries=0;(function send(){var b=document.querySelector('[data-testid=\"send-button\"]')||document.querySelector('#composer-submit-button');" +
+            "if(b&&!b.disabled){b.click();return;}if(++tries<8)setTimeout(send,400);" +
+            "else e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));})();" +
+            "return 'ok';})(${JSONObject.quote(send)})"
+        w.evaluateJavascript(js) { r ->
+            Diag.log("ask", "follow-up typed: $r")
+            if (r?.contains("noinput") == true) fail(com.faithscroll.app.util.tr("Couldn't type the question into ChatGPT.", "Klarte ikke å skrive spørsmålet inn i ChatGPT."))
+        }
         watch(expected = turns.value.count { it.user })
     }
+
+    /** Does ChatGPT's latest answer say it needs more context? */
+    fun wantsMoreContext(): Boolean = turns.value.lastOrNull()?.takeIf { !it.user }?.text?.let {
+        Regex("(?i)(mer kontekst|mer sammenheng|more context|ikke nok (informasjon|kontekst|sammenheng)|uklart|unclear|vanskelig å (si|vite|avgjøre)|hard to (say|tell)|without more|need more|trenger mer)").containsMatchIn(it)
+    } == true
 
     /** Reads the page every ~0.6 s; the answer streams into the panel and is done when it stops growing. */
     private fun watch(expected: Int) {

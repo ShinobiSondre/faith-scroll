@@ -148,11 +148,11 @@ object Asr {
      * Wants subtitles from [fromMs] onwards (up to [maxMs], at most ~30 s ahead) plus a little
      * before it. Starts the parallel workers if they aren't running.
      */
-    fun ensure(ctx: Context, videoId: String, fromMs: Long, maxMs: Long = Long.MAX_VALUE, allowDownload: Boolean = false) {
+    fun ensure(ctx: Context, videoId: String, fromMs: Long, maxMs: Long = Long.MAX_VALUE, allowDownload: Boolean = false, ahead: Long = 30_000) {
         val live = live(videoId)
         if (allowDownload) live.allowDownload = true
         live.focus = fromMs
-        live.until = minOf(maxMs, fromMs + 30_000)
+        live.until = minOf(maxMs, fromMs + ahead)
         // Only one video at a time: stop the others and free their connections.
         lives.forEach { (id, other) -> if (id != videoId && (other.workers.any { it.isActive } || other.readers.isNotEmpty())) release(other) }
         synchronized(live) {
