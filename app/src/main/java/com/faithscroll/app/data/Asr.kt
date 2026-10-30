@@ -30,9 +30,13 @@ import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
 
 /**
- * Makes subtitles for any video by listening to it on the phone (Vosk speech recognition,
- * fully offline once the ~40 MB English model is downloaded). Transcribes from where you are
- * watching, faster than real time, and pre-transcribes the start of upcoming videos.
+ * Makes subtitles for any video by listening to it on the phone: Vosk for English, NB-Whisper for
+ * Norwegian (both offline after a one-time download).
+ *
+ * It follows the playhead instead of working through the whole video: the timeline is cut into
+ * 6-second pieces, and only the pieces around where you are (one behind, ~30 s ahead) are
+ * transcribed – nearest first, two at a time in parallel. Audio is read straight from YouTube at
+ * that spot, so it can start anywhere instantly; jumping elsewhere moves the work with you.
  */
 object Asr {
     // GitHub copy first (gets past ad-blocking DNS), the original site as backup.
@@ -45,22 +49,25 @@ object Asr {
 
     enum class State { IDLE, DOWNLOADING_MODEL, LOADING_AUDIO, LISTENING, DONE, FAILED }
 
-    /** Live captions for one video, growing as transcription runs. */
+    private const val PIECE = 6_000L
+
+    /** Live captions for one video, growing as pieces are transcribed. */
     class Live {
         val cues = MutableStateFlow<List<Cue>>(emptyList())
         val state = MutableStateFlow(State.IDLE)
-        @Volatile var coveredFrom = Long.MAX_VALUE
-        @Volatile var coveredTo = 0L
-        @Volatile var runMax = 0L // how far the current/last run was allowed to go
-        @Volatile var finished = false // reached the end of the video
         @Volatile var error: String? = null
-        var job: Job? = null
+        @Volatile var focus = 0L          // where you are
+        @Volatile var until = 0L          // how far ahead is wanted
+        @Volatile var durationMs = Long.MAX_VALUE
+        val done = java.util.Collections.newSetFromMap(ConcurrentHashMap<Int, Boolean>())
+        val busy = java.util.Collections.newSetFromMap(ConcurrentHashMap<Int, Boolean>())
+        val workers = mutableListOf<Job>()
+        @Volatile var source: String? = null // audio URL (or local file path)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lives = ConcurrentHashMap<String, Live>()
     private val modelLock = Mutex()
-    private val cpu = kotlinx.coroutines.sync.Semaphore(2) // at most two videos at once
     @Volatile private var model: Model? = null
     val modelProgress = MutableStateFlow(0f)
     private val http = OkHttpClient.Builder().readTimeout(60, TimeUnit.SECONDS).build()
@@ -130,32 +137,179 @@ object Asr {
     }
 
     /**
-     * Makes sure captions exist around [fromMs] (and ahead of it). Starts or restarts
-     * transcription from there if needed. [maxMs] limits how far to go (e.g. preloading).
+     * Wants subtitles from [fromMs] onwards (up to [maxMs], at most ~30 s ahead) plus a little
+     * before it. Starts the parallel workers if they aren't running.
      */
     fun ensure(ctx: Context, videoId: String, fromMs: Long, maxMs: Long = Long.MAX_VALUE) {
         val live = live(videoId)
-        val running = live.job?.isActive == true
-        val inRange = fromMs >= live.coveredFrom - 1000 && fromMs <= live.coveredTo + 5000
-        when {
-            running && inRange && live.runMax >= minOf(maxMs, fromMs + 60_000) -> return // already heading there
-            !running && inRange && live.finished -> return // whole rest is done
-            !running && inRange && live.coveredTo - fromMs > 30_000 && maxMs <= live.coveredTo -> return
-        }
-        live.job?.cancel()
-        val start = if (inRange) live.coveredTo else (fromMs - 3000).coerceAtLeast(0)
-        live.runMax = maxMs
-        val app = ctx.applicationContext
-        live.job = scope.launch {
-            cpu.acquire()
-            try { transcribe(app, videoId, live, start, maxMs) }
-            catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: Throwable) { live.error = "${e.javaClass.simpleName}: ${e.message?.take(120)}"; Diag.err("asr", "$videoId failed", e); live.state.value = State.FAILED }
-            finally { cpu.release() }
+        live.focus = fromMs
+        live.until = minOf(maxMs, fromMs + 30_000)
+        synchronized(live) {
+            live.workers.removeAll { !it.isActive }
+            val app = ctx.applicationContext
+            while (live.workers.size < Whisper.WORKERS && nextPiece(live, peek = true) != null) {
+                live.workers += scope.launch { worker(app, videoId, live) }
+            }
         }
     }
 
-    fun stop(videoId: String) { lives[videoId]?.job?.cancel() }
+    fun stop(videoId: String) { lives[videoId]?.workers?.forEach { it.cancel() } }
+
+    /** The most useful piece not done yet: where you are, then ahead, then just behind. */
+    private fun nextPiece(live: Live, peek: Boolean = false): Int? = synchronized(live) {
+        val at = (live.focus / PIECE).toInt()
+        val last = (minOf(live.until, live.durationMs - 1) / PIECE).toInt()
+        val order = (at..maxOf(at, last)).toList() + listOf(at - 1, at - 2).filter { it >= 0 }
+        val i = order.firstOrNull { it !in live.done && it !in live.busy } ?: return null
+        if (!peek) live.busy += i
+        i
+    }
+
+    private suspend fun worker(ctx: Context, videoId: String, live: Live) {
+        try {
+            val lang = engineLang.getOrPut(videoId) { if (spokenLanguage(videoId) == "no") "no" else "en" }
+            val norwegian = lang == "no"
+            val vosk: Model? = if (norwegian) {
+                if (!Whisper.ready(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading Norwegian speech model") }
+                if (!Whisper.load(ctx)) { live.error = "Norwegian model unavailable"; live.state.value = State.FAILED; return }
+                null
+            } else {
+                if (!modelReady(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading speech model") }
+                model(ctx)
+            }
+            if (live.state.value != State.LISTENING) live.state.value = State.LOADING_AUDIO
+            val reader = openReader(ctx, videoId, live) ?: run { live.error = "no audio"; live.state.value = State.FAILED; return }
+            try {
+                live.durationMs = reader.durationMs
+                live.state.value = State.LISTENING
+                val pcm = ShortArray((RATE * (PIECE + 1000) / 1000).toInt())
+                while (coroutineContext.isActive) {
+                    val i = nextPiece(live) ?: break
+                    try {
+                        val start = i * PIECE
+                        val t0 = System.currentTimeMillis()
+                        val n = reader.read(start, start + PIECE, pcm)
+                        val cues = if (n == 0) emptyList() else if (norwegian) {
+                            val threads = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4)
+                            Whisper.transcribePiece(pcm, n, "no", threads).flatMap { (a, b, t) -> splitLine(start + a, start + b, t) }
+                        } else voskPiece(vosk!!, pcm, n, start)
+                        live.done += i
+                        if (cues.isNotEmpty()) {
+                            val first = live.cues.value.isEmpty()
+                            live.cues.value = (live.cues.value.filter { c -> c.start < start || c.start >= start + PIECE } + cues).sortedBy { it.start }
+                            if (first) Diag.log("asr", "$videoId: first subtitles after ${(System.currentTimeMillis() - t0) / 1000.0} s (${if (norwegian) "Norwegian" else "English"})")
+                        }
+                    } finally { live.busy -= i }
+                }
+            } finally { reader.close() }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: Throwable) {
+            live.error = "${e.javaClass.simpleName}: ${e.message?.take(120)}"; Diag.err("asr", "$videoId failed", e); live.state.value = State.FAILED
+        }
+    }
+
+    private fun voskPiece(m: Model, pcm: ShortArray, n: Int, startMs: Long): List<Cue> {
+        val rec = Recognizer(m, RATE.toFloat()).apply { setWords(true) }
+        try {
+            rec.acceptWaveForm(pcm, n)
+            val words = JSONObject(rec.finalResult).optJSONArray("result") ?: return emptyList()
+            val list = (0 until words.length()).map { words.getJSONObject(it) }
+            val out = mutableListOf<Cue>()
+            var cur = mutableListOf<JSONObject>()
+            for (w in list) {
+                val gap = cur.lastOrNull()?.let { w.getDouble("start") - it.getDouble("end") } ?: 0.0
+                if (cur.size >= 7 || gap > 0.7) { out += toCue(cur, startMs); cur = mutableListOf() }
+                cur += w
+            }
+            if (cur.isNotEmpty()) out += toCue(cur, startMs)
+            return out
+        } finally { rec.close() }
+    }
+
+    // ---- Reading audio at any spot ----
+
+    /** Decodes a stretch of the audio track to 16 kHz mono. Opens the stream straight from YouTube. */
+    private class AudioReader(private val ex: MediaExtractor, private val codec: MediaCodec, val durationMs: Long, var srcRate: Int, var channels: Int) {
+        fun read(fromMs: Long, toMs: Long, out: ShortArray): Int {
+            ex.seekTo(fromMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            codec.flush()
+            val info = MediaCodec.BufferInfo()
+            var n = 0
+            var inputDone = false
+            val endUs = toMs * 1000
+            while (n < out.size) {
+                if (!inputDone) {
+                    val i = codec.dequeueInputBuffer(10_000)
+                    if (i >= 0) {
+                        val size = ex.readSampleData(codec.getInputBuffer(i)!!, 0)
+                        if (size < 0 || ex.sampleTime > endUs + 200_000) {
+                            codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true
+                        } else { codec.queueInputBuffer(i, 0, size, ex.sampleTime, 0); ex.advance() }
+                    }
+                }
+                val o = codec.dequeueOutputBuffer(info, 10_000)
+                if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    codec.outputFormat.let { srcRate = it.getInteger(MediaFormat.KEY_SAMPLE_RATE); channels = it.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }
+                } else if (o >= 0) {
+                    val buf = codec.getOutputBuffer(o)!!.order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
+                    val frames = buf.remaining() / channels
+                    // Pick the samples of this buffer that fall inside [from, to), mixed to mono at 16 kHz.
+                    var k = 0
+                    while (true) {
+                        val tUs = info.presentationTimeUs + k * 1_000_000L / RATE
+                        val src = ((tUs - info.presentationTimeUs) * srcRate / 1_000_000L).toInt()
+                        if (src >= frames || n >= out.size) break
+                        if (tUs >= fromMs * 1000 && tUs < endUs) {
+                            var s = 0
+                            for (c in 0 until channels) s += buf.get(src * channels + c)
+                            out[n++] = (s / channels).toShort()
+                        }
+                        k++
+                    }
+                    val bufferEnd = info.presentationTimeUs + frames * 1_000_000L / srcRate
+                    codec.releaseOutputBuffer(o, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0 || bufferEnd >= endUs) break
+                }
+            }
+            return n
+        }
+        fun close() { runCatching { codec.stop() }; codec.release(); ex.release() }
+    }
+
+    private suspend fun openReader(ctx: Context, videoId: String, live: Live): AudioReader? = withContext(Dispatchers.IO) {
+        fun open(setSource: (MediaExtractor) -> Unit): AudioReader {
+            val ex = MediaExtractor()
+            setSource(ex)
+            val track = (0 until ex.trackCount).first { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+            ex.selectTrack(track)
+            val fmt = ex.getTrackFormat(track)
+            val codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
+            codec.configure(fmt, null, null, 0); codec.start()
+            val dur = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) / 1000 else Long.MAX_VALUE
+            return AudioReader(ex, codec, dur, fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE), fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+        }
+        // Already downloaded? Use the file.
+        File(File(ctx.cacheDir, "asr"), "$videoId.m4a").takeIf { it.exists() && it.length() > 10_000 }?.let { f ->
+            return@withContext runCatching { open { it.setDataSource(f.absolutePath) } }.getOrNull()
+        }
+        // Otherwise straight from YouTube: only the parts that are needed are fetched.
+        val url = live.source ?: audioUrl(videoId)?.also { live.source = it }
+        if (url != null) {
+            runCatching { open { it.setDataSource(url, mapOf("User-Agent" to "Mozilla/5.0")) } }
+                .onSuccess { return@withContext it }
+                .onFailure { Diag.err("asr", "$videoId: streaming audio", it) }
+        }
+        // Fallback: download the audio file first.
+        val f = audioFile(ctx, videoId) ?: return@withContext null
+        runCatching { open { it.setDataSource(f.absolutePath) } }.getOrNull()
+    }
+
+    /** A small, widely decodable audio track for listening. */
+    private suspend fun audioUrl(videoId: String): String? {
+        val r = StreamResolver.resolve(videoId) ?: return null
+        val tracks = StreamResolver.preferredAudio(r)
+        return (tracks.filter { it.bitrate >= 48 }.minByOrNull { it.bitrate } ?: tracks.minByOrNull { it.bitrate })?.url
+    }
 
     internal suspend fun audioFile(ctx: Context, videoId: String): File? =
         downloadAudio(videoId, File(ctx.cacheDir, "asr").apply { mkdirs() })
@@ -219,13 +373,6 @@ object Asr {
         f
     }
 
-    /** Transcribes a local audio file (used by the device tests to check the whole engine). */
-    internal suspend fun transcribeFile(ctx: Context, id: String, file: File): Live {
-        val live = live(id)
-        transcribe(ctx, id, live, 0, Long.MAX_VALUE, file)
-        return live
-    }
-
     /** Spoken language of a video: YouTube's automatic-caption label, else its title/description. */
     private suspend fun spokenLanguage(videoId: String): String {
         val info = WatchPage.info(videoId) ?: return "en"
@@ -234,149 +381,6 @@ object Asr {
 
     /** Language of the subtitles made for this video (Norwegian = NB-Whisper, otherwise English). */
     val engineLang = ConcurrentHashMap<String, String>()
-
-    private suspend fun transcribe(ctx: Context, videoId: String, live: Live, fromMs: Long, maxMs: Long, localFile: File? = null) {
-        val lang = engineLang.getOrPut(videoId) { if (spokenLanguage(videoId) == "no") "no" else "en" }
-        val norwegian = lang == "no"
-        val m: Model? = if (norwegian) {
-            if (!Whisper.ready(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading Norwegian speech model") }
-            if (!Whisper.load(ctx)) { live.error = "Norwegian model unavailable"; live.state.value = State.FAILED; return }
-            null
-        } else {
-            if (!modelReady(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading speech model") }
-            model(ctx)
-        }
-        Diag.log("asr", "$videoId: ${if (norwegian) "Norwegian (NB-Whisper)" else "English (Vosk)"}, transcribing from ${fromMs / 1000}s")
-        live.state.value = State.LOADING_AUDIO
-        val file = localFile ?: audioFile(ctx, videoId) ?: run { live.state.value = State.FAILED; return }
-        live.state.value = State.LISTENING
-
-        val ex = MediaExtractor()
-        ex.setDataSource(file.absolutePath)
-        val track = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
-            ?: run { ex.release(); live.state.value = State.FAILED; return }
-        ex.selectTrack(track)
-        val fmt = ex.getTrackFormat(track)
-        ex.seekTo(fromMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-        Diag.log("asr", "$videoId: ${fmt.getString(MediaFormat.KEY_MIME)} ${fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)} Hz")
-        val codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
-        codec.configure(fmt, null, null, 0)
-        codec.start()
-        val rec = m?.let { Recognizer(it, RATE.toFloat()).apply { setWords(true) } }
-        // Whisper works on chunks: a short first one so subtitles appear quickly, then longer ones.
-        val chunk = ShortArray(RATE * 20)
-        var baseOffset = 0L
-        var chunkN = 0
-        var chunkStartMs = 0L
-        fun whisperChunk() {
-            if (chunkN == 0) return
-            val segs = Whisper.transcribe(chunk, chunkN)
-            val base = baseOffset + chunkStartMs
-            val newCues = segs.flatMap { (a, b, t) -> splitLine(base + a, base + b, t) }
-            if (newCues.isNotEmpty()) {
-                val merged = (live.cues.value.filter { c -> newCues.none { it.start <= c.end && c.start <= it.end } } + newCues).sortedBy { it.start }
-                val first = live.cues.value.isEmpty()
-                live.cues.value = merged
-                if (first) Diag.log("asr", "$videoId: first subtitles ready")
-            }
-            chunkStartMs += chunkN * 1000L / RATE
-            chunkN = 0
-        }
-
-        var srcRate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        var channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-        val startUs = maxOf(0L, ex.sampleTime)
-        val offsetMs = startUs / 1000
-        baseOffset = offsetMs
-        if (live.coveredTo < offsetMs - 5000 || live.coveredFrom > offsetMs + 5000) live.coveredFrom = offsetMs
-        live.coveredFrom = minOf(live.coveredFrom, offsetMs)
-        val info = MediaCodec.BufferInfo()
-        var inputDone = false
-        var resamplePos = 0.0
-        val out16 = ShortArray(RATE) // up to 1 s per push
-        var outN = 0
-        var fedMs = 0L // ms of 16 kHz audio fed so far
-
-        fun handleResult(json: String) {
-            val words = JSONObject(json).optJSONArray("result") ?: return
-            if (words.length() == 0) return
-            val list = (0 until words.length()).map { words.getJSONObject(it) }
-            // Group into readable lines: up to 7 words, broken at pauses.
-            val newCues = mutableListOf<Cue>()
-            var cur = mutableListOf<JSONObject>()
-            for (w in list) {
-                val gap = cur.lastOrNull()?.let { w.getDouble("start") - it.getDouble("end") } ?: 0.0
-                if (cur.size >= 7 || gap > 0.7) {
-                    newCues += toCue(cur, offsetMs); cur = mutableListOf()
-                }
-                cur += w
-            }
-            if (cur.isNotEmpty()) newCues += toCue(cur, offsetMs)
-            val merged = (live.cues.value.filter { c -> newCues.none { it.start <= c.end && c.start <= it.end } } + newCues).sortedBy { it.start }
-            live.cues.value = merged
-            if (merged.size <= newCues.size) Diag.log("asr", "$videoId: first subtitles ready")
-        }
-
-        try {
-            while (coroutineContext.isActive) {
-                if (!inputDone) {
-                    val i = codec.dequeueInputBuffer(10_000)
-                    if (i >= 0) {
-                        val n = ex.readSampleData(codec.getInputBuffer(i)!!, 0)
-                        if (n < 0 || (ex.sampleTime / 1000) > maxMs) {
-                            if (n < 0) live.finished = true
-                            codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true
-                        } else {
-                            codec.queueInputBuffer(i, 0, n, ex.sampleTime, 0); ex.advance()
-                        }
-                    }
-                }
-                val o = codec.dequeueOutputBuffer(info, 10_000)
-                if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    codec.outputFormat.let {
-                        srcRate = it.getInteger(MediaFormat.KEY_SAMPLE_RATE); channels = it.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                    }
-                } else if (o >= 0) {
-                    val buf = codec.getOutputBuffer(o)!!.order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
-                    val frames = buf.remaining() / channels
-                    val step = srcRate.toDouble() / RATE
-                    // Mix to mono and resample to 16 kHz.
-                    while (resamplePos < frames) {
-                        val idx = resamplePos.toInt() * channels
-                        var s = 0
-                        for (c in 0 until channels) s += buf.get(idx + c)
-                        out16[outN++] = (s / channels).toShort()
-                        resamplePos += step
-                        if (outN == out16.size) {
-                            if (rec != null) { if (rec.acceptWaveForm(out16, outN)) handleResult(rec.result) }
-                            else {
-                                System.arraycopy(out16, 0, chunk, chunkN, outN); chunkN += outN
-                                // Short first piece so the first line shows fast, then 12 s pieces.
-                                val target = if (chunkStartMs == 0L) RATE * 5 else RATE * 12
-                                if (chunkN >= target) whisperChunk()
-                            }
-                            fedMs += outN * 1000L / RATE; outN = 0
-                            live.coveredTo = offsetMs + fedMs
-                        }
-                    }
-                    resamplePos -= frames
-                    codec.releaseOutputBuffer(o, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
-                }
-            }
-            if (rec != null) {
-                if (outN > 0) rec.acceptWaveForm(out16, outN)
-                handleResult(rec.finalResult)
-            } else {
-                if (outN > 0 && chunkN + outN <= chunk.size) { System.arraycopy(out16, 0, chunk, chunkN, outN); chunkN += outN }
-                whisperChunk()
-            }
-            live.coveredTo = offsetMs + fedMs
-            if (coroutineContext.isActive) live.state.value = State.DONE
-        } finally {
-            runCatching { codec.stop() }; codec.release(); ex.release(); rec?.close()
-        }
-    }
 
     /** Long Whisper segments become readable lines of up to ~8 words, time split evenly. */
     private fun splitLine(start: Long, end: Long, text: String): List<Cue> {

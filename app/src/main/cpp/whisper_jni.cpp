@@ -49,3 +49,40 @@ Java_com_faithscroll_app_data_Whisper_nativeTranscribe(JNIEnv *env, jobject, jlo
     env->SetByteArrayRegion(arr, 0, (jsize) out.size(), (const jbyte *) out.data());
     return arr;
 }
+
+// ---- Parallel use: one loaded model, several independent "states" (one per worker) ----
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_faithscroll_app_data_Whisper_nativeNewState(JNIEnv *, jobject, jlong ctx) {
+    return ctx ? (jlong) whisper_init_state((whisper_context *) ctx) : 0;
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_faithscroll_app_data_Whisper_nativeTranscribeState(JNIEnv *env, jobject, jlong ctxp, jlong statep, jfloatArray samples,
+                                                            jstring lang, jint threads, jint audioCtx) {
+    auto *ctx = (whisper_context *) ctxp;
+    auto *st = (whisper_state *) statep;
+    std::string out;
+    if (ctx && st) {
+        jsize n = env->GetArrayLength(samples);
+        jfloat *data = env->GetFloatArrayElements(samples, nullptr);
+        const char *l = env->GetStringUTFChars(lang, nullptr);
+        whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+        p.print_realtime = false; p.print_progress = false; p.print_timestamps = false; p.print_special = false;
+        p.translate = false; p.language = l; p.n_threads = threads; p.no_context = true; p.suppress_blank = true;
+        p.greedy.best_of = 1; p.temperature_inc = 0.0f; p.audio_ctx = audioCtx;
+        if (whisper_full_with_state(ctx, st, p, data, n) == 0) {
+            int ns = whisper_full_n_segments_from_state(st);
+            for (int i = 0; i < ns; i++) {
+                out += std::to_string(whisper_full_get_segment_t0_from_state(st, i) * 10) + "\t" +
+                       std::to_string(whisper_full_get_segment_t1_from_state(st, i) * 10) + "\t" +
+                       whisper_full_get_segment_text_from_state(st, i) + "\n";
+            }
+        }
+        env->ReleaseStringUTFChars(lang, l);
+        env->ReleaseFloatArrayElements(samples, data, JNI_ABORT);
+    }
+    jbyteArray arr = env->NewByteArray((jsize) out.size());
+    env->SetByteArrayRegion(arr, 0, (jsize) out.size(), (const jbyte *) out.data());
+    return arr;
+}

@@ -28,6 +28,12 @@ object Whisper {
     private external fun nativeInit(path: String): Long
     private external fun nativeFree(ctx: Long)
     private external fun nativeTranscribe(ctx: Long, samples: FloatArray, lang: String, threads: Int, audioCtx: Int): ByteArray
+    private external fun nativeNewState(ctx: Long): Long
+    private external fun nativeTranscribeState(ctx: Long, state: Long, samples: FloatArray, lang: String, threads: Int, audioCtx: Int): ByteArray
+
+    /** Independent workspaces on the one loaded model, so pieces can be transcribed in parallel. */
+    const val WORKERS = 2
+    private val states = kotlinx.coroutines.channels.Channel<Long>(WORKERS)
 
     fun file(c: Context) = File(c.filesDir, "whisper/$FILE")
     fun ready(c: Context) = file(c).let { it.exists() && it.length() > 40_000_000 }
@@ -40,7 +46,11 @@ object Whisper {
             val f = file(c)
             if (!ready(c)) download(f)
             ctx = nativeInit(f.absolutePath)
-            if (ctx == 0L) Diag.log("whisper", "model failed to load") else Diag.log("whisper", "Norwegian model ready")
+            if (ctx == 0L) Diag.log("whisper", "model failed to load")
+            else {
+                repeat(WORKERS) { nativeNewState(ctx).takeIf { it != 0L }?.let { st -> states.trySend(st) } }
+                Diag.log("whisper", "Norwegian model ready ($WORKERS parallel workers)")
+            }
         }
         ctx != 0L
     }
@@ -72,6 +82,28 @@ object Whisper {
         }
         throw last ?: IllegalStateException("Model download failed")
     }
+
+    /** Parallel-safe: borrows one of the worker states for this piece of audio. */
+    suspend fun transcribePiece(pcm: ShortArray, n: Int, lang: String = "no", threads: Int): List<Triple<Long, Long, String>> {
+        if (ctx == 0L || n < 1600) return emptyList()
+        val st = states.receive()
+        try {
+            val f = FloatArray(n) { pcm[it] / 32768f }
+            val audioCtx = (n / 16000.0 * 50 + 64).toInt().coerceIn(256, 1500)
+            val t0 = System.currentTimeMillis()
+            val text = withContext(Dispatchers.Default) { nativeTranscribeState(ctx, st, f, lang, threads, audioCtx) }.toString(Charsets.UTF_8)
+            Diag.log("whisper", "${n / 16000} s piece in ${(System.currentTimeMillis() - t0) / 1000.0} s")
+            return parse(text)
+        } finally { states.send(st) }
+    }
+
+    private fun parse(text: String) = text.lineSequence().mapNotNull { line ->
+        val parts = line.split('\t', limit = 3)
+        if (parts.size < 3) return@mapNotNull null
+        val t = parts[2].trim()
+        if (t.isBlank() || t.startsWith("[") || t.startsWith("(")) null
+        else Triple(parts[0].toLongOrNull() ?: 0L, parts[1].toLongOrNull() ?: 0L, t)
+    }.toList()
 
     /** Transcribes 16 kHz mono audio; returns (startMs, endMs, text) relative to the start of [pcm]. */
     fun transcribe(pcm: ShortArray, n: Int, lang: String = "no"): List<Triple<Long, Long, String>> = synchronized(this) {
