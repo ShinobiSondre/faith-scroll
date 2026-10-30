@@ -43,12 +43,13 @@ object ChatGptBridge {
     // Reads ChatGPT's answers (two ways, in case the page layout differs), whether it's still
     // writing, and whether our question is still sitting unsent in the input box.
     private const val READ = "(function(){var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
+        "if(!a.length)a=document.querySelectorAll('[data-turn=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
         "if(!out.length){var m=document.querySelectorAll('article .markdown, .markdown.prose');for(var j=0;j<m.length;j++)out.push(m[j].innerText);}" +
         // Last resort: the page text itself – each answer follows a "ChatGPT said:" label.
         "if(!out.length&&document.body){var parts=document.body.innerText.split(/ChatGPT (?:said|sa):/);" +
         "for(var k=1;k<parts.length;k++){var t=parts[k].split(/(?:You said|Du sa):/)[0];" +
-        "t=t.split(/\\n(?:Ask anything|Spør om hva som helst|ChatGPT can make mistakes|ChatGPT kan gjøre feil|Log in|Sign up)/)[0];out.push(t.trim());}}" +
+        "t=t.split(/(?:ChatGPT is AI and can make mistakes|ChatGPT can make mistakes|ChatGPT kan gjøre feil|ChatGPT er KI|Chat with ChatGPT|Ask anything|Spør om hva som helst|Log in|Sign up|Logg inn)/)[0];out.push(t.trim());}}" +
         "var busy=!!document.querySelector('[data-testid=\"stop-button\"]');" +
         "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
         "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
@@ -124,7 +125,7 @@ object ChatGptBridge {
                 val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
                 o.optString("url").takeIf { it.startsWith("http") }?.let { pageUrl.value = it }
                 val answers = o.optJSONArray("a") ?: JSONArray()
-                val text = if (answers.length() >= expected) answers.optString(expected - 1).trim() else ""
+                val text = (if (answers.length() >= expected) answers.optString(expected - 1).trim() else "").let(::clean)
                 if (text.isNotEmpty()) {
                     val users = turns.value.filter { it.user }
                     // Rebuild: question, answer, question, answer… with the newest answer growing.
@@ -138,7 +139,8 @@ object ChatGptBridge {
                     if (last.isEmpty()) Diag.log("ask", "ChatGPT started answering after ${(System.currentTimeMillis() - t0) / 1000.0} s")
                     if (text != last) { last = text; stableSince = System.currentTimeMillis() }
                     val busy = o.optBoolean("busy")
-                    if (!busy && System.currentTimeMillis() - stableSince > 1500) {
+                    // Finished: ChatGPT's stop button is gone and the text hasn't changed for 2.5 s.
+                    if (!busy && text.length >= 20 && System.currentTimeMillis() - stableSince > 2500) {
                         status.value = Status.DONE
                         Diag.log("ask", "ChatGPT answered in ${(System.currentTimeMillis() - t0) / 1000.0} s (${text.length} chars)")
                         return@launch
@@ -160,6 +162,10 @@ object ChatGptBridge {
             }
         }
     }
+
+    /** Drops page furniture that isn't part of the answer (disclaimers, buttons). */
+    private val junk = Regex("(ChatGPT is AI and can make mistakes\\.?|ChatGPT can make mistakes\\.?.*|Check important info\\.?|Chat with ChatGPT|ChatGPT kan gjøre feil\\.?.*)", RegexOption.IGNORE_CASE)
+    private fun clean(s: String): String = s.replace(junk, "").replace(Regex("\\n{3,}"), "\n\n").trim()
 
     private fun fail(msg: String) { error.value = msg; status.value = Status.FAILED }
 }
