@@ -62,7 +62,8 @@ fun CaptionOverlay(videoId: String, positionMs: Long, modifier: Modifier = Modif
         line = Transcripts.cueAt(youtube!!, positionMs)
     } else if (useAsr) {
         // Keep the phone's transcript running from where you're watching.
-        LaunchedEffect(videoId, positionMs / 5000) { Asr.ensure(ctx, videoId, positionMs) }
+        // Start once the video is playing (so it loads first), then keep following the playhead.
+        LaunchedEffect(videoId, positionMs / 5000) { if (positionMs >= 1_500) Asr.ensure(ctx, videoId, positionMs) }
         val live = remember(videoId) { Asr.live(videoId) }
         val cues by live.cues.collectAsState()
         val state by live.state.collectAsState()

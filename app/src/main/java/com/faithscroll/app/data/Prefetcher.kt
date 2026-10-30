@@ -44,11 +44,9 @@ object Prefetcher {
         // Subtitles: fetch YouTube captions (and YouTube's translation) for the next 3 videos now,
         // so they're ready the moment you swipe. Phone transcription only if YouTube has none.
         val captionsOn = app.getSharedPreferences("captions", Context.MODE_PRIVATE).getBoolean("on", true)
-        if (captionsOn) upcoming.filterIsInstance<FeedItem.VideoItem>().map { it.video }.filter { it.direct.isBlank() }.take(3).forEach { v ->
-            if (asrJobs[v.id]?.isActive != true) asrJobs[v.id] = scope.launch {
-                if (Transcripts.inAppLanguage(v.id) == null && v == videos.firstOrNull()) Asr.ensure(app, v.id, 0, maxMs = 90_000)
-            }
-        }
+        // (Subtitles are made on the phone only for the video you're watching, so upcoming videos
+        //  get all the bandwidth and processor time to load fast.)
+        if (captionsOn && false) Unit
 
         // Images are small: warm the next several thumbnails and illustrations.
         upcoming.take(6).mapNotNull {

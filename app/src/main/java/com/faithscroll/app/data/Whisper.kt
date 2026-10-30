@@ -91,7 +91,14 @@ object Whisper {
             val f = FloatArray(n) { pcm[it] / 32768f }
             val audioCtx = (n / 16000.0 * 50 + 64).toInt().coerceIn(256, 1500)
             val t0 = System.currentTimeMillis()
-            val text = withContext(Dispatchers.Default) { nativeTranscribeState(ctx, st, f, lang, threads, audioCtx) }.toString(Charsets.UTF_8)
+            val text = withContext(Dispatchers.Default) {
+                // Lower priority than the video player, so playback and loading stay smooth.
+                val tid = android.os.Process.myTid()
+                val old = android.os.Process.getThreadPriority(tid)
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                try { nativeTranscribeState(ctx, st, f, lang, threads, audioCtx) }
+                finally { android.os.Process.setThreadPriority(old) }
+            }.toString(Charsets.UTF_8)
             Diag.log("whisper", "${n / 16000} s piece in ${(System.currentTimeMillis() - t0) / 1000.0} s")
             return parse(text)
         } finally { states.send(st) }

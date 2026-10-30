@@ -63,6 +63,7 @@ object Asr {
         val busy = java.util.Collections.newSetFromMap(ConcurrentHashMap<Int, Boolean>())
         val workers = mutableListOf<Job>()
         @Volatile var source: String? = null // audio URL (or local file path)
+        @Volatile var allowDownload = false // fall back to downloading the whole audio (only when you ask)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -140,8 +141,9 @@ object Asr {
      * Wants subtitles from [fromMs] onwards (up to [maxMs], at most ~30 s ahead) plus a little
      * before it. Starts the parallel workers if they aren't running.
      */
-    fun ensure(ctx: Context, videoId: String, fromMs: Long, maxMs: Long = Long.MAX_VALUE) {
+    fun ensure(ctx: Context, videoId: String, fromMs: Long, maxMs: Long = Long.MAX_VALUE, allowDownload: Boolean = false) {
         val live = live(videoId)
+        if (allowDownload) live.allowDownload = true
         live.focus = fromMs
         live.until = minOf(maxMs, fromMs + 30_000)
         synchronized(live) {
@@ -167,7 +169,7 @@ object Asr {
 
     private suspend fun worker(ctx: Context, videoId: String, live: Live) {
         try {
-            val lang = engineLang.getOrPut(videoId) { if (spokenLanguage(videoId) == "no") "no" else "en" }
+            val lang = engineLang.getOrPut(videoId) { engineFor(videoId) }
             val norwegian = lang == "no"
             val vosk: Model? = if (norwegian) {
                 if (!Whisper.ready(ctx)) { live.state.value = State.DOWNLOADING_MODEL; Diag.log("asr", "downloading Norwegian speech model") }
@@ -190,7 +192,7 @@ object Asr {
                         val t0 = System.currentTimeMillis()
                         val n = reader.read(start, start + PIECE, pcm)
                         val cues = if (n == 0) emptyList() else if (norwegian) {
-                            val threads = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4)
+                            val threads = 2 // per worker; leaves cores free for the video itself
                             Whisper.transcribePiece(pcm, n, "no", threads).flatMap { (a, b, t) -> splitLine(start + a, start + b, t) }
                         } else voskPiece(vosk!!, pcm, n, start)
                         live.done += i
@@ -299,7 +301,8 @@ object Asr {
                 .onSuccess { return@withContext it }
                 .onFailure { Diag.err("asr", "$videoId: streaming audio", it) }
         }
-        // Fallback: download the audio file first.
+        // Fallback: download the audio file first – only when you asked, never for background subtitles.
+        if (!live.allowDownload) { Diag.log("asr", "$videoId: couldn't stream the audio; subtitles skipped"); return@withContext null }
         val f = audioFile(ctx, videoId) ?: return@withContext null
         runCatching { open { it.setDataSource(f.absolutePath) } }.getOrNull()
     }
@@ -374,6 +377,18 @@ object Asr {
     }
 
     /** Spoken language of a video: YouTube's automatic-caption label, else its title/description. */
+    /**
+     * Which speech model to use. In Norwegian-only mode every video in the feed is Norwegian, so it's
+     * always NB-Whisper; otherwise YouTube's language label or the title/description decide, and if
+     * that's unclear the app's language wins.
+     */
+    private suspend fun engineFor(videoId: String): String {
+        if (com.faithscroll.app.util.Lang.no && !com.faithscroll.app.util.Lang.alsoEnglish) return "no"
+        val info = WatchPage.info(videoId)
+        val s = info?.let { WatchPage.spoken(it).ifBlank { LangFilter.spokenFromText(it.title + "\n" + it.description).orEmpty() } }.orEmpty()
+        return when (s) { "no" -> "no"; "en" -> "en"; else -> if (com.faithscroll.app.util.Lang.no) "no" else "en" }
+    }
+
     private suspend fun spokenLanguage(videoId: String): String {
         val info = WatchPage.info(videoId) ?: return "en"
         return WatchPage.spoken(info).ifBlank { LangFilter.spokenFromText(info.title + "\n" + info.description).orEmpty() }.ifBlank { "en" }
