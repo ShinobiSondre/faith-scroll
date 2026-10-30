@@ -194,7 +194,7 @@ fun WidgetScreen(
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(tr("New verse every hour", "Nytt vers hver time"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(tr("New verse every day", "Nytt vers hver dag"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Text(tr("Or tap ↻ on the widget anytime", "Eller trykk ↻ på widgeten når du vil"), color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
             }
             Switch(checked = auto, onCheckedChange = { auto = it; Prefs.setWidgetAutoChange(ctx, it) },

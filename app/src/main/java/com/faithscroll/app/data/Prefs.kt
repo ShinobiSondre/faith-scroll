@@ -52,7 +52,10 @@ object Prefs {
     fun widgetAutoChange(ctx: Context): Boolean = p(ctx).getBoolean("widget_auto", true)
     fun setWidgetAutoChange(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("widget_auto", v).apply()
     fun widgetRef(ctx: Context): String? = p(ctx).getString("widget_ref", null)
-    fun setWidgetRef(ctx: Context, ref: String) = p(ctx).edit().putString("widget_ref", ref).apply()
+    fun setWidgetRef(ctx: Context, ref: String) = p(ctx).edit().putString("widget_ref", ref).putString("widget_day", today()).apply()
+    /** The day (yyyy-MM-dd, phone's time zone) the widget's verse was chosen. */
+    fun widgetDay(ctx: Context): String? = p(ctx).getString("widget_day", null)
+    fun today(): String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
 
     // Reading streak
     data class Streak(val current: Int, val best: Int, val totalDays: Int)

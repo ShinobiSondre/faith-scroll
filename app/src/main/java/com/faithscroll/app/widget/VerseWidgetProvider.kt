@@ -16,9 +16,10 @@ import com.faithscroll.app.data.VerseRepository
 class VerseWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-        // Called on add and on the periodic (hourly) update.
+        // Android checks in every hour; the verse only changes once a day (the first check after midnight).
         val current = VerseRepository.byRef(ctx, Prefs.widgetRef(ctx))
-        val verse = if (current == null || Prefs.widgetAutoChange(ctx)) {
+        val newDay = Prefs.widgetDay(ctx) != Prefs.today()
+        val verse = if (current == null || (Prefs.widgetAutoChange(ctx) && newDay)) {
             VerseRepository.random(ctx, current?.ref).also { Prefs.setWidgetRef(ctx, it.ref) }
         } else current
         ids.forEach { mgr.updateAppWidget(it, build(ctx, verse)) }
