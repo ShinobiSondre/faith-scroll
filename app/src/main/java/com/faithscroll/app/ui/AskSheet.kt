@@ -123,3 +123,78 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
         }
     }
 }
+
+
+/** The app's own answer panel for ChatGPT: just the answer (our long question with timestamps is never shown). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val B = com.faithscroll.app.data.ChatGptBridge
+    val turns by B.turns.collectAsState()
+    val status by B.status.collectAsState()
+    val error by B.error.collectAsState()
+    val page by B.pageUrl.collectAsState()
+    var input by remember { mutableStateOf("") }
+    val list = rememberLazyListState()
+    val at = com.faithscroll.app.data.AskPrompt.time(atMs)
+    val title = tr("What do they mean at $at?", "Hva mener de ved $at?")
+
+    LaunchedEffect(url) { (ctx as? android.app.Activity)?.let { B.ask(it, url, title) } }
+    LaunchedEffect(turns.size, turns.lastOrNull()?.text?.length) { if (turns.isNotEmpty()) list.animateScrollToItem(turns.size - 1) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 20.dp).imePadding()) {
+            Text("✦ $title", color = Gold, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(video.title, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1)
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Your questions show short (the first one is the title above); ChatGPT's answers in full.
+                items(turns.drop(1)) { t ->
+                    Box(Modifier.fillMaxWidth(), contentAlignment = if (t.user) Alignment.CenterEnd else Alignment.CenterStart) {
+                        Text(
+                            t.text, color = if (t.user) Ink else Color.White, fontSize = 15.sp, lineHeight = 22.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(16.dp))
+                                .background(if (t.user) Gold else Color.White.copy(alpha = 0.08f))
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+                if (status == com.faithscroll.app.data.ChatGptBridge.Status.THINKING && turns.lastOrNull()?.user != false) item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(color = Gold, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(tr("Asking ChatGPT…", "Spør ChatGPT …"), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    }
+                }
+                error?.let { e ->
+                    item {
+                        Column {
+                            Text(e, color = HeartRed, fontSize = 13.sp)
+                            androidx.compose.material3.TextButton(onClick = { page?.let(onOpenPage) }) {
+                                Text(tr("Open ChatGPT", "Åpne ChatGPT"), color = Gold)
+                            }
+                        }
+                    }
+                }
+                if (status == com.faithscroll.app.data.ChatGptBridge.Status.DONE) item {
+                    Text(tr("Answer from ChatGPT", "Svar fra ChatGPT"), color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = input, onValueChange = { input = it },
+                    placeholder = { Text(tr("Ask more…", "Spør mer …"), color = Color.White.copy(alpha = 0.4f)) },
+                    modifier = Modifier.weight(1f), singleLine = false, maxLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                        focusedBorderColor = Gold, unfocusedBorderColor = Color.White.copy(alpha = 0.2f), cursorColor = Gold)
+                )
+                IconButton(
+                    onClick = { val q = input.trim(); if (q.isNotEmpty()) { B.followUp(q); input = "" } },
+                    enabled = status != com.faithscroll.app.data.ChatGptBridge.Status.THINKING
+                ) { Icon(Icons.AutoMirrored.Filled.Send, tr("Send", "Send"), tint = Gold) }
+            }
+        }
+    }
+}

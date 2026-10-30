@@ -111,6 +111,7 @@ fun VideoCard(
     var expanded by remember(video.id) { mutableStateOf(false) }
     var asking by remember(video.id) { mutableStateOf<Long?>(null) }
     var askBusy by remember(video.id) { mutableStateOf<String?>(null) }
+    var chatAsk by remember(video.id) { mutableStateOf<Pair<Long, String>?>(null) } // (moment, ChatGPT link)
     val openPage = LocalOpenPage.current
     val isYouTube = video.direct.isBlank()
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
@@ -315,6 +316,7 @@ fun VideoCard(
             VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) })
         }
         asking?.let { at -> AskSheet(video, at) { asking = null } }
+        chatAsk?.let { (at, url) -> ChatGptSheet(video, at, url, onOpenPage = { chatAsk = null; openPage(it) }) { chatAsk = null } }
 
         // "What do they mean here?" – drawn last so it sits above the title, buttons and details,
         // just under the play button (clear of the text at the bottom, also on a small folded screen).
@@ -326,7 +328,7 @@ fun VideoCard(
                     .shadow(8.dp, CircleShape).clip(CircleShape).background(Gold)
                     .clickable {
                         com.faithscroll.app.ui.AskChatGpt.open(ctx, video, if (usingEmbed) embedPos else playback.position,
-                            onBusy = { askBusy = it }, openPage = openPage)
+                            onBusy = { askBusy = it }, onReady = { url -> chatAsk = (if (usingEmbed) embedPos else playback.position) to url })
                     }
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             )

@@ -25,7 +25,7 @@ object AskChatGpt {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** [onBusy] shows/hides the loading screen (null = done); [openPage] shows ChatGPT inside the app. */
-    fun open(ctx: Context, video: Video, atMs: Long, onBusy: (String?) -> Unit, openPage: (String) -> Unit) {
+    fun open(ctx: Context, video: Video, atMs: Long, onBusy: (String?) -> Unit, onReady: (String) -> Unit) {
         scope.launch {
             onBusy(tr("Getting what was said…", "Henter det som ble sagt …"))
             val t0 = System.currentTimeMillis()
@@ -47,7 +47,7 @@ object AskChatGpt {
                 .appendQueryParameter("q", q)
                 .build()
             onBusy(null)
-            openPage(url.toString()) // inside the app, not a separate browser
+            onReady(url.toString()) // asked in the background; the answer appears in the app's own panel
         }
     }
 
