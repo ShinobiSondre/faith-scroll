@@ -45,6 +45,10 @@ object ChatGptBridge {
     private const val READ = "(function(){var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
         "if(!out.length){var m=document.querySelectorAll('article .markdown, .markdown.prose');for(var j=0;j<m.length;j++)out.push(m[j].innerText);}" +
+        // Last resort: the page text itself – each answer follows a "ChatGPT said:" label.
+        "if(!out.length&&document.body){var parts=document.body.innerText.split(/ChatGPT (?:said|sa):/);" +
+        "for(var k=1;k<parts.length;k++){var t=parts[k].split(/(?:You said|Du sa):/)[0];" +
+        "t=t.split(/\\n(?:Ask anything|Spør om hva som helst|ChatGPT can make mistakes|ChatGPT kan gjøre feil|Log in|Sign up)/)[0];out.push(t.trim());}}" +
         "var busy=!!document.querySelector('[data-testid=\"stop-button\"]');" +
         "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
         "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
@@ -57,9 +61,16 @@ object ChatGptBridge {
     @SuppressLint("SetJavaScriptEnabled")
     private fun webView(a: Activity): WebView? {
         if (web != null && host?.get() === a) return web
-        web?.let { w -> (w.parent as? ViewGroup)?.removeView(w); w.destroy() }
+        web?.let { w -> (w.parent as? ViewGroup)?.let { h -> (h.parent as? ViewGroup)?.removeView(h); h.removeView(w) }; w.destroy() }
         val root = a.findViewById<ViewGroup>(android.R.id.content) ?: return null
         host = WeakReference(a)
+        // On top of the app but practically transparent, and every touch passes straight through to
+        // the app underneath. (Behind the app, ChatGPT never drew its streaming answer.)
+        val holder = object : FrameLayout(a) {
+            override fun dispatchTouchEvent(ev: android.view.MotionEvent?) = false
+            override fun onInterceptTouchEvent(ev: android.view.MotionEvent?) = false
+        }.apply { alpha = 0.01f; isClickable = false; isFocusable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
+        root.addView(holder, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         return WebView(a).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -67,8 +78,8 @@ object ChatGptBridge {
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webChromeClient = WebChromeClient()
             webViewClient = WebViewClient()
-            // Behind the app's own screen: a real, laid-out page you never see.
-            root.addView(this, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            isFocusable = false; isFocusableInTouchMode = false
+            holder.addView(this, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }.also { web = it }
     }
 
