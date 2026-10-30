@@ -42,14 +42,18 @@ object ChatGptBridge {
 
     // Reads ChatGPT's answers (two ways, in case the page layout differs), whether it's still
     // writing, and whether our question is still sitting unsent in the input box.
-    private const val READ = "(function(){var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
+    private const val READ = "(function(){" +
+        // Cookie banner (Norway/EU): choose "reject non-essential" (or close it) so it never blocks or gets read.
+        "var bs=document.querySelectorAll('button');for(var x=0;x<bs.length;x++){var bt=(bs[x].innerText||'').trim();" +
+        "if(/^(Avvis ikke nødvendige|Reject non-essential|Avvis alle|Reject all)$/i.test(bt)){bs[x].click();break;}}" +
+        "var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
         "if(!a.length)a=document.querySelectorAll('[data-turn=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
         "if(!out.length){var m=document.querySelectorAll('article .markdown, .markdown.prose');for(var j=0;j<m.length;j++)out.push(m[j].innerText);}" +
         // Last resort: the page text itself – each answer follows a "ChatGPT said:" label.
         "if(!out.length&&document.body){var parts=document.body.innerText.split(/ChatGPT (?:said|sa):/);" +
         "for(var k=1;k<parts.length;k++){var t=parts[k].split(/(?:You said|Du sa):/)[0];" +
-        "t=t.split(/(?:ChatGPT is AI and can make mistakes|ChatGPT can make mistakes|ChatGPT kan gjøre feil|ChatGPT er KI|Chat with ChatGPT|Ask anything|Spør om hva som helst|Log in|Sign up|Logg inn)/)[0];out.push(t.trim());}}" +
+        "t=t.split(/(?:ChatGPT is AI and can make mistakes|ChatGPT can make mistakes|ChatGPT kan gjøre feil|ChatGPT er (?:KI|AI)|Chat with ChatGPT|Chat med ChatGPT|Ask anything|Spør om hva som helst|Log in|Sign up|Logg inn|Registrer deg|We use cookies|Vi bruker informasjonskapsler)/)[0];out.push(t.trim());}}" +
         "var busy=!!document.querySelector('[data-testid=\"stop-button\"]');" +
         "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
         "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
@@ -160,7 +164,7 @@ object ChatGptBridge {
                     val list = mutableListOf<Turn>()
                     users.forEachIndexed { i, u ->
                         list += u
-                        val ans = if (i == expected - 1) text else answers.optString(i).trim()
+                        val ans = if (i == expected - 1) text else clean(answers.optString(i).trim())
                         if (ans.isNotEmpty()) list += Turn(false, ans)
                     }
                     turns.value = list
@@ -192,8 +196,12 @@ object ChatGptBridge {
     }
 
     /** Drops page furniture that isn't part of the answer (disclaimers, buttons). */
-    private val junk = Regex("(ChatGPT is AI and can make mistakes\\.?|ChatGPT can make mistakes\\.?.*|Check important info\\.?|Chat with ChatGPT|ChatGPT kan gjøre feil\\.?.*)", RegexOption.IGNORE_CASE)
-    private fun clean(s: String): String = s.replace(junk, "").replace(Regex("\\n{3,}"), "\n\n").trim()
+    private val junk = Regex("(ChatGPT is AI and can make mistakes\\.?|ChatGPT can make mistakes\\.?.*|Check important info\\.?|Chat with ChatGPT|Chat med ChatGPT|ChatGPT er (KI|AI) og kan gjøre feil\\.?.*|ChatGPT kan gjøre feil\\.?.*)", RegexOption.IGNORE_CASE)
+    // Whole paragraphs/lines that are page furniture: cookie banners, login prompts, buttons.
+    private val junkLine = Regex("(?i)(informasjonskapsl|cookie|Avvis ikke nødvendige|Godta alle|Accept all|Reject non-essential|Administrer innstillingene|Manage (cookie|preferences)|^Logg inn$|^Log in$|^Registrer deg|^Sign up|^Chat (med|with) ChatGPT$|Vi bruker informasjonskapsler|We use cookies)")
+    private fun clean(s: String): String = s.replace(junk, "")
+        .lines().filterNot { it.isNotBlank() && junkLine.containsMatchIn(it.trim()) }.joinToString("\n")
+        .replace(Regex("\\n{3,}"), "\n\n").trim()
 
     private fun fail(msg: String) { error.value = msg; status.value = Status.FAILED }
 }
