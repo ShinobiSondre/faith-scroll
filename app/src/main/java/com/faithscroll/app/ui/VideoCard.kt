@@ -1,5 +1,6 @@
 package com.faithscroll.app.ui
 
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.offset
@@ -286,6 +287,11 @@ fun VideoCard(
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
             RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) { muted = !muted }
+            // A conversation with ChatGPT about this video: reopen it with one tap.
+            val chat by com.faithscroll.app.data.ChatGptBridge.session.collectAsState()
+            chat?.takeIf { it.videoId == video.id }?.let { c ->
+                RailButton(Icons.Filled.Forum, tr("Answer", "Svar"), true, Gold) { paused = true; chatAsk = c.atMs to c.url }
+            }
             if (isYouTube) RailButton(
                 if (subscribed) Icons.Filled.Check else Icons.Filled.PersonAdd,
                 if (subscribed) tr("Subscribed", "Abonnerer") else tr("Subscribe", "Abonner"), subscribed, if (subscribed) Gold else Color.White

@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -132,8 +133,11 @@ fun AskSheet(video: Video, atMs: Long, onDismiss: () -> Unit) {
 @Composable
 fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> Unit, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Doesn't close by a swipe or a tap beside it – only with ✕ (or Back).
+    var closing by remember { mutableStateOf(false) }
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden || closing })
     val B = com.faithscroll.app.data.ChatGptBridge
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val turns by B.turns.collectAsState()
     val status by B.status.collectAsState()
     val error by B.error.collectAsState()
@@ -141,17 +145,22 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
     var input by remember { mutableStateOf("") }
     var context by remember { mutableStateOf<Int?>(null) } // lines gathered so far while fetching 5 minutes
     var usedContext by remember { mutableStateOf(false) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val list = rememberLazyListState()
     val at = com.faithscroll.app.data.AskPrompt.time(atMs)
     val title = tr("What do they mean at $at?", "Hva mener de ved $at?")
 
-    LaunchedEffect(url) { (ctx as? android.app.Activity)?.let { B.ask(it, url, title) } }
+    // Reopening continues the same conversation (it lives outside this panel).
+    LaunchedEffect(url) { (ctx as? android.app.Activity)?.let { B.ask(it, url, title, video.id, atMs) } }
     LaunchedEffect(turns.size, turns.lastOrNull()?.text?.length) { if (turns.isNotEmpty()) list.animateScrollToItem(turns.size - 1) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
+    val close: () -> Unit = { closing = true; scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum, sheetGesturesEnabled = false) {
+        androidx.activity.compose.BackHandler { close() }
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 20.dp).imePadding()) {
-            Text("✦ $title", color = Gold, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("✦ $title", color = Gold, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton(onClick = close) { Icon(Icons.Filled.Close, tr("Close", "Lukk"), tint = Color.White) }
+            }
             Text(video.title, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1)
             Spacer(Modifier.height(12.dp))
             LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {

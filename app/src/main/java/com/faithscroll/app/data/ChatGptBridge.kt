@@ -85,7 +85,14 @@ object ChatGptBridge {
     }
 
     /** Starts a new conversation with [question] (shown short in the panel) using the prefilled [url]. */
-    fun ask(a: Activity, url: String, question: String) {
+    /** Which conversation is open: video id, the moment asked about, and the link it started with. */
+    data class Session(val videoId: String, val atMs: Long, val url: String)
+    val session = MutableStateFlow<Session?>(null)
+
+    /** Starts a new conversation – unless this exact one is already going (then it just continues). */
+    fun ask(a: Activity, url: String, question: String, videoId: String, atMs: Long) {
+        if (session.value?.let { it.videoId == videoId && it.atMs == atMs } == true && turns.value.isNotEmpty()) return
+        session.value = Session(videoId, atMs, url)
         val w = webView(a) ?: run { fail("No window"); return }
         turns.value = listOf(Turn(true, question))
         error.value = null
