@@ -1,5 +1,10 @@
 package com.faithscroll.app.ui
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.zIndex
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Check
@@ -105,6 +110,7 @@ fun VideoCard(
     var controls by remember(video.id) { mutableStateOf(false) }
     var expanded by remember(video.id) { mutableStateOf(false) }
     var asking by remember(video.id) { mutableStateOf<Long?>(null) }
+    var askBusy by remember(video.id) { mutableStateOf<String?>(null) }
     val openPage = LocalOpenPage.current
     val isYouTube = video.direct.isBlank()
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
@@ -210,16 +216,6 @@ fun VideoCard(
         }
         // When paused: ask what the speaker means at this moment.
         val usingEmbed = playback.failed && !embedFailed
-        if (isActive && paused && isYouTube && (!playback.failed || usingEmbed)) {
-            Text(
-                "✦ " + tr("What do they mean here?", "Hva mener de her?"),
-                color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.Center).padding(top = 150.dp)
-                    .clip(CircleShape).background(Gold)
-                    .clickable { AskChatGpt.open(ctx, video, if (usingEmbed) embedPos else playback.position) }
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
-            )
-        }
 
         // Play / pause button: hidden while playing, shown when you touch the video (or it's paused).
         AnimatedVisibility(
@@ -318,6 +314,48 @@ fun VideoCard(
             VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) })
         }
         asking?.let { at -> AskSheet(video, at) { asking = null } }
+
+        // "What do they mean here?" – drawn last so it sits above the title, buttons and details,
+        // just under the play button (clear of the text at the bottom, also on a small folded screen).
+        if (isActive && paused && isYouTube && !expanded && askBusy == null && (!playback.failed || usingEmbed)) {
+            Text(
+                "✦ " + tr("What do they mean here?", "Hva mener de her?"),
+                color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Center).offset(y = 82.dp).zIndex(5f)
+                    .shadow(8.dp, CircleShape).clip(CircleShape).background(Gold)
+                    .clickable {
+                        com.faithscroll.app.ui.AskChatGpt.open(ctx, video, if (usingEmbed) embedPos else playback.position,
+                            onBusy = { askBusy = it }, openPage = openPage)
+                    }
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+        }
+        // Loading while the moment is being transcribed.
+        askBusy?.let { msg ->
+            var secs by remember { mutableIntStateOf(0) }
+            LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000); secs++ } }
+            val lines by com.faithscroll.app.data.Asr.cues(video.id).collectAsState()
+            Box(
+                Modifier.fillMaxSize().zIndex(6f).background(Color.Black.copy(alpha = 0.7f))
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                    CircularProgressIndicator(color = Gold, strokeWidth = 4.dp, modifier = Modifier.size(56.dp))
+                    Spacer(Modifier.height(18.dp))
+                    Text(msg, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        tr("${secs} s · ${lines.size} lines so far", "${secs} s · ${lines.size} linjer så langt"),
+                        color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp
+                    )
+                    lines.lastOrNull()?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text("«${it.text}»", color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp, textAlign = TextAlign.Center, maxLines = 2)
+                    }
+                }
+            }
+        }
 
         // Progress: a thin line while playing; the full seek bar appears with the controls.
         if (isActive && playback.duration > 0 && !playback.failed && uiAlpha > 0f) {

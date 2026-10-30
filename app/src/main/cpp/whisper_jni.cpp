@@ -19,7 +19,7 @@ Java_com_faithscroll_app_data_Whisper_nativeFree(JNIEnv *, jobject, jlong ctx) {
 
 // Returns "startMs\tendMs\ttext\n" lines as UTF-8 bytes (decoded in Kotlin).
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_faithscroll_app_data_Whisper_nativeTranscribe(JNIEnv *env, jobject, jlong ctxp, jfloatArray samples, jstring lang, jint threads) {
+Java_com_faithscroll_app_data_Whisper_nativeTranscribe(JNIEnv *env, jobject, jlong ctxp, jfloatArray samples, jstring lang, jint threads, jint audioCtx) {
     auto *ctx = (whisper_context *) ctxp;
     std::string out;
     if (ctx) {
@@ -29,6 +29,11 @@ Java_com_faithscroll_app_data_Whisper_nativeTranscribe(JNIEnv *env, jobject, jlo
         whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
         p.print_realtime = false; p.print_progress = false; p.print_timestamps = false; p.print_special = false;
         p.translate = false; p.language = l; p.n_threads = threads; p.no_context = true; p.suppress_blank = true;
+        // Speed: one greedy pass (no retries at higher temperature), and only as much of Whisper's
+        // 30-second window as the chunk needs (it otherwise pads every chunk to 30 s).
+        p.greedy.best_of = 1;
+        p.temperature_inc = 0.0f;
+        p.audio_ctx = audioCtx;
         if (whisper_full(ctx, p, data, n) == 0) {
             int ns = whisper_full_n_segments(ctx);
             for (int i = 0; i < ns; i++) {

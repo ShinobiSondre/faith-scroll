@@ -334,6 +334,7 @@ private fun FeedHeader(state: AppState, onBeStill: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SidePanel(
     current: FeedItem?,
@@ -359,7 +360,7 @@ private fun SidePanel(
                     Text(v.channel, color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
                     current.reason?.let { Spacer(Modifier.height(12.dp)); ReasonTag(it) }
                     Spacer(Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         val saved = state.isVideoSaved(v.id)
                         PanelButton(if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre")) { state.toggleVideo(v) }
                         PanelButton(tr("Share", "Del")) { Share.video(ctx, v) }

@@ -172,10 +172,35 @@ object Asr {
             ?: run { Diag.log("asr", "$videoId: no audio track"); return@withContext null }
         Diag.log("asr", "$videoId: downloading audio")
         val part = File(dir, "$videoId.part")
+        val clen = android.net.Uri.parse(url).getQueryParameter("clen")?.toLongOrNull()
+        if (clen != null && clen in 1..(60L * 1024 * 1024)) {
+            // Size known: fetch 1 MB pieces, 4 at a time (much faster than one after another).
+            val piece = 1L * 1024 * 1024
+            val gate = kotlinx.coroutines.sync.Semaphore(4)
+            java.io.RandomAccessFile(part, "rw").use { raf ->
+                raf.setLength(clen)
+                kotlinx.coroutines.coroutineScope {
+                    (0 until clen step piece).map { start ->
+                        launch(Dispatchers.IO) {
+                            gate.acquire()
+                            try {
+                                val end = minOf(start + piece, clen) - 1
+                                val bytes = http.newCall(Request.Builder().url("$url&range=$start-$end").header("User-Agent", "Mozilla/5.0").build())
+                                    .execute().use { r -> if (!r.isSuccessful) error("HTTP ${r.code}") else r.body!!.bytes() }
+                                synchronized(raf) { raf.seek(start); raf.write(bytes) }
+                            } finally { gate.release() }
+                        }
+                    }.forEach { it.join() }
+                }
+            }
+            part.renameTo(f)
+            Diag.log("asr", "$videoId: audio ${f.length() / 1024} KB (parallel)")
+            return@withContext f
+        }
         part.outputStream().use { out ->
             var pos = 0L
             val chunk = 2L * 1024 * 1024
-            val total = android.net.Uri.parse(url).getQueryParameter("clen")?.toLongOrNull()
+            val total = clen
             val cap = 40L * 1024 * 1024 // ~2 hours of low-bitrate audio
             while (pos < (total ?: cap) && pos < cap) {
                 coroutineContext.ensureActive()
@@ -326,7 +351,8 @@ object Asr {
                             if (rec != null) { if (rec.acceptWaveForm(out16, outN)) handleResult(rec.result) }
                             else {
                                 System.arraycopy(out16, 0, chunk, chunkN, outN); chunkN += outN
-                                val target = if (chunkStartMs == 0L) RATE * 6 else chunk.size
+                                // Short first piece so the first line shows fast, then 12 s pieces.
+                                val target = if (chunkStartMs == 0L) RATE * 5 else RATE * 12
                                 if (chunkN >= target) whisperChunk()
                             }
                             fedMs += outN * 1000L / RATE; outN = 0

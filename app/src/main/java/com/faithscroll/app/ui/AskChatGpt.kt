@@ -24,16 +24,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 object AskChatGpt {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    fun open(ctx: Context, video: Video, atMs: Long) {
+    /** [onBusy] shows/hides the loading screen (null = done); [openPage] shows ChatGPT inside the app. */
+    fun open(ctx: Context, video: Video, atMs: Long, onBusy: (String?) -> Unit, openPage: (String) -> Unit) {
         scope.launch {
-            Toast.makeText(ctx, tr("Opening ChatGPT…", "Åpner ChatGPT …"), Toast.LENGTH_SHORT).show()
+            onBusy(tr("Getting what was said…", "Henter det som ble sagt …"))
             val t0 = System.currentTimeMillis()
             var cues = withTimeoutOrNull(4_000) { Transcripts.original(video.id, urgent = true) }?.cues
             if (cues.isNullOrEmpty()) {
                 // No YouTube captions: use what the phone already transcribed, or transcribe the last 90 s now.
                 val have = com.faithscroll.app.data.Asr.cues(video.id).value
                 cues = if (have.any { it.start <= atMs && it.end >= atMs - 60_000 }) have else {
-                    Toast.makeText(ctx, tr("Transcribing the last 90 seconds…", "Transkriberer de siste 90 sekundene …"), Toast.LENGTH_LONG).show()
+                    onBusy(tr("Transcribing the last minute…", "Transkriberer det siste minuttet …"))
                     withTimeoutOrNull(65_000) { Transcripts.transcribeWindow(ctx, video.id, atMs) }
                     com.faithscroll.app.data.Asr.cues(video.id).value
                 }
@@ -44,8 +45,8 @@ object AskChatGpt {
                 .apply { if (cues.isNullOrEmpty()) appendQueryParameter("hints", "search") } // no captions: let it look the video up
                 .appendQueryParameter("q", q)
                 .build()
-            runCatching { CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(ctx, url) }
-                .onFailure { ctx.startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            onBusy(null)
+            openPage(url.toString()) // inside the app, not a separate browser
         }
     }
 

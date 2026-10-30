@@ -110,7 +110,7 @@ object Transcripts {
      * just that slice of audio is downloaded and recognised, so an answer comes quickly.
      */
     suspend fun transcribeWindow(ctx: android.content.Context, videoId: String, atMs: Long): String {
-        val from = (atMs - 90_000).coerceAtLeast(0)
+        val from = (atMs - 60_000).coerceAtLeast(0) // the last minute is enough context and twice as quick
         Asr.ensure(ctx, videoId, from, atMs + 5_000)
         kotlinx.coroutines.withTimeoutOrNull(60_000) {
             Asr.cues(videoId).first { cues -> cues.any { it.end >= atMs - 4_000 } }

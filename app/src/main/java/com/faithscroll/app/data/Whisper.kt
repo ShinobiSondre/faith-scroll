@@ -27,7 +27,7 @@ object Whisper {
 
     private external fun nativeInit(path: String): Long
     private external fun nativeFree(ctx: Long)
-    private external fun nativeTranscribe(ctx: Long, samples: FloatArray, lang: String, threads: Int): ByteArray
+    private external fun nativeTranscribe(ctx: Long, samples: FloatArray, lang: String, threads: Int, audioCtx: Int): ByteArray
 
     fun file(c: Context) = File(c.filesDir, "whisper/$FILE")
     fun ready(c: Context) = file(c).let { it.exists() && it.length() > 40_000_000 }
@@ -77,8 +77,12 @@ object Whisper {
     fun transcribe(pcm: ShortArray, n: Int, lang: String = "no"): List<Triple<Long, Long, String>> = synchronized(this) {
         if (ctx == 0L || n < 1600) return emptyList()
         val f = FloatArray(n) { pcm[it] / 32768f }
-        val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
-        val text = nativeTranscribe(ctx, f, lang, threads).toString(Charsets.UTF_8)
+        val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4) // the fast cores
+        // Whisper's window is 1500 steps for 30 s; use just enough for this chunk (+ a little margin).
+        val audioCtx = (n / 16000.0 * 50 + 64).toInt().coerceIn(256, 1500)
+        val t0 = System.currentTimeMillis()
+        val text = nativeTranscribe(ctx, f, lang, threads, audioCtx).toString(Charsets.UTF_8)
+        Diag.log("whisper", "${n / 16000} s of audio in ${(System.currentTimeMillis() - t0) / 1000.0} s")
         text.lineSequence().mapNotNull { line ->
             val parts = line.split('\t', limit = 3)
             if (parts.size < 3) return@mapNotNull null
