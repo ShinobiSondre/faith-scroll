@@ -37,8 +37,11 @@ fun WebPageScreen(url: String, onClose: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, com.faithscroll.app.util.tr("Close", "Lukk"), tint = Color.White) }
+            // For "What do they mean here?": a short title instead of the address.
+            val question = android.net.Uri.parse(url).takeIf { it.host?.contains("chatgpt.com") == true }
+                ?.getQueryParameter("q")?.let { q -> Regex("(Hva mener de ved [0-9:]+\\?|What do they mean at [0-9:]+\\?)").find(q)?.value }
             Text(
-                android.net.Uri.parse(url).host?.removePrefix("www.") ?: url,
+                question ?: (android.net.Uri.parse(url).host?.removePrefix("www.") ?: url),
                 color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }

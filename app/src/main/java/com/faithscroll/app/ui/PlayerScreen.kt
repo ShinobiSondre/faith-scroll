@@ -208,7 +208,17 @@ fun InAppWebPage(url: String, modifier: Modifier = Modifier) {
                 settings.userAgentString = settings.userAgentString.replace("; wv", "") // a normal Chrome to websites
                 android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                 webChromeClient = WebChromeClient()
+                // On ChatGPT: hide the long question we sent (video, timestamps, transcript); show only the answer.
+                val cleanChat = "(function(){if(document.getElementById('fs-clean'))return;var s=document.createElement('style');s.id='fs-clean';" +
+                    "s.textContent='[data-message-author-role=\"user\"]{display:none !important}';(document.head||document.documentElement).appendChild(s);})();"
+                if (android.net.Uri.parse(url).host?.contains("chatgpt.com") == true &&
+                    androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) runCatching {
+                    androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, cleanChat, setOf("https://chatgpt.com"))
+                }
                 webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, u: String) {
+                        if (android.net.Uri.parse(u).host?.contains("chatgpt.com") == true) view.evaluateJavascript(cleanChat, null)
+                    }
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         val scheme = request.url.scheme
                         return !(scheme == "http" || scheme == "https")
