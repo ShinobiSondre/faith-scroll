@@ -25,4 +25,4 @@ jobs:
           git config user.email "github-actions@users.noreply.github.com"
           git add app/src/main/assets/bible_no_nt.json.gz
           git commit -m "Add modern Norwegian New Testament (En Levende Bok, CC BY-SA 4.0)" || exit 0
-          git push
+          git pull --rebase origin main && git push origin HEAD:main
