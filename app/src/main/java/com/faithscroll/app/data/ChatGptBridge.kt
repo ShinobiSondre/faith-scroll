@@ -106,12 +106,11 @@ object ChatGptBridge {
         history = turns.value
         sent.clear(); sent += firstQuestion
         currentQ = firstQuestion
-        pageQuestions = 0
         error.value = null
         status.value = Status.THINKING
         pageUrl.value = url
         w.loadUrl(url)
-        watch(answerIndex = 0, expectUsers = 1, fallback = null)
+        watch()
     }
 
     /** Everything shown before the answer being written now; the new answer is added after it. */
@@ -134,42 +133,15 @@ object ChatGptBridge {
         turns.value = turns.value + Turn(true, shown)
         history = turns.value
         sent += send
+        currentQ = q
         status.value = Status.THINKING
         error.value = null
-        // First: the same conversation – close any pop-ups, then type the question in.
-        w.evaluateJavascript(DISMISS, null)
-        scope.launch {
-            delay(500)
-            w.evaluateJavascript(typeJs(send)) { r -> Diag.log("ask", "follow-up typed into the same chat: $r") }
-        }
-        currentQ = send
-        watch(answerIndex = pageQuestions, expectUsers = pageQuestions + 1, fallback = q)
-    }
-
-    /** Loads a fresh ChatGPT link carrying the whole conversation (when typing into the page is blocked). */
-    private fun sendAsLink(q: String) {
-        val w = web ?: return
-        currentQ = q
         val url = android.net.Uri.parse("https://chatgpt.com/").buildUpon().appendQueryParameter("q", q).build().toString()
         pageUrl.value = url
-        Diag.log("ask", "follow-up sent as a new link instead (${q.length} chars, with the conversation so far)")
+        Diag.log("ask", "follow-up sent as a new link (${q.length} chars)")
         w.loadUrl(url)
+        watch()
     }
-
-    /** How many questions the current ChatGPT page holds (so the next answer is the one after them). */
-    @Volatile private var pageQuestions = 0
-
-    // Closes pop-ups: cookie banner, "log in / stay logged out", "not now", and dialog close (✕) buttons.
-    private const val DISMISS = "(function(){var n=0;" +
-        "var bs=document.querySelectorAll('button, a, [role=\"button\"]');for(var x=0;x<bs.length;x++){var bt=(bs[x].innerText||bs[x].getAttribute('aria-label')||'').trim();" +
-        "if(bt.length<45&&/(avvis|reject|forbli utlogget|stay logged out|fortsett uten|continue without|ikke nå|not now|maybe later|kanskje senere|^lukk$|^close$|dismiss)/i.test(bt)){bs[x].click();n++;}}" +
-        "var ds=document.querySelectorAll('[role=\"dialog\"] [aria-label*=\"lose\"], [role=\"dialog\"] [aria-label*=\"Lukk\"], [data-testid=\"close-button\"]');for(var y=0;y<ds.length;y++){ds[y].click();n++;}" +
-        "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',keyCode:27,bubbles:true}));return n;})()"
-
-    // What's on screen when something blocks: dialog texts and button labels (for the diagnostics).
-    private const val BLOCKERS = "(function(){var d=[].slice.call(document.querySelectorAll('[role=\"dialog\"], [aria-modal=\"true\"]')).map(function(e){return (e.innerText||'').replace(/\\s+/g,' ').slice(0,160);});" +
-        "var b=[].slice.call(document.querySelectorAll('button')).map(function(e){return (e.innerText||e.getAttribute('aria-label')||'').trim();}).filter(function(t){return t&&t.length<40;}).slice(0,20);" +
-        "return JSON.stringify({dialogs:d,buttons:b});})()"
 
     /** The video + the conversation so far + the new question, kept short enough for a link. */
     private fun followUpPrompt(send: String): String {
@@ -216,13 +188,11 @@ object ChatGptBridge {
     } == true
 
     /** Reads the page every ~0.6 s; the answer streams into the panel and is done when it stops growing. */
-    private fun watch(answerIndex: Int, expectUsers: Int, fallback: String?) {
+    private fun watch() {
+        val expected = 1 // every question is a fresh ChatGPT page with exactly one answer
         poll?.cancel()
         poll = scope.launch {
-            var expected = answerIndex + 1
-            var wantUsers = expectUsers
-            var backup = fallback
-            var t0 = System.currentTimeMillis()
+            val t0 = System.currentTimeMillis()
             var last = ""
             var stableSince = 0L
             var nudged = 0L
@@ -233,14 +203,6 @@ object ChatGptBridge {
                 val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
                 o.optString("url").takeIf { it.startsWith("http") }?.let { pageUrl.value = it }
                 val answers = o.optJSONArray("a") ?: JSONArray()
-                // The follow-up didn't show up in the chat within 8 s: something is blocking. Note what, then use the link.
-                if (backup != null && o.optInt("users") < wantUsers && System.currentTimeMillis() - t0 > 8_000) {
-                    w.evaluateJavascript(BLOCKERS) { b -> Diag.log("ask", "follow-up blocked on the page – ${runCatching { JSONTokener(b).nextValue() as String }.getOrDefault(b)}") }
-                    sendAsLink(backup)
-                    backup = null; expected = 1; wantUsers = 1; t0 = System.currentTimeMillis(); last = ""
-                    continue
-                }
-                if (o.optInt("users") < wantUsers) { w.evaluateJavascript(DISMISS, null) }
                 val text = (if (answers.length() >= expected) answers.optString(expected - 1).trim() else "").let(::clean)
                 if (text.isNotEmpty()) {
                     // Everything before + the answer as it's being written.
@@ -250,7 +212,6 @@ object ChatGptBridge {
                     val busy = o.optBoolean("busy")
                     // Finished: ChatGPT's stop button is gone and the text hasn't changed for 2.5 s.
                     if (!busy && text.length >= 20 && System.currentTimeMillis() - stableSince > 2500) {
-                        pageQuestions = wantUsers
                         status.value = Status.DONE
                         Diag.log("ask", "ChatGPT answered in ${(System.currentTimeMillis() - t0) / 1000.0} s (${text.length} chars)")
                         return@launch
