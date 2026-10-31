@@ -103,12 +103,21 @@ object ChatGptBridge {
         firstQuestion = android.net.Uri.parse(url).getQueryParameter("q").orEmpty()
         val w = webView(a) ?: run { fail("No window"); return }
         turns.value = listOf(Turn(true, question))
+        history = turns.value
+        sent.clear(); sent += firstQuestion
+        currentQ = firstQuestion
         error.value = null
         status.value = Status.THINKING
         pageUrl.value = url
         w.loadUrl(url)
-        watch(expected = 1)
+        watch()
     }
+
+    /** Everything shown before the answer being written now; the new answer is added after it. */
+    @Volatile private var history: List<Turn> = emptyList()
+    /** What was actually sent to ChatGPT for each question (with transcript etc.). */
+    private val sent = mutableListOf<String>()
+    @Volatile private var currentQ = ""
 
     /** Types a follow-up question into the same conversation. */
     /**
@@ -117,17 +126,45 @@ object ChatGptBridge {
      */
     fun followUp(shown: String, send: String = shown) {
         val w = web ?: return
+        // Typing into ChatGPT's page gets blocked by its log-in/cookie pop-ups for logged-out users,
+        // so a follow-up goes the same way as the first question: a fresh ChatGPT link that carries
+        // the video, the conversation so far and the new question. In the panel it's one chat.
+        val q = followUpPrompt(send)
         turns.value = turns.value + Turn(true, shown)
+        history = turns.value
+        sent += send
+        currentQ = q
         status.value = Status.THINKING
         error.value = null
-        // The page is invisible and has no keyboard focus, so the text is put into ChatGPT's input
-        // box directly (and announced as typed), then the send button is pressed.
-        val js = typeJs(send)
-        w.evaluateJavascript(js) { r ->
-            Diag.log("ask", "follow-up typed: $r")
-            if (r?.contains("noinput") == true) fail(com.faithscroll.app.util.tr("Couldn't type the question into ChatGPT.", "Klarte ikke å skrive spørsmålet inn i ChatGPT."))
+        val url = android.net.Uri.parse("https://chatgpt.com/").buildUpon().appendQueryParameter("q", q).build().toString()
+        pageUrl.value = url
+        Diag.log("ask", "follow-up sent as a new link (${q.length} chars)")
+        w.loadUrl(url)
+        watch()
+    }
+
+    /** The video + the conversation so far + the new question, kept short enough for a link. */
+    private fun followUpPrompt(send: String): String {
+        val no = com.faithscroll.app.util.Lang.no
+        val header = firstQuestion.lineSequence().firstOrNull().orEmpty()
+        val past = buildString {
+            var qi = 0
+            for (t in turns.value) {
+                if (t.user) {
+                    // The first question is the long one with the transcript; summarise it.
+                    val text = if (qi == 0) (if (no) "Hva mener de på dette tidspunktet?" else "What do they mean at this moment?") else sent.getOrElse(qi) { t.text }
+                    append(if (no) "Spørsmål: " else "Question: ").append(text.take(1500)).append("\n"); qi++
+                } else append(if (no) "Ditt svar: " else "Your answer: ").append(t.text.take(900)).append("\n\n")
+            }
         }
-        watch(expected = turns.value.count { it.user })
+        // The transcript around the moment (from the first question), if there's room.
+        val transcript = firstQuestion.substringAfter("\n", "").substringBeforeLast("\n\n").take(2500)
+        val ask = (if (no) "Nytt spørsmål: " else "New question: ") + send
+        val intro = if (no) "Vi snakker om denne videoen. Fortsett samtalen og svar kort på norsk." else "We're talking about this video. Continue the conversation and answer briefly."
+        val label = if (no) "Samtalen så langt" else "Conversation so far"
+        var out = "$header\n$intro\n\n" + (if (send.length < 2000) "$transcript\n\n" else "") + "$label:\n$past$ask"
+        if (out.length > 6000) out = "$header\n$intro\n\n$label:\n${past.takeLast(1500)}${ask.takeLast(4000)}"
+        return out
     }
 
     /** Puts [text] into ChatGPT's input box (no keyboard focus needed) and presses send. */
@@ -151,7 +188,8 @@ object ChatGptBridge {
     } == true
 
     /** Reads the page every ~0.6 s; the answer streams into the panel and is done when it stops growing. */
-    private fun watch(expected: Int) {
+    private fun watch() {
+        val expected = 1 // every question is a fresh ChatGPT page with exactly one answer
         poll?.cancel()
         poll = scope.launch {
             val t0 = System.currentTimeMillis()
@@ -167,15 +205,8 @@ object ChatGptBridge {
                 val answers = o.optJSONArray("a") ?: JSONArray()
                 val text = (if (answers.length() >= expected) answers.optString(expected - 1).trim() else "").let(::clean)
                 if (text.isNotEmpty()) {
-                    val users = turns.value.filter { it.user }
-                    // Rebuild: question, answer, question, answer… with the newest answer growing.
-                    val list = mutableListOf<Turn>()
-                    users.forEachIndexed { i, u ->
-                        list += u
-                        val ans = if (i == expected - 1) text else clean(answers.optString(i).trim())
-                        if (ans.isNotEmpty()) list += Turn(false, ans)
-                    }
-                    turns.value = list
+                    // Everything before + the answer as it's being written.
+                    turns.value = history + Turn(false, text)
                     if (last.isEmpty()) Diag.log("ask", "ChatGPT started answering after ${(System.currentTimeMillis() - t0) / 1000.0} s")
                     if (text != last) { last = text; stableSince = System.currentTimeMillis() }
                     val busy = o.optBoolean("busy")
@@ -191,12 +222,12 @@ object ChatGptBridge {
                     if (o.optInt("pending") > 0 && waited > 4_000 && System.currentTimeMillis() - nudged > 5_000) {
                         nudged = System.currentTimeMillis()
                         w.evaluateJavascript(SEND) { r -> Diag.log("ask", "question was waiting unsent – pressed send ($r)") }
-                    } else if (expected == 1 && o.optInt("users") == 0 && o.optInt("pending") == 0 && o.optBoolean("input") &&
-                        waited > 6_000 && System.currentTimeMillis() - nudged > 8_000 && firstQuestion.isNotBlank()) {
+                    } else if (o.optInt("users") == 0 && o.optInt("pending") == 0 && o.optBoolean("input") &&
+                        waited > 6_000 && System.currentTimeMillis() - nudged > 8_000 && currentQ.isNotBlank()) {
                         // The link's question never arrived (e.g. a pop-up was in the way): type it in ourselves.
                         nudged = System.currentTimeMillis()
                         Diag.log("ask", "question didn't arrive from the link – typing it in")
-                        w.evaluateJavascript(typeJs(firstQuestion), null)
+                        w.evaluateJavascript(typeJs(currentQ), null)
                     }
                     if (waited > 45_000) {
                         val seen = "${o.optString("title")} | ${o.optString("body").replace("\n", " ").take(160)}"
