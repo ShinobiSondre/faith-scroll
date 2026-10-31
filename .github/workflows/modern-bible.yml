@@ -14,8 +14,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download and convert
         run: |
-          curl -fL -o noblb_vpl.zip https://eBible.org/Scriptures/noblb_vpl.zip
-          python3 tools/build_modern_nt.py noblb_vpl.zip app/src/main/assets/bible_no_nt.json.gz
+          curl -fL -A "Mozilla/5.0" -o noblb_vpl.zip https://eBible.org/Scriptures/noblb_vpl.zip || { echo "::error::download failed"; exit 1; }
+          ls -la noblb_vpl.zip
+          echo "::warning title=zip contents::$(unzip -l noblb_vpl.zip | tail -n +4 | head -8 | tr '\n' ' ')"
+          f=$(unzip -Z1 noblb_vpl.zip | grep -i '\.txt$' | head -1); echo "::warning title=first lines::$(unzip -p noblb_vpl.zip "$f" | head -3 | tr '\n' ' ' | cut -c1-400)"
+          python3 tools/build_modern_nt.py noblb_vpl.zip app/src/main/assets/bible_no_nt.json.gz 2>&1 | tee conv.log || { echo "::error::$(tail -3 conv.log | tr '\n' ' ')"; exit 1; }
       - name: Commit
         run: |
           git config user.name "github-actions"
