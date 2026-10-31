@@ -71,8 +71,12 @@ object VerseRepository {
         val mapped = runCatching { org.json.JSONObject(ctx.assets.open("verses_no.json").bufferedReader().use { it.readText() }) }.getOrNull()
         return list.mapNotNull { v ->
             mapped?.optJSONObject(v.ref)?.let { o ->
-                v.copy(text = o.getString("text"), label = o.getString("label"),
-                    noBook = o.getInt("book"), noChapter = o.getInt("chapter"), noFrom = o.getInt("from"), noTo = o.getInt("to"))
+                val book = o.getInt("book"); val ch = o.getInt("chapter"); val from = o.getInt("from"); val to = o.getInt("to")
+                // New Testament: modern bokmål (En Levende Bok) instead of the 1930 wording.
+                val modern = if (book >= 39 && BibleNo.isModern(ctx, book)) BibleNo.chapter(ctx, book, ch)
+                    ?.let { vs -> (from..to).mapNotNull { vs.getOrNull(it - 1) }.joinToString(" ").trim() }?.takeIf { it.isNotBlank() } else null
+                v.copy(text = modern ?: o.getString("text"), label = o.getString("label"),
+                    noBook = book, noChapter = ch, noFrom = from, noTo = to)
             } ?: BibleNo.lookup(ctx, v.ref)?.let { (text, label, pos) ->
                 v.copy(text = text, label = label, noBook = pos[0], noChapter = pos[1], noFrom = pos[2], noTo = pos[3])
             }

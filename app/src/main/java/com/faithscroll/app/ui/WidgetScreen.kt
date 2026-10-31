@@ -238,7 +238,7 @@ fun WidgetScreen(
         DiagnosticsCard()
         Spacer(Modifier.height(16.dp))
         Text(
-            tr("Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.", "Bibeltekst: Bibelen 1930, Det Norske Bibelselskap (fri bruk). Videoene strømmes fra YouTube-kanaler med vitnesbyrd og bibelundervisning."),
+            tr("Scripture: King James Version (public domain). Videos stream from YouTube channels sharing testimonies and Bible teaching.", "Bibeltekst: Det nye testamentet fra En Levende Bok (Biblica Open, CC BY-SA 4.0); Det gamle testamentet fra Bibelen 1930, Det Norske Bibelselskap (fri bruk). Videoene strømmes fra YouTube-kanaler med vitnesbyrd og bibelundervisning."),
             color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp
         )
     }
@@ -412,7 +412,7 @@ private fun LanguageCard() {
             }
         }
         Text(
-            tr("Bible verses: King James Version.", "Bibelvers: Bibelen 1930 (Det Norske Bibelselskap)."),
+            tr("Bible verses: King James Version.", "Bibelvers: " + com.faithscroll.app.data.BibleNo.CREDITS),
             color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
         )
     }

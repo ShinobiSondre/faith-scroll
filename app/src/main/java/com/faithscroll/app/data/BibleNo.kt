@@ -5,8 +5,9 @@ import org.json.JSONArray
 import java.util.zip.GZIPInputStream
 
 /**
- * The Norwegian Bible Society's 1930 Bokmål translation (public domain), bundled so verses and
- * whole chapters can be read in Norwegian, offline.
+ * Norwegian Bible text, offline: the New Testament in modern bokmål from "En Levende Bok"
+ * (Biblica Open, CC BY-SA 4.0), the Old Testament from the Norwegian Bible Society's 1930
+ * translation (public domain – there's no free modern Norwegian Old Testament).
  */
 object BibleNo {
     const val NAME = "Bibelen 1930"
@@ -41,8 +42,33 @@ object BibleNo {
 
     fun bookName(ctx: Context, index: Int): String = load(ctx).getOrNull(index)?.first.orEmpty().let { if (it == "Salmene") "Salme" else it }
 
-    /** All verses of a chapter (1-based chapter), or null. */
-    fun chapter(ctx: Context, book: Int, chapter: Int): List<String>? = load(ctx).getOrNull(book)?.second?.getOrNull(chapter - 1)
+    /** All verses of a chapter (1-based chapter), or null. New Testament: modern text when available. */
+    fun chapter(ctx: Context, book: Int, chapter: Int): List<String>? =
+        modern(ctx, book, chapter)?.takeIf { it.any { v -> v.isNotBlank() } } ?: load(ctx).getOrNull(book)?.second?.getOrNull(chapter - 1)
+
+    /** True when this book is read from the modern translation. */
+    fun isModern(ctx: Context, book: Int): Boolean = modernBooks(ctx)?.has(book.toString()) == true
+
+    @Volatile private var nt: org.json.JSONObject? = null
+    @Volatile private var ntTried = false
+    private fun modernBooks(ctx: Context): org.json.JSONObject? = nt ?: synchronized(this) {
+        if (!ntTried) {
+            ntTried = true
+            nt = runCatching {
+                org.json.JSONObject(GZIPInputStream(ctx.assets.open("bible_no_nt.json.gz")).bufferedReader().use { it.readText() })
+            }.getOrNull()
+        }
+        nt
+    }
+    private fun modern(ctx: Context, book: Int, chapter: Int): List<String>? {
+        if (book < 39) return null
+        val chs = modernBooks(ctx)?.optJSONArray(book.toString()) ?: return null
+        val vs = chs.optJSONArray(chapter - 1) ?: return null
+        return (0 until vs.length()).map { vs.optString(it) }
+    }
+
+    /** Where the text comes from, for the credits. */
+    const val CREDITS = "Det nye testamentet: En Levende Bok (Biblica Open, CC BY-SA 4.0). Det gamle testamentet: Bibelen 1930 (Det Norske Bibelselskap)."
 
     /** A verse range for an English reference like "John 3:16" or "Romans 8:38-39" (not Psalms, whose numbering differs). */
     fun lookup(ctx: Context, ref: String): Triple<String, String, IntArray>? {
