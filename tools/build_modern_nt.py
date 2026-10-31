@@ -8,11 +8,17 @@ CODES = ["MAT","MRK","LUK","JHN","ACT","ROM","1CO","2CO","GAL","EPH","PHP","COL"
 zf = zipfile.ZipFile(sys.argv[1])
 name = next(n for n in zf.namelist() if n.endswith("_vpl.txt") or n.endswith(".txt"))
 books = {}
-pat = re.compile(r"^([1-3A-Z]{3})\s+(\d+):(\d+)\s+(.*)$")
-for line in zf.read(name).decode("utf-8-sig").splitlines():
-    m = pat.match(line.strip())
-    if not m or m.group(1) not in CODES: continue
-    b = 39 + CODES.index(m.group(1)); c = int(m.group(2)); v = int(m.group(3))
+pat = re.compile(r"^([1-4A-Z][A-Z0-9]{1,3})\s+(\d+):(\d+)\s+(.*)$")
+lines = [pat.match(l.strip()) for l in zf.read(name).decode("utf-8-sig").splitlines()]
+lines = [m for m in lines if m]
+# Book codes in the order they appear: the 27 New Testament books always come in canonical order.
+order = []
+for m in lines:
+    if m.group(1) not in order: order.append(m.group(1))
+print("codes:", " ".join(order))
+assert len(order) == 27, f"expected 27 books, got {len(order)}"
+for m in lines:
+    b = 39 + order.index(m.group(1)); c = int(m.group(2)); v = int(m.group(3))
     text = re.sub(r"\s+", " ", m.group(4)).strip()
     chs = books.setdefault(str(b), [])
     while len(chs) < c: chs.append([])
