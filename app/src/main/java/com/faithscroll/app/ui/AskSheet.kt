@@ -195,45 +195,6 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
                 if (status == com.faithscroll.app.data.ChatGptBridge.Status.DONE) item {
                     Text(tr("Answer from ChatGPT", "Svar fra ChatGPT"), color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
                 }
-                // More context: what was said in the 5 minutes before the pause, sent into the same chat.
-                if (status == com.faithscroll.app.data.ChatGptBridge.Status.DONE || context != null) item {
-                    val needs = B.wantsMoreContext()
-                    Column {
-                        if (needs && context == null) Text(tr("ChatGPT needs more context.", "ChatGPT trenger mer sammenheng."), color = Gold, fontSize = 13.sp)
-                        Row(
-                            Modifier.padding(top = 6.dp).clip(RoundedCornerShape(50))
-                                .background(if (needs) Gold else Color.White.copy(alpha = 0.12f))
-                                .clickable(enabled = context == null && !usedContext) {
-                                    context = 0
-                                    scope.launch {
-                                        val text = com.faithscroll.app.data.Transcripts.fiveMinutes(ctx, video.id, atMs) { context = it }
-                                        context = null; usedContext = true
-                                        val at = com.faithscroll.app.data.AskPrompt.time(atMs)
-                                        B.followUp(
-                                            tr("With 5 minutes of context", "Med 5 minutter sammenheng"),
-                                            tr("Here is more of what was said – the 5 minutes before $at (timestamped):\n$text\n\nWith this context: what do they mean at $at? Answer briefly.",
-                                                "Her er mer av det som ble sagt – de 5 minuttene før $at (med tidspunkt):\n$text\n\nMed denne sammenhengen: hva mener de ved $at? Svar kort på norsk.")
-                                        )
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (context != null) {
-                                CircularProgressIndicator(color = if (needs) Ink else Gold, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text(
-                                when {
-                                    context != null -> tr("Gathering 5 minutes… ${context} lines", "Henter 5 minutter … ${context} linjer")
-                                    usedContext -> tr("5 minutes of context sent", "5 minutter sammenheng sendt")
-                                    else -> tr("⟲ Take 5 minutes of context", "⟲ Ta med 5 minutter sammenheng")
-                                },
-                                color = if (needs) Ink else Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(

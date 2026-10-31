@@ -273,7 +273,10 @@ fun VideoCard(
                 color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
             )
             Spacer(Modifier.height(6.dp))
-            Text(video.channel, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            // Tap the channel name: the channel's page with all its videos.
+            val openChannel = LocalOpenChannel.current
+            Text(video.channel + if (isYouTube) "  ›" else "", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                modifier = if (isYouTube) Modifier.clickable { paused = true; openChannel(video) } else Modifier)
             Spacer(Modifier.height(4.dp))
             Text(video.title, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(tr("more", "mer"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -319,7 +322,9 @@ fun VideoCard(
             visible = expanded, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)),
             modifier = Modifier.fillMaxSize()
         ) {
-            VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) })
+            val openChannel = LocalOpenChannel.current
+            VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) },
+                onChannel = if (isYouTube) ({ expanded = false; paused = true; openChannel(video) }) else null)
         }
         asking?.let { at -> AskSheet(video, at) { asking = null } }
         chatAsk?.let { (at, url) -> ChatGptSheet(video, at, url, onOpenPage = { chatAsk = null; openPage(it) }) { chatAsk = null } }
@@ -530,7 +535,7 @@ function setCaptions(on){capsOn=on;applyCaptions();}
 
 /** Full title, description and a button to the original page. */
 @Composable
-private fun VideoDetails(video: Video, onClose: () -> Unit, onGoToPage: () -> Unit) {
+private fun VideoDetails(video: Video, onClose: () -> Unit, onGoToPage: () -> Unit, onChannel: (() -> Unit)? = null) {
     var description by remember(video.id) { mutableStateOf(StreamResolver.cached(video.id)?.description.orEmpty()) }
     LaunchedEffect(video.id) {
         if (description.isBlank() && video.direct.isBlank()) description = StreamResolver.resolve(video.id)?.description.orEmpty()
@@ -559,6 +564,14 @@ private fun VideoDetails(video: Video, onClose: () -> Unit, onGoToPage: () -> Un
                 color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clip(CircleShape).background(Gold).clickable(onClick = onGoToPage).padding(horizontal = 18.dp, vertical = 10.dp)
             )
+            onChannel?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    tr("More from ${video.channel}", "Mer fra ${video.channel}") + "  →",
+                    color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.14f)).clickable(onClick = it).padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
             Spacer(Modifier.height(80.dp))
         }
     }

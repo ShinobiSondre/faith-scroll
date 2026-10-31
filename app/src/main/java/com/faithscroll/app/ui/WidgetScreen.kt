@@ -132,8 +132,6 @@ fun WidgetScreen(
         QualityCard()
         Spacer(Modifier.height(16.dp))
         YouTubeCard(onChanged = { sourcesChanged() })
-        Spacer(Modifier.height(16.dp))
-        SourcesCard()
 
         Spacer(Modifier.height(28.dp))
         Text(tr("Home screen widget", "Widget på hjemskjermen"), color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold)

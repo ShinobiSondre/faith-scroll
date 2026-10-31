@@ -105,25 +105,10 @@ fun YouTubeCard(onChanged: () -> Unit) {
             color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp
         )
         Spacer(Modifier.height(12.dp))
-        Button(
-            onClick = { if (YouTubeAccount.signedIn()) readAccount() else login = true },
-            enabled = !busy,
-            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(when {
-                busy -> status ?: tr("Connecting…", "Kobler til …")
-                signedIn -> tr("Refresh my subscriptions", "Oppdater abonnementene mine")
-                else -> tr("Sign in with Google", "Logg inn med Google")
-            })
-        }
         OutlinedButton(
             onClick = { takeout.launch(arrayOf("text/*", "text/csv", "text/comma-separated-values", "application/zip", "application/octet-stream")) },
             enabled = !busy, modifier = Modifier.fillMaxWidth()
-        ) { Text(tr("Import from Google Takeout", "Importer fra Google Takeout"), color = Gold) }
-        if (signedIn) TextButton(onClick = { YouTubeAccount.signOut(); signedIn = false }, enabled = !busy) {
-            Text(tr("Sign out of YouTube", "Logg ut av YouTube"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
-        }
+        ) { Text(if (busy) status ?: tr("Importing…", "Importerer …") else tr("Import from Google Takeout", "Importer fra Google Takeout"), color = Gold) }
 
         if (subs.isNotEmpty()) {
             val favs = subs.count { it.favourite }
@@ -173,11 +158,6 @@ fun YouTubeCard(onChanged: () -> Unit) {
         )
     }
 
-    if (login) YouTubeLoginDialog { ok ->
-        login = false
-        signedIn = YouTubeAccount.signedIn()
-        if (ok || signedIn) readAccount()
-    }
 
     setupHelp?.let { msg ->
         AlertDialog(
