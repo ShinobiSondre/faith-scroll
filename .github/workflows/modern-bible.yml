@@ -18,7 +18,10 @@ jobs:
           ls -la noblb_vpl.zip
           echo "::warning title=zip contents::$(unzip -l noblb_vpl.zip | tail -n +4 | head -8 | tr '\n' ' ')"
           f=$(unzip -Z1 noblb_vpl.zip | grep -i '\.txt$' | head -1); echo "::warning title=first lines::$(unzip -p noblb_vpl.zip "$f" | head -3 | tr '\n' ' ' | cut -c1-400)"
-          python3 tools/build_modern_nt.py noblb_vpl.zip app/src/main/assets/bible_no_nt.json.gz 2>&1 | tee conv.log || { echo "::error::$(tail -3 conv.log | tr '\n' ' ')"; exit 1; }
+          set +e; python3 tools/build_modern_nt.py noblb_vpl.zip app/src/main/assets/bible_no_nt.json.gz > conv.log 2>&1; rc=$?; set -e
+          echo "::warning title=converter::rc=$rc $(tail -c 600 conv.log | tr '\n' ' ')"
+          ls -la app/src/main/assets/
+          [ $rc -eq 0 ]
       - name: Publish to the "models" release
         env:
           GH_TOKEN: ${{ github.token }}
