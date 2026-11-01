@@ -1,5 +1,6 @@
 package com.faithscroll.app.ui
 
+import androidx.compose.material.icons.filled.Search
 import com.faithscroll.app.util.tr
 
 import androidx.compose.animation.core.Animatable
@@ -111,7 +112,8 @@ fun FeedScreen(
     suspended: Boolean = false,
     twoPane: Boolean = false,
     onOpenVideo: (Video) -> Unit = {},
-    onBeStill: () -> Unit = {}
+    onBeStill: () -> Unit = {},
+    onSearch: () -> Unit = {}
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -286,7 +288,7 @@ fun FeedScreen(
                     }
                 }
             }
-            FeedHeader(state, onBeStill)
+            FeedHeader(state, onBeStill, onSearch)
         }
     }
 
@@ -309,13 +311,19 @@ fun FeedScreen(
 }
 
 @Composable
-private fun FeedHeader(state: AppState, onBeStill: () -> Unit) {
+private fun FeedHeader(state: AppState, onBeStill: () -> Unit, onSearch: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("FaithScroll", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif)
         Spacer(Modifier.weight(1f))
+        // Search by feeling or theme
+        Box(
+            Modifier.size(34.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f)).clickable(onClick = onSearch),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Filled.Search, tr("Search", "Søk"), tint = Color.White, modifier = Modifier.size(19.dp)) }
+        Spacer(Modifier.width(8.dp))
         // Quiet time with God
         Text(
             "🙏 " + tr("Be still", "Vær stille"), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium,

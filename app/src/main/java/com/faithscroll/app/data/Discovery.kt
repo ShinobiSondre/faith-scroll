@@ -122,7 +122,12 @@ object Discovery {
         LangFilter.videos(out.distinctBy { it.id }.filter { !Seen.has(ctx, it.id) })
     }
 
-    private fun searchOnce(q: String): List<Video> {
+    /** One YouTube search for the search page (in the app's language; checked like everything else). */
+    suspend fun searchQuery(q: String): List<Video> = withContext(Dispatchers.IO) {
+        LangFilter.videos(runCatching { searchOnce(q, 20) }.onFailure { Diag.err("search", q, it) }.getOrDefault(emptyList()))
+    }
+
+    private fun searchOnce(q: String, max: Int = 12): List<Video> {
         StreamResolver.ensureInit()
         val (lang, country) = LangFilter.searchLanguage
         NewPipe.setupLocalization(Localization(lang, country), ContentCountry(country))
@@ -144,7 +149,7 @@ object Discovery {
                 }
                 Video(id, item.name ?: "", channel, kind)
             }
-            .take(12)
+            .take(max)
     }
 
     /** A real YouTube Short: marked as one (or a /shorts/ link), and at most a minute when the length is known. */

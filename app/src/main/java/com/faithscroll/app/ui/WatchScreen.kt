@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -54,13 +55,18 @@ import com.faithscroll.app.data.VideoLibrary
 
 /** Browse sermons and testimonies; everything plays in the in-app player. */
 @Composable
-fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Video>) -> Unit) {
+fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Video>) -> Unit, onSearch: () -> Unit = {}) {
     var filter by rememberSaveable { mutableStateOf("For you") }
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Column(Modifier.fillMaxSize().background(Ink).statusBarsPadding()) {
-        Text(tr("Watch", "Se"), color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 20.dp, top = 12.dp))
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Watch", "Se"), color = Color.White, fontSize = 28.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 20.dp, top = 12.dp).weight(1f))
+            androidx.compose.material3.IconButton(onClick = onSearch, modifier = Modifier.padding(top = 12.dp, end = 8.dp)) {
+                Icon(androidx.compose.material.icons.Icons.Filled.Search, tr("Search", "Søk"), tint = Color.White)
+            }
+        }
         Text(tr("Sermons and real stories of faith", "Prekener og ekte troshistorier"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp,
             modifier = Modifier.padding(start = 20.dp, bottom = 10.dp))
 

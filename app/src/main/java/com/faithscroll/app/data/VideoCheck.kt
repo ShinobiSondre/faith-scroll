@@ -71,6 +71,29 @@ object VideoCheck {
         }
     }
 
+    /** Checks extra videos (e.g. search results) right away, alongside the feed's own queue. */
+    fun checkExtra(ctx: Context, videos: List<Video>) {
+        appCtx = ctx.applicationContext
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v3.json"); runCatching { load() }; publish() }
+        val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
+        if (todo.isEmpty()) return
+        scope.launch {
+            val gate = kotlinx.coroutines.sync.Semaphore(3)
+            kotlinx.coroutines.coroutineScope {
+                for (v in todo) {
+                    gate.acquire()
+                    launch {
+                        try {
+                            val ok = runCatching { check(v) }.getOrNull()
+                            if (ok != null) results[v.id] = Result(ok, mode(), System.currentTimeMillis())
+                            publish(); save()
+                        } finally { gate.release() }
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun check(v: Video): Boolean? {
         // Can't read YouTube's page (e.g. offline): no verdict yet, it's checked again later.
         val info = WatchPage.info(v.id) ?: run { reject(v, "page unreadable (will retry)"); return null }

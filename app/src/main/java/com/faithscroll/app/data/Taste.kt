@@ -232,6 +232,9 @@ object Taste {
         save(ctx)
     }
 
+    /** You searched for a feeling/theme: more of it in the feed for a while. */
+    fun boostTheme(ctx: Context, theme: String, by: Float = 1f) { load(ctx); bump(themeScore, theme, by); save(ctx) }
+
     fun isMuted(ctx: Context, channel: String): Boolean { load(ctx); return channel in muted }
 
     // ---------- Ranking ----------

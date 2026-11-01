@@ -191,7 +191,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var tasteVersion by remember { mutableIntStateOf(0) }
     var beStill by remember { mutableStateOf(false) }
     var webPage by remember { mutableStateOf<String?>(null) }
-    var channelOf by remember { mutableStateOf<Video?>(null) } // a channel page, opened from one of its videos
+    var channelOf by remember { mutableStateOf<Video?>(null) }
+    var searchOpen by remember { mutableStateOf(false) } // search by feeling / theme // a channel page, opened from one of its videos
     var askReminders by remember { mutableStateOf(false) }
     // Android 13+ needs permission to show the prayer reminders.
     val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -300,10 +301,11 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                 val verifiedFeed = remember(feedVideos, ok) { feedVideos.filter { it.id in ok } }
                 FeedScreen(
                     state, verifiedFeed, social, bottomInset,
-                    suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null || channelOf != null,
+                    suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null || channelOf != null || searchOpen,
                     twoPane = twoPane,
                     onOpenVideo = { v -> openVideo(v, verifiedFeed); playerFromFeed = true },
-                    onBeStill = { beStill = true }
+                    onBeStill = { beStill = true },
+                    onSearch = { searchOpen = true }
                 )
             }
             AnimatedContent(
@@ -326,7 +328,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                                 )
                             }
                         }
-                        WatchScreen(checkedLibrary, bottomInset, openVideo)
+                        WatchScreen(checkedLibrary, bottomInset, openVideo, onSearch = { searchOpen = true })
                     }
                     2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
                     else -> WidgetScreen(
@@ -351,8 +353,14 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             }
         }
 
-        widgetVerse?.let { v -> VerseOverlay(v, state, onRead = { reading = it }) { widgetVerse = null } }
 
+        if (searchOpen) com.faithscroll.app.ui.SearchScreen(
+            inApp = (feedVideos + (library?.all ?: emptyList()) + discovered).distinctBy { it.id }
+                .filter { it.id in com.faithscroll.app.data.VideoCheck.verified.value },
+            onOpenVideo = { v, list -> openVideo(v, list) },
+            onOpenVerse = { widgetVerse = it }
+        ) { searchOpen = false }
+        widgetVerse?.let { v -> VerseOverlay(v, state, onRead = { reading = it }) { widgetVerse = null } }
         channelOf?.let { v -> com.faithscroll.app.ui.ChannelScreen(v, onOpenVideo = { video, list -> openVideo(video, list) }) { channelOf = null } }
         player?.let { (v, q) ->
             PlayerScreen(v, q, state, onLeaveAt = { if (playerFromFeed) com.faithscroll.app.data.PlaybackMemory.returnTo.value = it }) { player = null }
