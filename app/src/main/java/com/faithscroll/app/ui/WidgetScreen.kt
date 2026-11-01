@@ -354,13 +354,16 @@ private fun PrayerCard(onBeStill: () -> Unit, onNeedNotifications: () -> Unit) {
                     } else popup = on
                 }, colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold))
             }
-            TextButton(onClick = { com.faithscroll.app.prayer.Reminders.showPopup(ctx) }) {
-                Text(tr("Preview the reminder", "Forhåndsvis påminnelsen"), color = Gold, fontSize = 13.sp)
-            }
         }
         Spacer(Modifier.height(12.dp))
-        Button(onClick = onBeStill, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)) {
-            Text(tr("Be still with God", "Vær stille hos Gud"), fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onBeStill, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)) {
+                Text(tr("Be still with God", "Vær stille hos Gud"), fontWeight = FontWeight.SemiBold)
+            }
+            // See the animated reminder popup right now.
+            OutlinedButton(onClick = { com.faithscroll.app.prayer.Reminders.showPopup(ctx) }) {
+                Text(tr("▶ Preview popup", "▶ Forhåndsvis popup"), color = Gold, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
