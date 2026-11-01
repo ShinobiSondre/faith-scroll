@@ -254,10 +254,13 @@ fun VideoCard(
             }
         }
 
-        // Caption: tap to see the full title, description and a link to the original page
+        // Caption: tap it to open the channel's page (all its videos); "more" shows the full details.
+        val openChannel = LocalOpenChannel.current
         if (uiAlpha > 0f) Column(
             Modifier.align(Alignment.BottomStart).then(uiMod).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 44.dp)
-                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { expanded = true }
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {
+                    if (isYouTube) { paused = true; openChannel(video) } else expanded = true
+                }
         ) {
             if (reason != null) {
                 ReasonTag(reason)
@@ -273,13 +276,12 @@ fun VideoCard(
                 color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
             )
             Spacer(Modifier.height(6.dp))
-            // Tap the channel name: the channel's page with all its videos.
-            val openChannel = LocalOpenChannel.current
             Text(video.channel + if (isYouTube) "  ›" else "", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
                 modifier = if (isYouTube) Modifier.clickable { paused = true; openChannel(video) } else Modifier)
             Spacer(Modifier.height(4.dp))
             Text(video.title, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(tr("more", "mer"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(tr("more", "mer"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { expanded = true }.padding(top = 2.dp, end = 12.dp, bottom = 2.dp))
         }
 
         if (uiAlpha > 0f) Column(
@@ -322,7 +324,6 @@ fun VideoCard(
             visible = expanded, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)),
             modifier = Modifier.fillMaxSize()
         ) {
-            val openChannel = LocalOpenChannel.current
             VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) },
                 onChannel = if (isYouTube) ({ expanded = false; paused = true; openChannel(video) }) else null)
         }
