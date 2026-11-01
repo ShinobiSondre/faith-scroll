@@ -141,10 +141,14 @@ fun SearchScreen(inApp: List<Video>, onOpenVideo: (Video, List<Video>) -> Unit, 
     }
     val videos = (local + found.filter { it.id in ok }).distinctBy { it.id }
     val waiting = found.count { it.id !in ok && VideoCheck.checking.value }
+    // After picking something, scroll down to the results.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(query, pick) { if (query != null) runCatching { listState.animateScrollToItem(5) } }
 
     Box(Modifier.fillMaxSize().background(Ink).clickable(remember { MutableInteractionSource() }, null) { }) {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding(),
+            state = listState,
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
@@ -176,20 +180,28 @@ fun SearchScreen(inApp: List<Video>, onOpenVideo: (Video, List<Video>) -> Unit, 
                 }
             }
             if (query != null) {
+                // Verses: one compact row you swipe sideways, so the videos are right below.
                 if (verses.isNotEmpty()) {
-                    item { Section(tr("From the Bible", "Fra Bibelen")) }
-                    items(verses, key = { "v" + it.ref }) { v ->
-                        Column(
-                            Modifier.padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                                .background(Plum).clickable { onOpenVerse(v) }.padding(16.dp)
+                    item(key = "results") { Section(tr("From the Bible", "Fra Bibelen")) }
+                    item {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(v.text, color = Color.White, fontSize = 16.sp, lineHeight = 22.sp, fontFamily = FontFamily.Serif)
-                            Spacer(Modifier.height(6.dp))
-                            Text(v.label, color = Gold, fontSize = 13.sp)
+                            items(verses, key = { "v" + it.ref }) { v ->
+                                Column(
+                                    Modifier.width(260.dp).height(120.dp).clip(RoundedCornerShape(16.dp))
+                                        .background(Plum).clickable { onOpenVerse(v) }.padding(14.dp)
+                                ) {
+                                    Text(v.text, color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, fontFamily = FontFamily.Serif,
+                                        maxLines = 4, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text(v.label, color = Gold, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
-                item { Section(tr("Videos", "Videoer")) }
+                item(key = "videos") { Section(tr("Videos", "Videoer") + if (videos.isNotEmpty()) " (${videos.size})" else "") }
                 items(videos, key = { "x" + it.id }) { v -> VideoRow(v) { onOpenVideo(v, videos) } }
                 if (searching || waiting > 0) item {
                     Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
