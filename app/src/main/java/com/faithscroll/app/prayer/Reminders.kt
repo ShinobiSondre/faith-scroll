@@ -77,6 +77,18 @@ object Reminders {
         am.setWindow(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + minutes * 60_000L, 2 * 60_000L, pending(ctx, ACTION_FIRE + ".once", 11))
     }
 
+    /** Pop up over whatever app you're in (needs "display over other apps"). */
+    fun popupOverApps(ctx: Context): Boolean = prefs(ctx).getBoolean("popup", false)
+    fun setPopupOverApps(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("popup", on).apply()
+    fun canPopup(ctx: Context): Boolean = android.provider.Settings.canDrawOverlays(ctx)
+
+    /** Opens the animated reminder right away (over other apps when allowed, or when FaithScroll is open). */
+    fun showPopup(ctx: Context) {
+        runCatching {
+            ctx.startActivity(Intent(ctx, PrayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        }.onFailure { com.faithscroll.app.data.Diag.err("prayer", "popup", it) }
+    }
+
     fun prompt(): Pair<String, String> {
         val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         return when {
@@ -112,17 +124,25 @@ object Reminders {
             .setAutoCancel(true)
             .setContentIntent(open(20, false))
             .addAction(0, tr("Pray now", "Be nå"), open(21, true))
+            // Locked or screen off: the reminder opens as the full animated popup.
+            .setFullScreenIntent(open(23, false), true)
             .addAction(0, tr("In 10 min", "Om 10 min"), pending(ctx, ACTION_SNOOZE, 22))
             .build()
         runCatching { NotificationManagerCompat.from(ctx).notify(7001, n) }
     }
 }
 
+/** The reminder: a notification, and the animated popup on top when you've allowed it over other apps. */
+private fun fire(ctx: Context) {
+    Reminders.notify(ctx)
+    if (Reminders.popupOverApps(ctx) && Reminders.canPopup(ctx)) Reminders.showPopup(ctx)
+}
+
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         when (intent.action) {
-            Reminders.ACTION_FIRE -> { Reminders.notify(ctx); Reminders.schedule(ctx) }
-            Reminders.ACTION_FIRE + ".once" -> Reminders.notify(ctx)
+            Reminders.ACTION_FIRE -> { fire(ctx); Reminders.schedule(ctx) }
+            Reminders.ACTION_FIRE + ".once" -> fire(ctx)
             Reminders.ACTION_SNOOZE -> {
                 NotificationManagerCompat.from(ctx).cancel(7001)
                 Reminders.snooze(ctx)

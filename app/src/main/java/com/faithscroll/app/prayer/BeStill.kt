@@ -95,12 +95,14 @@ class PrayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Lang.init(this)
+        // Shows on top of the lock screen and wakes the screen when the reminder comes.
+        if (android.os.Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         NotificationManagerCompat.from(this).cancel(7001)
         beStill.value = intent.getBooleanExtra(EXTRA_BE_STILL, false)
         setContent {
             FaithTheme {
                 if (beStill.value) BeStillScreen(onClose = { finish() })
-                else PrayerPopup(
+                else ReminderPopup(
                     onPray = { beStill.value = true },
                     onSnooze = { Reminders.snooze(this); finish() },
                     onDismiss = { finish() }

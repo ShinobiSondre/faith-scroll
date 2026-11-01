@@ -330,6 +330,33 @@ private fun PrayerCard(onBeStill: () -> Unit, onNeedNotifications: () -> Unit) {
                 }
             }
             Text(tr("Tap a time to change it.", "Trykk på et klokkeslett for å endre det."), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            // The animated reminder over other apps (Android asks you to allow "display over other apps" once).
+            var popup by remember { mutableStateOf(com.faithscroll.app.prayer.Reminders.popupOverApps(ctx) && com.faithscroll.app.prayer.Reminders.canPopup(ctx)) }
+            val life = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(life) {
+                val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+                    if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && com.faithscroll.app.prayer.Reminders.popupOverApps(ctx))
+                        popup = com.faithscroll.app.prayer.Reminders.canPopup(ctx)
+                }
+                life.lifecycle.addObserver(obs); onDispose { life.lifecycle.removeObserver(obs) }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(tr("Pop up over other apps", "Vis som popup over andre apper"), color = Color.White, fontSize = 14.sp)
+                    Text(tr("The reminder appears wherever you are on the phone.", "Påminnelsen dukker opp uansett hvor du er på telefonen."),
+                        color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                }
+                Switch(checked = popup, onCheckedChange = { on ->
+                    com.faithscroll.app.prayer.Reminders.setPopupOverApps(ctx, on)
+                    if (on && !com.faithscroll.app.prayer.Reminders.canPopup(ctx)) {
+                        ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:" + ctx.packageName)))
+                    } else popup = on
+                }, colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold))
+            }
+            TextButton(onClick = { com.faithscroll.app.prayer.Reminders.showPopup(ctx) }) {
+                Text(tr("Preview the reminder", "Forhåndsvis påminnelsen"), color = Gold, fontSize = 13.sp)
+            }
         }
         Spacer(Modifier.height(12.dp))
         Button(onClick = onBeStill, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink)) {
