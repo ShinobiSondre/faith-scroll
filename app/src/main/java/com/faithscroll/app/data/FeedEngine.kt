@@ -29,6 +29,7 @@ class FeedEngine(
     private val rnd = Random(System.nanoTime())
     private val recentMessages = ArrayDeque<String>()
     private val shownVideos = mutableSetOf<String>()
+    private val recentChannels = mutableListOf<String>() // channels of the last ~10 videos shown
     private var sinceMessage = 0
     private var produced = 0
     private val explore = 0.25
@@ -87,14 +88,19 @@ class FeedEngine(
     private fun pickVideo(all: List<Video>): FeedItem? {
         val usable = all.filter { it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) }
         val notShown = usable.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); usable }
-        val pool = Seen.freshFirst(ctx, notShown, { it.id })
+        val fresh = Seen.freshFirst(ctx, notShown, { it.id })
+        // Variety: not a channel you just saw – none of the last 3 channels if there's anything else.
+        val pool = fresh.filter { it.channel !in recentChannels.takeLast(3) }.ifEmpty { fresh }
         if (pool.isEmpty()) return null
         val random = rnd.nextDouble() < explore
         // Newer uploads get a small boost (feeds come newest-first per channel).
         val v = if (random) pool.random(rnd) else Taste.weightedPick(pool, { vid ->
-            Taste.scoreVideo(ctx, vid) - 0.01f * all.indexOf(vid) + (if (vid.channel !in knownChannels) 0.3f else 0f)
+            Taste.scoreVideo(ctx, vid) - 0.01f * all.indexOf(vid) + (if (vid.channel !in knownChannels) 0.3f else 0f) -
+                1.2f * recentChannels.count { it == vid.channel } // seen this channel a lot lately → less likely
         }, rnd = rnd)!!
         shownVideos += v.id
+        recentChannels += v.channel
+        if (recentChannels.size > 10) recentChannels.removeAt(0)
         val reason = when {
             random -> tr("Something new", "Noe nytt")
             Taste.scoreVideo(ctx, v) > 1.2f -> {

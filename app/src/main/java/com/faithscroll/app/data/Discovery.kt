@@ -52,6 +52,16 @@ object Discovery {
         "bibelen forklart", "tale om tro", "frelst vitnesbyrd", "jesus helbredet meg", "kristen podcast norsk", "oppmuntring fra bibelen"
     )
 
+    // YouTube Shorts searches (short, vertical clips) – in the app's language.
+    private val shortsEnglish = listOf(
+        "christian #shorts", "jesus #shorts", "bible verse #shorts", "testimony #shorts", "prayer #shorts",
+        "sermon clip #shorts", "worship #shorts", "god's love #shorts", "faith encouragement #shorts"
+    )
+    private val shortsNorwegian = listOf(
+        "jesus #shorts norsk", "kristen #shorts", "bibelvers #shorts", "vitnesbyrd #shorts", "bønn #shorts",
+        "preken #shorts", "kristen tro shorts", "jesus elsker deg shorts", "andakt shorts"
+    )
+
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("discovery", Context.MODE_PRIVATE)
 
     // ---- Channels that earned a permanent spot ----
@@ -95,7 +105,15 @@ object Discovery {
         if (Lang.no && !Lang.alsoEnglish) { queries.clear(); queries += norwegian.shuffled(rnd).take(6) }
         else if (Lang.no) queries += norwegian.shuffled(rnd).take(3)
 
-        val results = coroutineScope { queries.distinct().map { q -> async { runCatching { searchOnce(q) }.getOrDefault(emptyList()) } }.awaitAll() }
+        // Shorts: a couple of Shorts searches each time, plus the Shorts tab of a few channels you follow or found.
+        queries += (if (Lang.no) shortsNorwegian else shortsEnglish).shuffled(rnd).take(2)
+        if (Lang.no && Lang.alsoEnglish) queries += shortsEnglish.random(rnd)
+        val shortChannels = (YouTubeSubs.favourites(ctx).map { it.id } + channels(ctx).map { it.first }).distinct().shuffled(rnd).take(3)
+
+        val results = coroutineScope {
+            queries.distinct().map { q -> async { runCatching { searchOnce(q) }.getOrDefault(emptyList()) } } +
+                shortChannels.map { id -> async { runCatching { ChannelVideos(id).shorts(8) }.getOrDefault(emptyList()) } }
+        }.awaitAll()
         val out = mutableListOf<Video>()
         for (i in 0 until (results.maxOfOrNull { it.size } ?: 0)) results.forEach { l -> l.getOrNull(i)?.let(out::add) }
         LangFilter.videos(out.distinctBy { it.id }.filter { !Seen.has(ctx, it.id) })
@@ -109,7 +127,7 @@ object Discovery {
         val handler = yt.searchQHFactory.fromQuery(q, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         val info = SearchInfo.getInfo(yt, handler)
         return info.relatedItems.filterIsInstance<StreamInfoItem>()
-            .filter { it.streamType != StreamType.LIVE_STREAM && it.duration in 10..1500 } // up to 25 min
+            .filter { it.streamType != StreamType.LIVE_STREAM && (it.duration in 10..1500 || isShort(it)) } // up to 25 min, or a Short
             .mapNotNull { item ->
                 val id = Regex("(?:v=|shorts/|youtu\\.be/)([A-Za-z0-9_-]{11})").find(item.url)?.groupValues?.get(1) ?: return@mapNotNull null
                 val channel = item.uploaderName ?: ""
@@ -117,7 +135,7 @@ object Discovery {
                     channelOfVideo[id] = it to channel
                 }
                 val kind = when {
-                    item.duration <= 90 -> Video.KIND_SHORT
+                    isShort(item) || item.duration <= 90 -> Video.KIND_SHORT
                     q.contains("sermon") || q.contains("preken") -> Video.KIND_SERMON
                     else -> Video.KIND_STORY
                 }
@@ -125,6 +143,8 @@ object Discovery {
             }
             .take(12)
     }
+
+    private fun isShort(i: StreamInfoItem) = i.isShortFormContent || "/shorts/" in i.url
 
     // ---- New subreddits now and then ----
     suspend fun maybeFindSubreddits(ctx: Context) = withContext(Dispatchers.IO) {

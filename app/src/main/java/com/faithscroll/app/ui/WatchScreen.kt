@@ -81,8 +81,11 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
                     val r = kotlin.random.Random(System.currentTimeMillis() / 600_000)
                     // Score each video once (re-scoring with a fresh random number inside the
                     // sort made the order inconsistent, which crashed the sort).
-                    library.all.map { it to (com.faithscroll.app.data.Taste.scoreVideo(ctx, it) + r.nextFloat() * 1.5f) }
-                        .sortedByDescending { it.second }.map { it.first }
+                    val ranked = library.all.map { v ->
+                        v to (com.faithscroll.app.data.Taste.scoreVideo(ctx, v) + r.nextFloat() * 1.5f -
+                            (if (com.faithscroll.app.data.Seen.has(ctx, v.id)) 3f else 0f)) // already watched → further down
+                    }.sortedByDescending { it.second }.map { it.first }
+                    mixChannels(ranked)
                 }
                 "Shorts" -> library.shorts
                 "Sermons" -> library.sermons
@@ -106,6 +109,25 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
             gridItems(list.drop(1), key = { it.id }) { v -> VideoRow(v) { onOpen(v, list) } }
         }
     }
+}
+
+/**
+ * Keeps the order by score but spreads channels out: never the same channel twice in a row (or
+ * within the last 3 when possible), and at most 3 per channel among the first 30.
+ */
+private fun mixChannels(ranked: List<Video>): List<Video> {
+    val left = ranked.toMutableList()
+    val out = mutableListOf<Video>()
+    val perChannel = HashMap<String, Int>()
+    while (left.isNotEmpty()) {
+        val recent = out.takeLast(3).map { it.channel }
+        val i = left.indexOfFirst { it.channel !in recent && (out.size >= 30 || (perChannel[it.channel] ?: 0) < 3) }
+            .takeIf { it >= 0 } ?: left.indexOfFirst { it.channel != out.lastOrNull()?.channel }.takeIf { it >= 0 } ?: 0
+        val v = left.removeAt(i)
+        out += v
+        perChannel[v.channel] = (perChannel[v.channel] ?: 0) + 1
+    }
+    return out
 }
 
 @Composable

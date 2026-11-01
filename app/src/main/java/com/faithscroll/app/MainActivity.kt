@@ -304,8 +304,15 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     0 -> Unit // the feed underneath shows through
                     1 -> {
                         val ok by com.faithscroll.app.data.VideoCheck.verified.collectAsState()
-                        val checkedLibrary = remember(library, ok) {
-                            library?.let { l -> VideoLibrary(l.stories.filter { it.id in ok }, l.sermons.filter { it.id in ok }, l.shorts.filter { it.id in ok }) }
+                        val checkedLibrary = remember(library, ok, discovered) {
+                            library?.let { l ->
+                                val found = discovered.filter { it.id in ok }
+                                VideoLibrary(
+                                    (l.stories + found.filter { it.kind == Video.KIND_STORY }).filter { it.id in ok }.distinctBy { it.id },
+                                    (l.sermons + found.filter { it.kind == Video.KIND_SERMON }).filter { it.id in ok }.distinctBy { it.id },
+                                    (l.shorts + found.filter { it.kind == Video.KIND_SHORT }).filter { it.id in ok }.distinctBy { it.id }
+                                )
+                            }
                         }
                         WatchScreen(checkedLibrary, bottomInset, openVideo)
                     }

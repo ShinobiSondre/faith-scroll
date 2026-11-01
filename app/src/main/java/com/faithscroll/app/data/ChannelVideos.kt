@@ -51,6 +51,15 @@ class ChannelVideos(val channelId: String) {
         }.onFailure { Diag.err("channel", "$channelId more", it); done = true }.getOrDefault(emptyList())
     }
 
+    /** The newest [limit] videos from the channel's Shorts tab. */
+    suspend fun shorts(limit: Int): List<Video> = withContext(Dispatchers.IO) {
+        StreamResolver.ensureInit()
+        val info = ChannelInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/channel/$channelId")
+        name = info.name.orEmpty()
+        val t = info.tabs.firstOrNull { it.contentFilters.contains(ChannelTabs.SHORTS) } ?: return@withContext emptyList()
+        toVideos(ChannelTabInfo.getInfo(ServiceList.YouTube, t).relatedItems).take(limit).map { it.copy(kind = Video.KIND_SHORT) }
+    }
+
     private fun rss(): List<Video> {
         done = true
         val xml = Http.get("https://www.youtube.com/feeds/videos.xml?channel_id=$channelId") ?: return emptyList()
