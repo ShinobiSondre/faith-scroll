@@ -123,6 +123,17 @@ fun FeedScreen(
     val items = remember(engine) { mutableStateListOf<FeedItem>().apply { add(engine.next()) } }
     val pager = rememberPagerState(pageCount = { items.size })
 
+    // Videos arrive a few seconds after start (they're checked first). If you're still on the first
+    // card, start the feed over as a normal mix of videos, shorts and pictures – not verse, verse.
+    var restarted by remember { mutableStateOf(false) }
+    LaunchedEffect(videos.isNotEmpty()) {
+        if (videos.isNotEmpty() && !restarted && pager.currentPage == 0) {
+            restarted = true
+            items[0] = engine.next()
+            while (items.size > 1) items.removeAt(items.lastIndex)
+        }
+    }
+
     // Keep cards ready ahead. While videos are still loading, only one card is made,
     // so the feed doesn't fill up with illustrations before the videos arrive.
     LaunchedEffect(pager.currentPage, items.size, videos.isNotEmpty()) {

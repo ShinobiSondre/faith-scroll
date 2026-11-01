@@ -43,6 +43,7 @@ object VideoCheck {
 
     /** Checks these videos in order, in the background (replaces any earlier list). */
     @Synchronized fun queue(ctx: Context, videos: List<Video>) {
+        publish() // the app language may have changed: only videos approved for this language count
         appCtx = ctx.applicationContext
         if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v5.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
@@ -70,6 +71,9 @@ object VideoCheck {
             checking.value = false
         }
     }
+
+    /** The language changed: only videos approved for the new language stay. */
+    fun languageChanged() = publish()
 
     /** Checks extra videos (e.g. search results) right away, alongside the feed's own queue. */
     fun checkExtra(ctx: Context, videos: List<Video>) {

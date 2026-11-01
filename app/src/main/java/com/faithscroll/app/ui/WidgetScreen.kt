@@ -386,7 +386,7 @@ private fun LanguageCard() {
     var mode by remember { mutableStateOf(Lang.mode(ctx)) }
     fun pick(m: Lang.Mode) {
         if (m == mode) return
-        mode = m; Lang.setMode(ctx, m)
+        mode = m; Lang.setMode(ctx, m); com.faithscroll.app.data.VideoCheck.languageChanged()
         (ctx as? android.app.Activity)?.recreate()
     }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
@@ -405,7 +405,7 @@ private fun LanguageCard() {
                     Text("Med norske undertekster. Av: bare videoer på norsk.", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
                 }
                 androidx.compose.material3.Switch(checked = also, onCheckedChange = {
-                    also = it; Lang.setAlsoEnglish(ctx, it); (ctx as? android.app.Activity)?.recreate()
+                    also = it; Lang.setAlsoEnglish(ctx, it); com.faithscroll.app.data.VideoCheck.languageChanged(); (ctx as? android.app.Activity)?.recreate()
                 })
             }
         }
