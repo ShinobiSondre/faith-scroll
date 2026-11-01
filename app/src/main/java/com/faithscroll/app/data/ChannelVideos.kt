@@ -21,7 +21,8 @@ class ChannelVideos(val channelId: String) {
 
     private fun toVideos(items: List<Any>): List<Video> = items.filterIsInstance<StreamInfoItem>().mapNotNull { i ->
         val id = Regex("(?:v=|shorts/|youtu\\.be/)([A-Za-z0-9_-]{11})").find(i.url)?.groupValues?.get(1) ?: return@mapNotNull null
-        Video(id, i.name.orEmpty(), name.ifBlank { i.uploaderName.orEmpty() }, if (i.duration in 1..90) Video.KIND_SHORT else Video.KIND_STORY)
+        Video(id, i.name.orEmpty(), name.ifBlank { i.uploaderName.orEmpty() },
+            if (i.duration in 1..90 || "/shorts/" in i.url) Video.KIND_SHORT else Video.kindFor(i.name.orEmpty(), Video.KIND_STORY))
     }
 
     /** First page (and the channel's name/picture). Falls back to the channel's RSS feed (latest 15). */

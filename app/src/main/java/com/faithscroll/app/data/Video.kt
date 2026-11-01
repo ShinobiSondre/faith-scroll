@@ -26,6 +26,15 @@ data class Video(
         const val KIND_STORY = "story"
         const val KIND_SERMON = "sermon"
         const val KIND_SHORT = "short"
+
+        // Titles that mean a sermon / church service (Norwegian and English).
+        private val sermonWords = Regex(
+            "(?i)(gudstjeneste|preken|prekenen|preik|tale\\b|talen\\b|andakt|bibeltime|bibelundervisning|undervisning|søndagsmøte|" +
+                "sermon|preach|church service|sunday service|worship service|bible study|message:|devotional)"
+        )
+        /** Sorts by what the title says: services and sermons go to Sermons, whatever channel or search they came from. */
+        fun kindFor(title: String, fallback: String): String =
+            if (fallback != KIND_SHORT && sermonWords.containsMatchIn(title)) KIND_SERMON else fallback
     }
     val thumbnail: String get() = thumb.ifBlank { "https://i.ytimg.com/vi/$id/hqdefault.jpg" }
     val url: String get() = link.ifBlank { "https://www.youtube.com/watch?v=$id" }
@@ -91,9 +100,13 @@ object VideoRepository {
             val c = shorts.map { (id, name) -> async { fetchChannel(id, name, Video.KIND_SHORT) } }
             Triple(a.awaitAll(), b.awaitAll(), c.awaitAll())
         }
+        // Re-sort by title: a "gudstjeneste" from a testimony channel belongs under Sermons.
+        val storiesAll = LangFilter.videos((pinned + interleave(storyLists)).distinctBy { it.id })
+        val sermonsAll = LangFilter.videos(interleave(sermonLists).distinctBy { it.id })
         val lib = VideoLibrary(
-            stories = LangFilter.videos((pinned + interleave(storyLists)).distinctBy { it.id }),
-            sermons = LangFilter.videos(interleave(sermonLists).distinctBy { it.id }),
+            stories = storiesAll.filter { Video.kindFor(it.title, Video.KIND_STORY) == Video.KIND_STORY },
+            sermons = (sermonsAll + storiesAll.filter { Video.kindFor(it.title, Video.KIND_STORY) == Video.KIND_SERMON }
+                .map { it.copy(kind = Video.KIND_SERMON) }).distinctBy { it.id },
             shorts = LangFilter.videos(interleave(shortLists).distinctBy { it.id })
         )
 

@@ -74,7 +74,7 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(chips) { c -> FilterChip(chipLabel(c), c == filter) { filter = c } }
         }
-        val list = remember(library, filter) {
+        val fresh = remember(library, filter) {
             when (filter) {
                 "For you" -> {
                     // Ranked by your taste with a dash of randomness, so it never feels stale.
@@ -93,6 +93,16 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
                 else -> library.all.filter { it.channel == filter }
             }
         }
+        // Keep the order you're looking at: new videos (checked in the background) only join at the
+        // bottom, and nothing jumps around under your finger. Changing the filter starts over.
+        val list = remember(filter) { androidx.compose.runtime.mutableStateListOf<Video>() }
+        androidx.compose.runtime.LaunchedEffect(fresh) {
+            val ids = fresh.map { it.id }.toSet()
+            list.removeAll { it.id !in ids }
+            val have = list.map { it.id }.toSet()
+            list.addAll(fresh.filter { it.id !in have })
+        }
+        if (list.isEmpty() && fresh.isNotEmpty()) list.addAll(fresh)
         if (list.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
                 Text(tr("Checking videos for captions and language… they appear here as they pass.", "Sjekker videoer for undertekster og språk … de dukker opp her når de er godkjent."),
@@ -105,8 +115,8 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
             columns = GridCells.Adaptive(340.dp),
             contentPadding = PaddingValues(top = 12.dp, bottom = bottomInset + 16.dp)
         ) {
-            item(key = "hero-" + list.first().id, span = { GridItemSpan(minOf(maxLineSpan, 2)) }) { Hero(list.first()) { onOpen(list.first(), list) } }
-            gridItems(list.drop(1), key = { it.id }) { v -> VideoRow(v) { onOpen(v, list) } }
+            item(key = "hero-" + list.first().id, span = { GridItemSpan(minOf(maxLineSpan, 2)) }) { Hero(list.first()) { onOpen(list.first(), list.toList()) } }
+            gridItems(list.drop(1), key = { it.id }) { v -> VideoRow(v) { onOpen(v, list.toList()) } }
         }
     }
 }

@@ -140,7 +140,7 @@ object Discovery {
                 val kind = when {
                     isShort(item) || item.duration <= 90 -> Video.KIND_SHORT
                     q.contains("sermon") || q.contains("preken") -> Video.KIND_SERMON
-                    else -> Video.KIND_STORY
+                    else -> Video.kindFor(item.name.orEmpty(), Video.KIND_STORY)
                 }
                 Video(id, item.name ?: "", channel, kind)
             }
