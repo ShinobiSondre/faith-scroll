@@ -15,7 +15,7 @@ object Lang {
     enum class Mode { AUTO, EN, NO }
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("lang", Context.MODE_PRIVATE)
-    fun mode(ctx: Context): Mode = runCatching { Mode.valueOf(prefs(ctx).getString("mode", "AUTO")!!) }.getOrDefault(Mode.AUTO)
+    fun mode(ctx: Context): Mode = runCatching { Mode.valueOf(prefs(ctx).getString("mode", "EN")!!) }.getOrDefault(Mode.EN) // English until you choose Norwegian
 
     fun setMode(ctx: Context, m: Mode) {
         prefs(ctx).edit().putString("mode", m.name).apply()
