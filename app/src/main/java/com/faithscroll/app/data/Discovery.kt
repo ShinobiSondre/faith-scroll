@@ -67,7 +67,7 @@ object Discovery {
     // ---- Channels that earned a permanent spot ----
     fun channels(ctx: Context): List<Pair<String, String>> = runCatching {
         val o = JSONObject(prefs(ctx).getString("channels", "{}")!!)
-        o.keys().asSequence().map { it to o.getJSONObject(it).optString("name") }.toList()
+        o.keys().asSequence().map { it to o.getJSONObject(it).optString("name") }.filter { !LangFilter.isBlockedChannel(it.second) }.toList()
     }.getOrDefault(emptyList())
 
     private val channelOfVideo = HashMap<String, Pair<String, String>>() // videoId -> (channelId, name)

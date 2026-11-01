@@ -127,9 +127,13 @@ object LangFilter {
 
     suspend fun videos(list: List<Video>): List<Video> = withContext(Dispatchers.Default) {
         // YouTube "Topic" channels are auto-made music tracks with a still picture – not videos.
-        list.filter { !it.channel.endsWith(" - Topic") }.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
+        list.filter { !it.channel.endsWith(" - Topic") && !isBlockedChannel(it.channel) }.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
     }
     suspend fun pins(list: List<Pin>): List<Pin> = withContext(Dispatchers.Default) { list.filter { it.title.isBlank() || ok(it.title) } }
+
+    /** Channels that never appear in the app. */
+    private val blockedChannels = listOf("hermon")
+    fun isBlockedChannel(name: String): Boolean = blockedChannels.any { name.contains(it, ignoreCase = true) }
 
     /** YouTube search language/country for discovery. */
     val searchLanguage: Pair<String, String> get() = if (Lang.no) "nb" to "NO" else "en" to "US"

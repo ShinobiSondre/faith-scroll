@@ -86,7 +86,7 @@ class FeedEngine(
     }
 
     private fun pickVideo(all: List<Video>): FeedItem? {
-        val usable = all.filter { it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) }
+        val usable = all.filter { it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) && !LangFilter.isBlockedChannel(it.channel) }
         val notShown = usable.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); usable }
         val fresh = Seen.freshFirst(ctx, notShown, { it.id })
         // Variety: not a channel you just saw – none of the last 3 channels if there's anything else.
