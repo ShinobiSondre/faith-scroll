@@ -130,7 +130,7 @@ object Discovery {
         val handler = yt.searchQHFactory.fromQuery(q, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         val info = SearchInfo.getInfo(yt, handler)
         return info.relatedItems.filterIsInstance<StreamInfoItem>()
-            .filter { it.streamType != StreamType.LIVE_STREAM && (it.duration in 10..1500 || isShort(it)) } // up to 25 min, or a Short
+            .filter { it.streamType != StreamType.LIVE_STREAM && (it.duration in 45..1500 || isShort(it)) } // a Short, or 45 s – 25 min
             .mapNotNull { item ->
                 val id = Regex("(?:v=|shorts/|youtu\\.be/)([A-Za-z0-9_-]{11})").find(item.url)?.groupValues?.get(1) ?: return@mapNotNull null
                 val channel = item.uploaderName ?: ""
@@ -138,7 +138,7 @@ object Discovery {
                     channelOfVideo[id] = it to channel
                 }
                 val kind = when {
-                    isShort(item) || item.duration <= 90 -> Video.KIND_SHORT
+                    isShort(item) -> Video.KIND_SHORT
                     q.contains("sermon") || q.contains("preken") -> Video.KIND_SERMON
                     else -> Video.kindFor(item.name.orEmpty(), Video.KIND_STORY)
                 }
@@ -147,7 +147,8 @@ object Discovery {
             .take(12)
     }
 
-    private fun isShort(i: StreamInfoItem) = i.isShortFormContent || "/shorts/" in i.url
+    /** A real YouTube Short: marked as one (or a /shorts/ link), and at most a minute when the length is known. */
+    private fun isShort(i: StreamInfoItem) = (i.isShortFormContent || "/shorts/" in i.url) && (i.duration <= 0 || i.duration <= 60)
 
     // ---- New subreddits now and then ----
     suspend fun maybeFindSubreddits(ctx: Context) = withContext(Dispatchers.IO) {

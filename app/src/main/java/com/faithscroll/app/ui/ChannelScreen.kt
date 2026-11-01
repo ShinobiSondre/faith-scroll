@@ -79,7 +79,7 @@ fun ChannelScreen(from: Video, onOpenVideo: (Video, List<Video>) -> Unit, onClos
         val id = WatchPage.info(from.id)?.channelId?.takeIf { it.isNotBlank() }
         if (id == null) { loading = false; failed = true; return@LaunchedEffect }
         val c = ChannelVideos(id); source = c
-        videos.addAll(c.first().distinctBy { it.id })
+        videos.addAll(c.first().distinctBy { it.id }.filter { !com.faithscroll.app.data.LangFilter.isNews(it.title, it.channel) })
         if (c.name.isNotBlank()) name = c.name
         avatar = c.avatar
         loading = false; failed = videos.isEmpty()
@@ -91,7 +91,7 @@ fun ChannelScreen(from: Video, onOpenVideo: (Video, List<Video>) -> Unit, onClos
         if (nearEnd && !loading && !c.done) {
             loading = true
             val more = c.more()
-            videos.addAll(more.filter { m -> videos.none { it.id == m.id } })
+            videos.addAll(more.filter { m -> videos.none { it.id == m.id } && !com.faithscroll.app.data.LangFilter.isNews(m.title, m.channel) })
             loading = false
         }
     }

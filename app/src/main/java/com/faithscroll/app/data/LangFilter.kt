@@ -127,9 +127,20 @@ object LangFilter {
 
     suspend fun videos(list: List<Video>): List<Video> = withContext(Dispatchers.Default) {
         // YouTube "Topic" channels are auto-made music tracks with a still picture – not videos.
-        list.filter { !it.channel.endsWith(" - Topic") && !isBlockedChannel(it.channel) }.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
+        list.filter { !it.channel.endsWith(" - Topic") && !isBlockedChannel(it.channel) && !isNews(it.title, it.channel) }.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
     }
     suspend fun pins(list: List<Pin>): List<Pin> = withContext(Dispatchers.Default) { list.filter { it.title.isBlank() || ok(it.title) } }
+
+    /** News and politics never appear – not even church news. */
+    private val newsWords = Regex(
+        "(?i)\\b(nyhet|nyheter|nyhetene|nyhetssending|breaking news|(?<!good )(?<!gode )news|headlines|politikk|politisk|politiske|politics|political|politician|" +
+            "valgkamp|stortingsvalg|kommunevalg|kirkevalg|election|elections|vote|voting|regjering|regjeringen|government|storting|stortinget|" +
+            "statsminister|president|presidenten|presidential|parliament|congress|senate|minister|partiet|partileder|debatt|debatten|debate|" +
+            "kirkemøtet|kirkemøte|bispemøtet|synode|synod|trump|biden|harris|putin|zelensky|netanyahu|støre|solberg|listhaug|" +
+            "reportasje|intervju om|pressekonferanse|press conference|abort|abortion|lovforslag|høring)\\b"
+    )
+    private val newsChannels = Regex("(?i)(news|nyheter|\\bnrk\\b|tv ?2|\\bdagen\\b|vårt land|vl\\.no|aftenposten|\\bvg\\b|cnn|bbc|fox|cbn news|\\bkpk\\b|kristelig pressekontor|nettavisen)")
+    fun isNews(title: String, channel: String): Boolean = newsWords.containsMatchIn(title) || newsChannels.containsMatchIn(channel)
 
     /** Channels that never appear in the app. */
     private val blockedChannels = listOf("hermon")

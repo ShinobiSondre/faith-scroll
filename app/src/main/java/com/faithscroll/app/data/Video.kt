@@ -165,11 +165,13 @@ object VideoRepository {
             var title: String? = null
             var author: String? = null
             var inAuthor = false
+            var isShortLink = false
             var event = parser.eventType
             while (event != XmlPullParser.END_DOCUMENT) {
                 when (event) {
                     XmlPullParser.START_TAG -> when (parser.name) {
-                        "entry" -> { inEntry = true; id = null; title = null; author = null }
+                        "entry" -> { inEntry = true; id = null; title = null; author = null; isShortLink = false }
+                        "link" -> if (inEntry && parser.getAttributeValue(null, "href")?.contains("/shorts/") == true) isShortLink = true
                         "videoId" -> if (inEntry) id = parser.nextText()
                         "title" -> if (inEntry && title == null) title = parser.nextText()
                         "author" -> inAuthor = true
@@ -179,7 +181,13 @@ object VideoRepository {
                         "author" -> inAuthor = false
                         "entry" -> {
                             inEntry = false
-                            id?.let { out += Video(it, title.orEmpty(), name.ifBlank { author.orEmpty() }, kind) }
+                            // Shorts lists only keep real Shorts; anything else is sorted as a story/sermon by its title.
+                            val k = when {
+                                isShortLink -> Video.KIND_SHORT
+                                kind == Video.KIND_SHORT -> Video.kindFor(title.orEmpty(), Video.KIND_STORY)
+                                else -> kind
+                            }
+                            id?.let { out += Video(it, title.orEmpty(), name.ifBlank { author.orEmpty() }, k) }
                         }
                     }
                 }

@@ -22,7 +22,7 @@ class ChannelVideos(val channelId: String) {
     private fun toVideos(items: List<Any>): List<Video> = items.filterIsInstance<StreamInfoItem>().mapNotNull { i ->
         val id = Regex("(?:v=|shorts/|youtu\\.be/)([A-Za-z0-9_-]{11})").find(i.url)?.groupValues?.get(1) ?: return@mapNotNull null
         Video(id, i.name.orEmpty(), name.ifBlank { i.uploaderName.orEmpty() },
-            if (i.duration in 1..90 || "/shorts/" in i.url) Video.KIND_SHORT else Video.kindFor(i.name.orEmpty(), Video.KIND_STORY))
+            if (i.isShortFormContent || "/shorts/" in i.url) Video.KIND_SHORT else Video.kindFor(i.name.orEmpty(), Video.KIND_STORY))
     }
 
     /** First page (and the channel's name/picture). Falls back to the channel's RSS feed (latest 15). */
@@ -58,7 +58,8 @@ class ChannelVideos(val channelId: String) {
         val info = ChannelInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/channel/$channelId")
         name = info.name.orEmpty()
         val t = info.tabs.firstOrNull { it.contentFilters.contains(ChannelTabs.SHORTS) } ?: return@withContext emptyList()
-        toVideos(ChannelTabInfo.getInfo(ServiceList.YouTube, t).relatedItems).take(limit).map { it.copy(kind = Video.KIND_SHORT) }
+        toVideos(ChannelTabInfo.getInfo(ServiceList.YouTube, t).relatedItems.filter { (it as? StreamInfoItem)?.duration?.let { d -> d <= 0 || d <= 60 } ?: true })
+            .take(limit).map { it.copy(kind = Video.KIND_SHORT) }
     }
 
     private fun rss(): List<Video> {
