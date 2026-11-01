@@ -126,7 +126,8 @@ object LangFilter {
     }
 
     suspend fun videos(list: List<Video>): List<Video> = withContext(Dispatchers.Default) {
-        list.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
+        // YouTube "Topic" channels are auto-made music tracks with a still picture – not videos.
+        list.filter { !it.channel.endsWith(" - Topic") }.filter { it.channel in trusted || com.faithscroll.app.data.YouTubeSubsCheck.isFav(it.channel) || ok(it.title) }
     }
     suspend fun pins(list: List<Pin>): List<Pin> = withContext(Dispatchers.Default) { list.filter { it.title.isBlank() || ok(it.title) } }
 

@@ -226,6 +226,18 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     LaunchedEffect(Unit) {
         discovered = com.faithscroll.app.data.Discovery.search(ctx)
         com.faithscroll.app.data.Discovery.maybeFindSubreddits(ctx)
+        // Keep finding more while you scroll: when fewer than ~20 checked, unwatched videos are
+        // waiting, run another round of searches (new queries each time).
+        while (true) {
+            kotlinx.coroutines.delay(40_000)
+            val ok = com.faithscroll.app.data.VideoCheck.verified.value
+            val waiting = (discovered + (library?.all ?: emptyList())).count { it.id in ok && !com.faithscroll.app.data.Seen.has(ctx, it.id) }
+            if (waiting < 20 && !com.faithscroll.app.data.VideoCheck.checking.value) {
+                val more = com.faithscroll.app.data.Discovery.search(ctx)
+                com.faithscroll.app.data.Diag.log("discover", "only $waiting new videos waiting – found ${more.size} more")
+                discovered = (discovered + more).distinctBy { it.id }
+            }
+        }
     }
 
     // Phone upright: tabs at the bottom. Turned sideways, unfolded or tablet: a rail on the side.

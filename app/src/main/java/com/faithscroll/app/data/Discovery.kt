@@ -102,17 +102,20 @@ object Discovery {
         val queries = mutableListOf<String>()
         Taste.topThemes(ctx, 3).forEach { t -> byTheme[t]?.random(rnd)?.let(queries::add) }
         queries += general.shuffled(rnd).take(if (queries.isEmpty()) 4 else 2)
-        if (Lang.no && !Lang.alsoEnglish) { queries.clear(); queries += norwegian.shuffled(rnd).take(6) }
+        if (Lang.no && !Lang.alsoEnglish) { queries.clear(); queries += norwegian.shuffled(rnd).take(8) }
         else if (Lang.no) queries += norwegian.shuffled(rnd).take(3)
 
         // Shorts: a couple of Shorts searches each time, plus the Shorts tab of a few channels you follow or found.
         queries += (if (Lang.no) shortsNorwegian else shortsEnglish).shuffled(rnd).take(2)
         if (Lang.no && Lang.alsoEnglish) queries += shortsEnglish.random(rnd)
         val shortChannels = (YouTubeSubs.favourites(ctx).map { it.id } + channels(ctx).map { it.first }).distinct().shuffled(rnd).take(3)
+        // Channels that proved to be in your language: a deeper look (their full video list, not just the latest 15).
+        val deepChannels = channels(ctx).map { it.first }.shuffled(rnd).take(2)
 
         val results = coroutineScope {
             queries.distinct().map { q -> async { runCatching { searchOnce(q) }.getOrDefault(emptyList()) } } +
-                shortChannels.map { id -> async { runCatching { ChannelVideos(id).shorts(8) }.getOrDefault(emptyList()) } }
+                shortChannels.map { id -> async { runCatching { ChannelVideos(id).shorts(8) }.getOrDefault(emptyList()) } } +
+                deepChannels.map { id -> async { runCatching { ChannelVideos(id).let { c -> c.first() + c.more() } }.getOrDefault(emptyList()) } }
         }.awaitAll()
         val out = mutableListOf<Video>()
         for (i in 0 until (results.maxOfOrNull { it.size } ?: 0)) results.forEach { l -> l.getOrNull(i)?.let(out::add) }
