@@ -22,7 +22,13 @@ class VerseWidgetProvider : AppWidgetProvider() {
         val verse = if (current == null || (Prefs.widgetAutoChange(ctx) && newDay)) {
             VerseRepository.random(ctx, current?.ref).also { Prefs.setWidgetRef(ctx, it.ref) }
         } else current
-        ids.forEach { mgr.updateAppWidget(it, build(ctx, verse)) }
+        ids.forEach { mgr.updateAppWidget(it, build(ctx, verse, it)) }
+    }
+
+    // Resized on the home screen: redraw the text for the new size.
+    override fun onAppWidgetOptionsChanged(ctx: Context, mgr: AppWidgetManager, id: Int, options: android.os.Bundle) {
+        val v = VerseRepository.byRef(ctx, Prefs.widgetRef(ctx)) ?: return
+        mgr.updateAppWidget(id, build(ctx, v, id))
     }
 
     override fun onReceive(ctx: Context, intent: Intent) {
@@ -53,19 +59,26 @@ class VerseWidgetProvider : AppWidgetProvider() {
 
         private fun render(ctx: Context, v: Verse) {
             val mgr = AppWidgetManager.getInstance(ctx)
-            ids(ctx).forEach { mgr.updateAppWidget(it, build(ctx, v)) }
+            ids(ctx).forEach { mgr.updateAppWidget(it, build(ctx, v, it)) }
         }
 
-        fun build(ctx: Context, verse0: Verse): RemoteViews {
+        fun build(ctx: Context, verse0: Verse, widgetId: Int = 0): RemoteViews {
             com.faithscroll.app.util.Lang.init(ctx)
             // The stored verse may be from before a language switch; show it in the current language.
             val verse = VerseRepository.byRef(ctx, verse0.ref) ?: verse0
             val lightText = Prefs.widgetLightText(ctx)
-            val layout = if (lightText) R.layout.widget_verse_light_text else R.layout.widget_verse_dark_text
-            val rv = RemoteViews(ctx.packageName, layout)
-            rv.setTextViewText(R.id.widget_verse, "“${verse.text}”")
-            rv.setTextViewText(R.id.widget_ref, "— ${verse.label}")
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_verse_drawn)
+            rv.setImageViewResource(R.id.widget_bg, if (lightText) R.drawable.widget_bg_dark else R.drawable.widget_bg_light)
             rv.setInt(R.id.widget_bg, "setImageAlpha", Prefs.widgetOpacity(ctx) * 255 / 100)
+            // The text, drawn at the widget's real size with your shadow/colour/font/size settings.
+            val d = ctx.resources.displayMetrics.density
+            val opts = AppWidgetManager.getInstance(ctx).getAppWidgetOptions(widgetId)
+            val wDp = opts?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH)?.takeIf { it > 0 } ?: 320
+            val hDp = opts?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)?.takeIf { it > 0 } ?: 170
+            val style = WidgetText.style(ctx)
+            rv.setContentDescription(R.id.widget_text, "${verse.text} — ${verse.label}")
+            rv.setImageViewBitmap(R.id.widget_text, WidgetText.render(verse, style, (wDp * d).toInt().coerceAtMost(1400), (hDp * d).toInt().coerceAtMost(1400), d))
+            rv.setInt(R.id.widget_refresh, "setColorFilter", WidgetText.textColors(style).first)
 
             val open = Intent(ctx, MainActivity::class.java).apply {
                 putExtra(MainActivity.EXTRA_REF, verse.ref)

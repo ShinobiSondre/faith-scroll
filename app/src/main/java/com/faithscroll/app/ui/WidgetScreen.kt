@@ -35,6 +35,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -70,6 +72,7 @@ import com.faithscroll.app.data.VerseRepository
 import com.faithscroll.app.widget.VerseWidgetProvider
 import kotlin.math.roundToInt
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun WidgetScreen(
     state: AppState,
@@ -84,6 +87,11 @@ fun WidgetScreen(
     var opacity by remember { mutableFloatStateOf(Prefs.widgetOpacity(ctx).toFloat()) }
     var lightText by remember { mutableStateOf(Prefs.widgetLightText(ctx)) }
     var auto by remember { mutableStateOf(Prefs.widgetAutoChange(ctx)) }
+    var shadow by remember { mutableFloatStateOf(Prefs.widgetShadow(ctx).toFloat()) }
+    var textColor by remember { mutableStateOf(Prefs.widgetColor(ctx)) }
+    var font by remember { mutableStateOf(Prefs.widgetFont(ctx)) }
+    var textSize by remember { mutableFloatStateOf(Prefs.widgetSize(ctx).toFloat()) }
+    var align by remember { mutableStateOf(Prefs.widgetAlign(ctx)) }
     var previewRef by remember { mutableStateOf(Prefs.widgetRef(ctx)) }
     val preview = remember(previewRef) { VerseRepository.byRef(ctx, previewRef) ?: VerseRepository.all(ctx).first() }
 
@@ -144,18 +152,18 @@ fun WidgetScreen(
             contentAlignment = Alignment.Center
         ) {
             val bgColor by animateColorAsState(if (lightText) Color(0xFF16112A) else Color(0xFFFBF6EC), label = "bg")
-            val textColor = if (lightText) Color.White else Plum
-            Column(
-                Modifier.padding(18.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+            // The same drawing the widget uses, so the preview is exact.
+            androidx.compose.foundation.layout.BoxWithConstraints(
+                Modifier.padding(18.dp).fillMaxWidth().height(180.dp).clip(RoundedCornerShape(22.dp))
                     .background(bgColor.copy(alpha = opacity / 100f))
-                    .padding(18.dp)
             ) {
-                Text("“${preview.text}”", color = textColor, fontFamily = FontFamily.Serif, fontSize = 16.sp, lineHeight = 22.sp, maxLines = 5)
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("— ${preview.label}", color = if (lightText) Gold else Color(0xFF8A5A00), fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Icon(Icons.Filled.Refresh, null, tint = textColor, modifier = Modifier.size(20.dp))
-                }
+                val dens = androidx.compose.ui.platform.LocalDensity.current.density
+                val wPx = constraints.maxWidth; val hPx = constraints.maxHeight
+                val style = com.faithscroll.app.widget.WidgetText.Style(shadow.roundToInt(), textColor, font, textSize.roundToInt(), align, lightText)
+                val img = remember(preview, style, wPx, hPx) { com.faithscroll.app.widget.WidgetText.render(preview, style, wPx, hPx, dens).asImageBitmap() }
+                androidx.compose.foundation.Image(img, null, Modifier.fillMaxSize())
+                Icon(Icons.Filled.Refresh, null, tint = Color(com.faithscroll.app.widget.WidgetText.textColors(style).first),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 12.dp).size(22.dp))
             }
         }
 
@@ -188,6 +196,58 @@ fun WidgetScreen(
             Chip(tr("Dark text", "Mørk tekst"), !lightText) { lightText = false; Prefs.setWidgetLightText(ctx, false); apply() }
         }
         Text(tr("Tip: use light text on dark wallpapers, dark text on light ones.", "Tips: bruk lys tekst på mørke bakgrunner og mørk tekst på lyse."), color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+
+        // Text shadow – makes the verse readable on any wallpaper.
+        Spacer(Modifier.height(20.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Text shadow", "Tekstskygge"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text(when { shadow < 3 -> tr("None", "Ingen"); shadow < 35 -> tr("Light", "Lett"); shadow < 70 -> tr("Medium", "Middels"); else -> tr("Strong", "Sterk") } + " · ${shadow.roundToInt()}",
+                color = Gold, fontSize = 14.sp)
+        }
+        Slider(value = shadow, onValueChange = { shadow = it }, valueRange = 0f..100f,
+            onValueChangeFinished = { Prefs.setWidgetShadow(ctx, shadow.roundToInt()); apply() },
+            colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold))
+
+        // Text colour
+        Spacer(Modifier.height(12.dp))
+        Text(tr("Text colour", "Tekstfarge"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            (listOf("auto") + com.faithscroll.app.widget.WidgetText.colors.keys).forEach { key ->
+                val sel = textColor == key
+                Box(
+                    Modifier.size(38.dp).clip(CircleShape)
+                        .background(if (key == "auto") Brush.linearGradient(listOf(Color.White, Plum)) else androidx.compose.ui.graphics.SolidColor(Color(com.faithscroll.app.widget.WidgetText.colors.getValue(key).first)))
+                        .then(if (sel) Modifier.border(3.dp, Gold, CircleShape) else Modifier.border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape))
+                        .clickable { textColor = key; Prefs.setWidgetColor(ctx, key); apply() },
+                    contentAlignment = Alignment.Center
+                ) { if (key == "auto") Text("A", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+            }
+        }
+
+        // Font
+        Spacer(Modifier.height(16.dp))
+        Text(tr("Font", "Skrift"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("serif" to tr("Classic", "Klassisk"), "sans" to tr("Modern", "Moderne"), "bold" to tr("Bold", "Fet"), "script" to tr("Handwritten", "Håndskrift")).forEach { (k, label) ->
+                Chip(label, font == k) { font = k; Prefs.setWidgetFont(ctx, k); apply() }
+            }
+        }
+
+        // Size and alignment
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Text size", "Tekststørrelse"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text("${textSize.roundToInt()} %", color = Gold, fontSize = 14.sp)
+        }
+        Slider(value = textSize, onValueChange = { textSize = it }, valueRange = 60f..160f,
+            onValueChangeFinished = { Prefs.setWidgetSize(ctx, textSize.roundToInt()); apply() },
+            colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(tr("Left", "Venstre"), align == "start") { align = "start"; Prefs.setWidgetAlign(ctx, "start"); apply() }
+            Chip(tr("Centred", "Midtstilt"), align == "center") { align = "center"; Prefs.setWidgetAlign(ctx, "center"); apply() }
+        }
 
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {

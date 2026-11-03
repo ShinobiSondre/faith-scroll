@@ -49,6 +49,18 @@ object Prefs {
     fun setWidgetOpacity(ctx: Context, v: Int) = p(ctx).edit().putInt("widget_opacity", v.coerceIn(0, 100)).apply()
     fun widgetLightText(ctx: Context): Boolean = p(ctx).getBoolean("widget_light_text", true)
     fun setWidgetLightText(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("widget_light_text", v).apply()
+    // Widget text look (drawn by WidgetText, so everything is adjustable)
+    fun widgetShadow(ctx: Context): Int = p(ctx).getInt("widget_shadow", 40)           // 0 = none … 100 = strong
+    fun setWidgetShadow(ctx: Context, v: Int) = p(ctx).edit().putInt("widget_shadow", v.coerceIn(0, 100)).apply()
+    fun widgetColor(ctx: Context): String = p(ctx).getString("widget_color", "auto")!!   // auto, white, cream, gold, rose, sky, dark
+    fun setWidgetColor(ctx: Context, v: String) = p(ctx).edit().putString("widget_color", v).apply()
+    fun widgetFont(ctx: Context): String = p(ctx).getString("widget_font", "serif")!!    // serif, sans, bold, script
+    fun setWidgetFont(ctx: Context, v: String) = p(ctx).edit().putString("widget_font", v).apply()
+    fun widgetSize(ctx: Context): Int = p(ctx).getInt("widget_size", 100)               // % of the normal text size
+    fun setWidgetSize(ctx: Context, v: Int) = p(ctx).edit().putInt("widget_size", v.coerceIn(60, 160)).apply()
+    fun widgetAlign(ctx: Context): String = p(ctx).getString("widget_align", "start")!!  // start, center
+    fun setWidgetAlign(ctx: Context, v: String) = p(ctx).edit().putString("widget_align", v).apply()
+
     fun widgetAutoChange(ctx: Context): Boolean = p(ctx).getBoolean("widget_auto", true)
     fun setWidgetAutoChange(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("widget_auto", v).apply()
     fun widgetRef(ctx: Context): String? = p(ctx).getString("widget_ref", null)
