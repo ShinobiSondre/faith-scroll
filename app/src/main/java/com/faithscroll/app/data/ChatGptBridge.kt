@@ -61,7 +61,9 @@ object ChatGptBridge {
         "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
         "var users=document.querySelectorAll('[data-message-author-role=\"user\"]').length;" +
         "return JSON.stringify({a:out,busy:busy,pending:pending,users:users,input:!!c,url:location.href,title:document.title," +
-        "body:(document.body?document.body.innerText:'').slice(0,240)});})()"
+        "body:(document.body?document.body.innerText:'').slice(0,240)," +
+        "tail:(document.body?document.body.innerText:'').slice(-300)," +
+        "dialog:[].slice.call(document.querySelectorAll('[role=\"dialog\"], [aria-modal=\"true\"]')).map(function(e){return (e.innerText||'').replace(/\\s+/g,' ').slice(0,200);}).join(' | ')});})()"
     private const val SEND = "(function(){var b=document.querySelector('[data-testid=\"send-button\"]')||document.querySelector('button[aria-label*=\"end\"]');" +
         "if(b&&!b.disabled){b.click();return 'clicked';}var e=document.querySelector('#prompt-textarea');" +
         "if(e){e.focus();e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));return 'enter';}return 'none';})()"
@@ -230,9 +232,18 @@ object ChatGptBridge {
                         w.evaluateJavascript(typeJs(currentQ), null)
                     }
                     if (waited > 45_000) {
-                        val seen = "${o.optString("title")} | ${o.optString("body").replace("\n", " ").take(160)}"
+                        // What's blocking: a pop-up if there is one, else the end of the page (limits / log-in show there).
+                        val dialog = o.optString("dialog").trim()
+                        val tail = o.optString("tail").replace("\n", " ").replace(Regex("\\s+"), " ").trim().takeLast(220)
+                        val seen = dialog.ifBlank { tail }.ifBlank { o.optString("body").replace("\n", " ").take(160) }
+                        val limit = Regex("(?i)(limit|log in|logg inn|sign up|registrer|too many|for mange|try again later|prøv igjen senere)").containsMatchIn(dialog + " " + tail)
                         Diag.log("ask", "ChatGPT gave no answer: $seen")
-                        fail(com.faithscroll.app.util.tr("ChatGPT didn't answer. The page showed: ", "ChatGPT svarte ikke. Siden viste: ") + seen)
+                        fail(
+                            if (limit) com.faithscroll.app.util.tr(
+                                "ChatGPT wants you to log in (or the free limit without an account is reached). Tap Open ChatGPT to log in once – after that it answers here again. ($seen)",
+                                "ChatGPT vil at du logger inn (eller grensen uten konto er nådd). Trykk Åpne ChatGPT og logg inn én gang – da svarer den her igjen. ($seen)")
+                            else com.faithscroll.app.util.tr("ChatGPT didn't answer. The page showed: ", "ChatGPT svarte ikke. Siden viste: ") + seen
+                        )
                         return@launch
                     }
                 }
