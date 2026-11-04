@@ -64,9 +64,17 @@ object ChatGptBridge {
         "body:(document.body?document.body.innerText:'').slice(0,240)," +
         "tail:(document.body?document.body.innerText:'').slice(-300)," +
         "dialog:[].slice.call(document.querySelectorAll('[role=\"dialog\"], [aria-modal=\"true\"]')).map(function(e){return (e.innerText||'').replace(/\\s+/g,' ').slice(0,200);}).join(' | ')});})()"
-    private const val SEND = "(function(){var b=document.querySelector('[data-testid=\"send-button\"]')||document.querySelector('button[aria-label*=\"end\"]');" +
-        "if(b&&!b.disabled){b.click();return 'clicked';}var e=document.querySelector('#prompt-textarea');" +
-        "if(e){e.focus();e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));return 'enter';}return 'none';})()"
+    // Sends what's in ChatGPT's input box. Tries every kind of send button ChatGPT has used, then the
+    // form's own submit, then a real Enter key (its layout changes now and then).
+    private const val SEND = "(function(){var e=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
+        "if(e){try{e.dispatchEvent(new InputEvent('input',{bubbles:true}));}catch(x){}}" +
+        "var sels=['[data-testid=\"send-button\"]','#composer-submit-button','[data-testid=\"composer-send-button\"]'," +
+        "'button[aria-label=\"Send prompt\"]','button[aria-label*=\"Send\"]','button[aria-label*=\"send\"]','button[aria-label*=\"Send inn\"]'," +
+        "'form button[type=\"submit\"]'];" +
+        "for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b&&!b.disabled&&b.getAttribute('aria-disabled')!=='true'){b.click();return 'clicked '+sels[i];}}" +
+        "var f=e&&e.closest?e.closest('form'):null;if(f&&f.requestSubmit){try{f.requestSubmit();return 'form';}catch(x){}}" +
+        "if(e){try{e.focus();}catch(x){}['keydown','keypress','keyup'].forEach(function(t){e.dispatchEvent(new KeyboardEvent(t,{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));});return 'enter';}" +
+        "return 'none';})()"
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun webView(a: Activity): WebView? {
