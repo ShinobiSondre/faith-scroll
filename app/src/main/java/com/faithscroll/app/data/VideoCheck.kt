@@ -45,7 +45,7 @@ object VideoCheck {
     @Synchronized fun queue(ctx: Context, videos: List<Video>) {
         publish() // the app language may have changed: only videos approved for this language count
         appCtx = ctx.applicationContext
-        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v5.json"); runCatching { load() }; publish() }
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v6.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
         if (todo.isEmpty()) return
         job?.cancel()
@@ -80,7 +80,7 @@ object VideoCheck {
     /** Checks extra videos (e.g. search results) right away, alongside the feed's own queue. */
     fun checkExtra(ctx: Context, videos: List<Video>) {
         appCtx = ctx.applicationContext
-        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v3.json"); runCatching { load() }; publish() }
+        if (store == null) { store = File(ctx.applicationContext.filesDir, "video_checks_v6.json"); runCatching { load() }; publish() }
         val todo = videos.filter { it.direct.isBlank() && !known(it.id) }.distinctBy { it.id }
         if (todo.isEmpty()) return
         scope.launch {
