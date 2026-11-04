@@ -57,6 +57,8 @@ object VideoCheck {
                 for (v in todo) {
                     if (!isActive) break
                     if (known(v.id)) continue
+                    // Asking ChatGPT gets the whole phone: checking waits until the answer is in.
+                    while (ChatGptBridge.status.value == ChatGptBridge.Status.THINKING) kotlinx.coroutines.delay(500)
                     gate.acquire()
                     launch {
                         try {
@@ -85,6 +87,8 @@ object VideoCheck {
             val gate = kotlinx.coroutines.sync.Semaphore(3)
             kotlinx.coroutines.coroutineScope {
                 for (v in todo) {
+                    // Asking ChatGPT gets the whole phone: checking waits until the answer is in.
+                    while (ChatGptBridge.status.value == ChatGptBridge.Status.THINKING) kotlinx.coroutines.delay(500)
                     gate.acquire()
                     launch {
                         try {

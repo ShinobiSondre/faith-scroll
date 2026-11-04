@@ -64,6 +64,15 @@ object ChatGptBridge {
         "body:(document.body?document.body.innerText:'').slice(0,240)," +
         "tail:(document.body?document.body.innerText:'').slice(-300)," +
         "dialog:[].slice.call(document.querySelectorAll('[role=\"dialog\"], [aria-modal=\"true\"]')).map(function(e){return (e.innerText||'').replace(/\\s+/g,' ').slice(0,200);}).join(' | ')});})()"
+    // How the page is built (for the diagnostics when no answer is found): which conversation markers
+    // exist, the input box, and whether our question appears anywhere.
+    private const val PAGE_SHAPE = "(function(){function n(s){return document.querySelectorAll(s).length;}" +
+        "var ids={};[].slice.call(document.querySelectorAll('[data-testid]')).forEach(function(e){var k=e.getAttribute('data-testid').replace(/[0-9]+/g,'#');ids[k]=(ids[k]||0)+1;});" +
+        "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
+        "return JSON.stringify({role_user:n('[data-message-author-role=\"user\"]'),role_assistant:n('[data-message-author-role=\"assistant\"]')," +
+        "turn:n('[data-turn]'),article:n('article'),markdown:n('.markdown'),composer:c?((c.innerText||c.value||'').length):-1," +
+        "url:location.pathname,testids:Object.keys(ids).slice(0,25).join(',')});})()"
+
     // Sends what's in ChatGPT's input box. Tries every kind of send button ChatGPT has used, then the
     // form's own submit, then a real Enter key (its layout changes now and then).
     private const val SEND = "(function(){var e=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
@@ -206,6 +215,8 @@ object ChatGptBridge {
             var last = ""
             var stableSince = 0L
             var nudged = 0L
+            var typed = false      // the question is typed in at most once (never twice into the chat)
+            var snapshot = false   // one look at how the page is built, if no answer shows up
             while (true) {
                 delay(600)
                 val w = web ?: return@launch
@@ -233,11 +244,16 @@ object ChatGptBridge {
                         nudged = System.currentTimeMillis()
                         w.evaluateJavascript(SEND) { r -> Diag.log("ask", "question was waiting unsent – pressed send ($r)") }
                     } else if (o.optInt("users") == 0 && o.optInt("pending") == 0 && o.optBoolean("input") &&
-                        waited > 6_000 && System.currentTimeMillis() - nudged > 8_000 && currentQ.isNotBlank()) {
+                        waited > 6_000 && !typed && currentQ.isNotBlank()) {
+                        typed = true
                         // The link's question never arrived (e.g. a pop-up was in the way): type it in ourselves.
                         nudged = System.currentTimeMillis()
                         Diag.log("ask", "question didn't arrive from the link – typing it in")
                         w.evaluateJavascript(typeJs(currentQ), null)
+                    }
+                    if (waited > 12_000 && !snapshot) {
+                        snapshot = true
+                        w.evaluateJavascript(PAGE_SHAPE) { r -> Diag.log("ask", "page shape: ${runCatching { JSONTokener(r).nextValue() as String }.getOrDefault(r)}") }
                     }
                     if (waited > 45_000) {
                         // What's blocking: a pop-up if there is one, else the end of the page (limits / log-in show there).
