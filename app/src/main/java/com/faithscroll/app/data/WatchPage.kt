@@ -82,7 +82,7 @@ object WatchPage {
         val ps = android?.optJSONObject("playabilityStatus")
         val status = ps?.optString("status").orEmpty()
         val tracks = android?.let { tracksOf(it, true) }.orEmpty().ifEmpty { page?.let { tracksOf(it, false) }.orEmpty() }
-        Diag.log("page", "$videoId: android=${status.ifBlank { "-" }}${ps?.optString("reason")?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""}, " +
+        if (status != "OK" || tracks.isEmpty()) Diag.log("page", "$videoId: android=${status.ifBlank { "-" }}${ps?.optString("reason")?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""}, " +
             "tracks=${tracks.joinToString { it.lang + (if (it.kind == "asr") "*" else "") + (if (it.plain) "" else "(web)") }.ifBlank { "none" }}")
         val vd = android?.optJSONObject("videoDetails") ?: page?.optJSONObject("videoDetails")
         val web = page?.let { tracksOf(it, false) }.orEmpty()
@@ -91,7 +91,10 @@ object WatchPage {
     }
 
     /** The spoken language: YouTube's automatic captions are made from the audio. */
-    fun spoken(info: Info): String = info.tracks.firstOrNull { it.kind == "asr" }?.lang.orEmpty()
+    // Only trustworthy when there's exactly one automatic track: YouTube now often lists automatic
+    // tracks in many languages (AI translations), and the first one (e.g. Arabic) isn't the spoken one.
+    // Then the title/description decide instead.
+    fun spoken(info: Info): String = info.tracks.filter { it.kind == "asr" }.let { a -> if (a.size == 1) a[0].lang else "" }
 
     /** Downloads one track as cues, optionally translated by YouTube (tlang). Tries with a proof-of-origin token first. */
     /** YouTube answered "429 Sorry" (too many requests): leave its captions alone for a while. */

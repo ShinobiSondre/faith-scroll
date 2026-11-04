@@ -33,7 +33,7 @@ object Transcripts {
         val info = WatchPage.info(videoId)
         if (info == null || info.tracks.isEmpty()) {
             missing[videoId] = System.currentTimeMillis()
-            Diag.log("subs", "$videoId: ${if (info == null) "page unreadable" else "no captions on YouTube"}")
+            if (info == null) Diag.log("subs", "$videoId: page unreadable")
             return@withContext null
         }
         val want = target()
