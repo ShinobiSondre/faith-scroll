@@ -48,7 +48,10 @@ object VerseRepository {
         }
     }
 
-    fun byRef(ctx: Context, ref: String?): Verse? = ref?.let { r -> all(ctx).firstOrNull { it.ref == r } }
+    fun byRef(ctx: Context, ref: String?): Verse? = ref?.let { r -> all(ctx).firstOrNull { it.ref == r } ?: everyMapped.firstOrNull { it.ref == r } }
+
+    /** Every verse in Norwegian, also Old Testament ones not in the daily pool (so saved verses still open). */
+    @Volatile private var everyMapped: List<Verse> = emptyList()
 
     fun random(ctx: Context, notRef: String? = null): Verse {
         val list = all(ctx)
@@ -69,7 +72,8 @@ object VerseRepository {
     /** Swaps in the Norwegian 1930 text and references. Verses we can't map reliably are left out. */
     private fun toNorwegian(ctx: Context, list: List<Verse>): List<Verse> {
         val mapped = runCatching { org.json.JSONObject(ctx.assets.open("verses_no.json").bufferedReader().use { it.readText() }) }.getOrNull()
-        return list.mapNotNull { v ->
+        val modernNt = BibleNo.isModern(ctx, 42)
+        val mappedAll = list.mapNotNull { v ->
             mapped?.optJSONObject(v.ref)?.let { o ->
                 val book = o.getInt("book"); val ch = o.getInt("chapter"); val from = o.getInt("from"); val to = o.getInt("to")
                 // New Testament: modern bokmål (En Levende Bok) instead of the 1930 wording.
@@ -80,7 +84,22 @@ object VerseRepository {
             } ?: BibleNo.lookup(ctx, v.ref)?.let { (text, label, pos) ->
                 v.copy(text = text, label = label, noBook = pos[0], noChapter = pos[1], noFrom = pos[2], noTo = pos[3])
             }
-        }.ifEmpty { list }
+        }
+        everyMapped = mappedAll
+        if (!modernNt) return mappedAll.ifEmpty { list }
+        // Norwegian: only New Testament verses, which read in modern bokmål (En Levende Bok) – the Old
+        // Testament exists only in the 1930 wording. Extra New Testament verses keep the choice wide.
+        val extras = runCatching {
+            JSONArray(ctx.assets.open("verses_no_nt_extra.json").bufferedReader().use { it.readText() }).let { a ->
+                (0 until a.length()).mapNotNull { i ->
+                    val o = a.getJSONObject(i)
+                    BibleNo.lookup(ctx, o.getString("ref"))?.let { (text, label, pos) ->
+                        Verse(o.getString("ref"), text, o.getString("theme"), label, pos[0], pos[1], pos[2], pos[3])
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+        return (mappedAll.filter { it.noBook >= 39 } + extras).distinctBy { it.ref }.ifEmpty { mappedAll.ifEmpty { list } }
     }
 
     private fun parse(json: String): List<Verse> {
