@@ -23,6 +23,14 @@ object BibleNo {
         "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
     )
 
+    /**
+     * Android unpacks ".gz" files when it builds the app, so the file is there as "x.json" –
+     * or still as "x.json.gz" on some build setups. Reads whichever exists.
+     */
+    private fun readAsset(ctx: Context, name: String): String =
+        runCatching { ctx.assets.open(name).bufferedReader().use { it.readText() } }.getOrNull()
+            ?: GZIPInputStream(ctx.assets.open("$name.gz")).bufferedReader().use { it.readText() }
+
     fun bookIndex(english: String): Int =
         this.english.indexOf(if (english == "Psalms") "Psalm" else english)
 
@@ -30,7 +38,7 @@ object BibleNo {
 
     private fun load(ctx: Context): List<Pair<String, List<List<String>>>> = books ?: synchronized(this) {
         books ?: run {
-            val text = GZIPInputStream(ctx.assets.open("bible_no.json.gz")).bufferedReader().use { it.readText() }
+            val text = readAsset(ctx, "bible_no.json")
             val a = JSONArray(text)
             (0 until a.length()).map { i ->
                 val b = a.getJSONArray(i)
@@ -55,7 +63,7 @@ object BibleNo {
         if (!ntTried) {
             ntTried = true
             nt = runCatching {
-                org.json.JSONObject(GZIPInputStream(ctx.assets.open("bible_no_nt.json.gz")).bufferedReader().use { it.readText() })
+                org.json.JSONObject(readAsset(ctx, "bible_no_nt.json"))
             }.getOrNull()
         }
         nt
