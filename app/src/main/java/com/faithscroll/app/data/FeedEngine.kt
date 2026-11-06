@@ -87,8 +87,11 @@ class FeedEngine(
 
     private fun pickVideo(all: List<Video>): FeedItem? {
         val usable = all.filter { it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) && !LangFilter.isBlockedChannel(it.channel) && !LangFilter.isNews(it.title, it.channel) }
-        val notShown = usable.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); usable }
-        val fresh = Seen.freshFirst(ctx, notShown, { it.id })
+        // Never a video you've already watched. If none are left, an illustration or message
+        // fills the spot while new videos are being found in the background.
+        val unwatched = usable.filter { !Seen.has(ctx, it.id) }
+        // Ones you only scrolled past may come back once everything else has been shown.
+        val fresh = unwatched.filter { it.id !in shownVideos }.ifEmpty { shownVideos.clear(); unwatched }
         // Variety: not a channel you just saw – none of the last 3 channels if there's anything else.
         val pool = fresh.filter { it.channel !in recentChannels.takeLast(3) }.ifEmpty { fresh }
         if (pool.isEmpty()) return null

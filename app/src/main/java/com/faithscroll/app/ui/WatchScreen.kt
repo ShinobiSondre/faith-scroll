@@ -87,15 +87,15 @@ fun WatchScreen(library: VideoLibrary?, bottomInset: Dp, onOpen: (Video, List<Vi
                     val r = kotlin.random.Random(System.currentTimeMillis() / 600_000)
                     // Score each video once (re-scoring with a fresh random number inside the
                     // sort made the order inconsistent, which crashed the sort).
-                    val ranked = library.all.map { v ->
-                        v to (com.faithscroll.app.data.Taste.scoreVideo(ctx, v) + r.nextFloat() * 1.5f -
-                            (if (com.faithscroll.app.data.Seen.has(ctx, v.id)) 3f else 0f)) // already watched → further down
+                    val ranked = library.all.filter { !com.faithscroll.app.data.Seen.has(ctx, it.id) }.map { v ->
+                        v to (com.faithscroll.app.data.Taste.scoreVideo(ctx, v) + r.nextFloat() * 1.5f)
                     }.sortedByDescending { it.second }.map { it.first }
                     mixChannels(ranked)
                 }
-                "Shorts" -> library.shorts
-                "Sermons" -> library.sermons
-                "Stories" -> library.stories
+                // Videos you've already watched don't come back (a channel's own list still shows all).
+                "Shorts" -> library.shorts.filter { !com.faithscroll.app.data.Seen.has(ctx, it.id) }
+                "Sermons" -> library.sermons.filter { !com.faithscroll.app.data.Seen.has(ctx, it.id) }
+                "Stories" -> library.stories.filter { !com.faithscroll.app.data.Seen.has(ctx, it.id) }
                 else -> library.all.filter { it.channel == filter }
             }
         }

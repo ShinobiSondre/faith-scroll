@@ -230,7 +230,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         // Keep finding more while you scroll: when fewer than ~20 checked, unwatched videos are
         // waiting, run another round of searches (new queries each time).
         while (true) {
-            kotlinx.coroutines.delay(40_000)
+            kotlinx.coroutines.delay(if (discovered.isEmpty()) 15_000 else 30_000)
             val ok = com.faithscroll.app.data.VideoCheck.verified.value
             val waiting = (discovered + (library?.all ?: emptyList())).count { it.id in ok && !com.faithscroll.app.data.Seen.has(ctx, it.id) }
             val asking = com.faithscroll.app.data.ChatGptBridge.status.value == com.faithscroll.app.data.ChatGptBridge.Status.THINKING

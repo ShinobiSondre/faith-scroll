@@ -173,9 +173,45 @@ fun BreathingLight(modifier: Modifier = Modifier, size: Float = 220f, onPhase: (
     }
     Canvas(modifier.size(size.dp)) {
         val r = this.size.minDimension / 2
-        val inner = r * (0.42f + 0.28f * k)
-        drawCircle(Brush.radialGradient(listOf(Gold.copy(alpha = 0.35f + 0.25f * k), Color.Transparent), center, r), r)
-        drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.95f), Gold.copy(alpha = 0.6f)), center, inner), inner)
+        val inner = r * (0.36f + 0.22f * k)
+        val c = center
+        // Soft halo.
+        drawCircle(Brush.radialGradient(listOf(Gold.copy(alpha = 0.32f + 0.22f * k), Color.Transparent), c, r), r)
+        // A cross of light shining out from behind the light – brighter as you breathe in.
+        val glow = 0.30f + 0.45f * k
+        val crossY = c.y - r * 0.28f
+        for ((w, a) in listOf(r * 0.16f to 0.18f, r * 0.07f to 0.45f, r * 0.025f to 0.9f)) {
+            drawRect(
+                Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = a * glow), Color.White.copy(alpha = a * glow), Color.Transparent), c.y - r * 0.98f, c.y + r * 0.98f),
+                Offset(c.x - w / 2, c.y - r * 0.98f), androidx.compose.ui.geometry.Size(w, r * 1.96f)
+            )
+            drawRect(
+                Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = a * glow), Color.White.copy(alpha = a * glow), Color.Transparent), c.x - r * 0.66f, c.x + r * 0.66f),
+                Offset(c.x - r * 0.66f, crossY - w / 2), androidx.compose.ui.geometry.Size(r * 1.32f, w)
+            )
+        }
+        drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.97f), Color(0xFFF3E3B5).copy(alpha = 0.92f), Gold.copy(alpha = 0.55f)), c, inner), inner)
+        // A small, fine cross in the middle of the light.
+        val deep = Color(0xFF9C7A2E).copy(alpha = 0.55f)
+        val h = inner * 0.62f
+        val bw = (inner * 0.075f).coerceAtLeast(1.5f)
+        val cy = c.y - h * 0.5f + h * 0.30f
+        drawRoundRect(deep, Offset(c.x - bw / 2, c.y - h / 2), androidx.compose.ui.geometry.Size(bw, h), androidx.compose.ui.geometry.CornerRadius(bw / 2))
+        drawRoundRect(deep, Offset(c.x - h * 0.30f, cy - bw / 2), androidx.compose.ui.geometry.Size(h * 0.60f, bw), androidx.compose.ui.geometry.CornerRadius(bw / 2))
+    }
+}
+
+/** Faint stars that slowly twinkle behind everything. */
+@Composable
+private fun Stars(modifier: Modifier = Modifier) {
+    val dots = remember { val g = kotlin.random.Random(46); List(46) { Triple(g.nextFloat(), g.nextFloat(), g.nextFloat() * 6.28f) } }
+    val t = rememberInfiniteTransition(label = "stars")
+    val p by t.animateFloat(0f, 6.2832f, infiniteRepeatable(tween(9000, easing = androidx.compose.animation.core.LinearEasing)), label = "p")
+    Canvas(modifier.fillMaxSize()) {
+        dots.forEachIndexed { i, (x, y, ph) ->
+            val a = 0.10f + 0.30f * ((kotlin.math.sin(p + ph) + 1f) / 2f)
+            drawCircle(Color.White.copy(alpha = a), radius = if (i % 7 == 0) 2.6f else 1.6f, center = Offset(x * size.width, y * size.height))
+        }
     }
 }
 
@@ -189,7 +225,7 @@ fun BeStillScreen(onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val prompts = remember {
         listOf(
-            tr("Be still, and know that I am God.", "Hold op og kjenn at jeg er Gud!") to tr("Psalm 46:10", "Salme 46,11"),
+            tr("Be still, and know that I am God.", "Vær stille og kjenn at jeg er Gud.") to tr("Psalm 46:10", "Salme 46,11"),
             tr("He is here with you, right now.", "Han er her hos deg, akkurat nå.") to "",
             tr("Tell Him what's on your heart.", "Fortell Ham hva som ligger på hjertet ditt.") to "",
             tr("Thank Him for one thing today.", "Takk Ham for én ting i dag.") to "",
@@ -220,12 +256,14 @@ fun BeStillScreen(onClose: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Ink).clickable(remember { MutableInteractionSource() }, null) { }) {
         LivingBackground(Palettes.forTheme("prayer"))
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
+        Stars()
 
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("✝", color = Gold, fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
                 Text(tr("Be still", "Vær stille"), color = Color.White, fontSize = 22.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, tr("Close", "Lukk"), tint = Color.White) }
             }
@@ -236,18 +274,24 @@ fun BeStillScreen(onClose: () -> Unit) {
             }
 
             Spacer(Modifier.weight(1f))
-            Box(contentAlignment = Alignment.Center) {
-                BreathingLight(size = 240f, onPhase = { inhale = it })
-                AnimatedContent(inhale, transitionSpec = { fadeIn(tween(800)) togetherWith fadeOut(tween(800)) }, label = "b") { i ->
-                    Text(if (i) tr("Breathe in", "Pust inn") else tr("Breathe out", "Pust ut"), color = Ink.copy(alpha = 0.8f), fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                }
+            BreathingLight(size = 260f, onPhase = { inhale = it })
+            // One word at a time: the old one fades out before the new one fades in (no overlap).
+            AnimatedContent(inhale, transitionSpec = { fadeIn(tween(700, delayMillis = 450)) togetherWith fadeOut(tween(400)) }, label = "b") { i ->
+                Text(if (i) tr("Breathe in", "Pust inn") else tr("Breathe out", "Pust ut"),
+                    color = Color.White.copy(alpha = 0.78f), fontSize = 15.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Medium)
             }
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(28.dp))
             AnimatedContent(if (done) -1 else index, transitionSpec = { fadeIn(tween(1500)) togetherWith fadeOut(tween(1200)) }, label = "p") { i ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val (line, ref) = if (i == -1) tr("Amen.", "Amen.") to tr("Carry His peace with you.", "Ta med deg Hans fred.") else prompts[i]
                     Text(line, color = Color.White, fontSize = 26.sp, lineHeight = 34.sp, fontFamily = FontFamily.Serif, textAlign = TextAlign.Center)
-                    if (ref.isNotBlank()) Text(ref, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    if (ref.isNotBlank()) {
+                        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.width(28.dp).height(1.dp).background(Gold.copy(alpha = 0.5f)))
+                            Text("  ✝  $ref  ", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Box(Modifier.width(28.dp).height(1.dp).background(Gold.copy(alpha = 0.5f)))
+                        }
+                    }
                 }
             }
             Spacer(Modifier.weight(1f))
