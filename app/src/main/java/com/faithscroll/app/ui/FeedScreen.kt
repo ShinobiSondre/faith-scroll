@@ -327,8 +327,8 @@ private fun FeedHeader(state: AppState, onBeStill: () -> Unit, onSearch: () -> U
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("FaithScroll", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif)
-        Spacer(Modifier.weight(1f))
+        Text("FaithScroll", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif,
+            maxLines = 1, softWrap = false, modifier = Modifier.weight(1f, fill = true))
         // Search by feeling or theme
         Box(
             Modifier.size(34.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f)).clickable(onClick = onSearch),
@@ -337,7 +337,7 @@ private fun FeedHeader(state: AppState, onBeStill: () -> Unit, onSearch: () -> U
         Spacer(Modifier.width(8.dp))
         // Quiet time with God
         Text(
-            "🙏 " + tr("Be still", "Vær stille"), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+            "✝ " + tr("Be still", "Vær stille"), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
             modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f))
                 .clickable(onClick = onBeStill).padding(horizontal = 12.dp, vertical = 6.dp)
         )
@@ -346,9 +346,10 @@ private fun FeedHeader(state: AppState, onBeStill: () -> Unit, onSearch: () -> U
             Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f)).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Filled.LocalFireDepartment, null, tint = Gold, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(tr("${state.streak.current} day${if (state.streak.current == 1) "" else "s"}", "${state.streak.current} ${if (state.streak.current == 1) "dag" else "dager"}"), color = Color.White, fontSize = 13.sp)
+            // Just the flame and the number, so it never wraps on narrow screens (Z Flip etc.).
+            Icon(Icons.Filled.LocalFireDepartment, tr("Day streak", "Dager på rad"), tint = Gold, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(3.dp))
+            Text("${state.streak.current}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }
@@ -644,7 +645,7 @@ fun RailButton(icon: ImageVector, label: String, active: Boolean, tint: Color, o
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
-                .size(50.dp)
+                .size(46.dp)
                 .scale(scale.value)
                 .clip(CircleShape)
                 .background(Color.Black.copy(alpha = 0.25f))
@@ -654,10 +655,10 @@ fun RailButton(icon: ImageVector, label: String, active: Boolean, tint: Color, o
                 ) { pops++; onClick() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, label, tint = tint, modifier = Modifier.size(28.dp))
+            Icon(icon, label, tint = tint, modifier = Modifier.size(25.dp))
         }
-        Spacer(Modifier.height(4.dp))
-        Text(label, color = Color.White, fontSize = 12.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(label, color = Color.White, fontSize = 11.sp, maxLines = 1)
     }
 }
 

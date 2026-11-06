@@ -47,7 +47,12 @@ object ChatGptBridge {
         // Cookie banner (Norway/EU): choose "reject non-essential" (or close it) so it never blocks or gets read.
         // Cookie banner and "log in" pop-ups: reject non-essential cookies / stay logged out.
         "var bs=document.querySelectorAll('button, a, [role=\"button\"]');for(var x=0;x<bs.length;x++){var bt=(bs[x].innerText||'').trim();" +
-        "if(bt.length<45&&/(avvis|reject|forbli utlogget|stay logged out|fortsett uten|continue without|ikke nå|not now|maybe later|kanskje senere)/i.test(bt)){bs[x].click();}}" +
+        "if(bt.length<45&&/(avvis|reject|forbli utlogget|stay logged out|fortsett uten|continue without|ikke nå|not now|maybe later|kanskje senere)/i.test(bt)){bs[x].click();}" +
+        // "Clear current chat?" (a new link while a chat is open): yes, start the new one.
+        "else if(/^(clear chat|clear|tøm chat|tøm chatten|tøm|slett chat|fjern chat|start new chat|ny chat)$/i.test(bt)&&bs[x].closest('[role=\"dialog\"],[role=\"alertdialog\"],[aria-modal=\"true\"],dialog')){bs[x].click();}}" +
+        // "Log in or sign up" sheets: close them (the X), we carry on logged out.
+        "var dl=document.querySelectorAll('[role=\"dialog\"],dialog[open]');for(var y=0;y<dl.length;y++){var dt=dl[y].innerText||'';" +
+        "if(/(log in|sign up|logg inn|registrer)/i.test(dt)&&!/(clear current chat|tøm)/i.test(dt)){var xb=dl[y].querySelector('button[aria-label*=\"lose\"],button[aria-label*=\"ukk\"],[data-testid=\"close-button\"]');if(xb)xb.click();}}" +
         "var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
         "if(!a.length)a=document.querySelectorAll('[data-turn=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
@@ -260,13 +265,14 @@ object ChatGptBridge {
                         val dialog = o.optString("dialog").trim()
                         val tail = o.optString("tail").replace("\n", " ").replace(Regex("\\s+"), " ").trim().takeLast(220)
                         val seen = dialog.ifBlank { tail }.ifBlank { o.optString("body").replace("\n", " ").take(160) }
-                        val limit = Regex("(?i)(limit|log in|logg inn|sign up|registrer|too many|for mange|try again later|prøv igjen senere)").containsMatchIn(dialog + " " + tail)
+                        val limit = Regex("(?i)(limit|too many|for mange|try again later|prøv igjen senere|grense|reached)").containsMatchIn(dialog + " " + tail)
                         Diag.log("ask", "ChatGPT gave no answer: $seen")
                         fail(
                             if (limit) com.faithscroll.app.util.tr(
-                                "ChatGPT wants you to log in (or the free limit without an account is reached). Tap Open ChatGPT to log in once – after that it answers here again. ($seen)",
-                                "ChatGPT vil at du logger inn (eller grensen uten konto er nådd). Trykk Åpne ChatGPT og logg inn én gang – da svarer den her igjen. ($seen)")
-                            else com.faithscroll.app.util.tr("ChatGPT didn't answer. The page showed: ", "ChatGPT svarte ikke. Siden viste: ") + seen
+                                "ChatGPT wants you to log in, or the free limit without an account is reached. Tap Open ChatGPT and log in once – then it answers here again.",
+                                "ChatGPT vil at du logger inn, eller grensen uten konto er nådd. Trykk «Åpne ChatGPT» og logg inn én gang – da svarer den her igjen.")
+                            // What the page showed goes to the diagnostics log, not on screen.
+                            else com.faithscroll.app.util.tr("ChatGPT didn't answer. Try again in a moment.", "ChatGPT svarte ikke. Prøv igjen om litt.")
                         )
                         return@launch
                     }

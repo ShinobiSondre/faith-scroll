@@ -285,9 +285,11 @@ fun VideoCard(
         }
 
         if (uiAlpha > 0f) Column(
-            Modifier.align(Alignment.BottomEnd).then(uiMod).padding(end = 12.dp, bottom = bottomInset + 44.dp),
+            // Stays below the header: on short screens (Z Flip cover, folded) the rail scrolls instead of overlapping it.
+            Modifier.align(Alignment.BottomEnd).then(uiMod).statusBarsPadding().padding(top = 64.dp, end = 10.dp, bottom = bottomInset + 40.dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
             RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
