@@ -53,7 +53,8 @@ object ChatGptBridge {
         // "Log in or sign up" sheets: close them (the X), we carry on logged out.
         "var dl=document.querySelectorAll('[role=\"dialog\"],dialog[open]');for(var y=0;y<dl.length;y++){var dt=dl[y].innerText||'';" +
         "if(/(log in|sign up|logg inn|registrer)/i.test(dt)&&!/(clear current chat|tøm)/i.test(dt)){var xb=dl[y].querySelector('button[aria-label*=\"lose\"],button[aria-label*=\"ukk\"],[data-testid=\"close-button\"]');if(xb)xb.click();}}" +
-        "var a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
+        "var a=document.querySelectorAll('[data-message-role=\"assistant\"]');" +
+        "if(!a.length)a=document.querySelectorAll('[data-message-author-role=\"assistant\"]');" +
         "if(!a.length)a=document.querySelectorAll('[data-turn=\"assistant\"]');" +
         "var out=[];for(var i=0;i<a.length;i++)out.push(a[i].innerText);" +
         "if(!out.length){var m=document.querySelectorAll('article .markdown, .markdown.prose');for(var j=0;j<m.length;j++)out.push(m[j].innerText);}" +
@@ -61,14 +62,43 @@ object ChatGptBridge {
         "if(!out.length&&document.body){var parts=document.body.innerText.split(/ChatGPT (?:said|sa):/);" +
         "for(var k=1;k<parts.length;k++){var t=parts[k].split(/(?:You said|Du sa):/)[0];" +
         "t=t.split(/(?:ChatGPT is AI and can make mistakes|ChatGPT can make mistakes|ChatGPT kan gjøre feil|ChatGPT er (?:KI|AI)|Chat with ChatGPT|Chat med ChatGPT|Ask anything|Spør om hva som helst|Log in|Sign up|Logg inn|Registrer deg|We use cookies|Vi bruker informasjonskapsler)/)[0];out.push(t.trim());}}" +
-        "var busy=!!document.querySelector('[data-testid=\"stop-button\"]');" +
+        "var busy=!!document.querySelector('[data-testid=\"stop-button\"],[data-message-streaming]');" +
         "var c=document.querySelector('#prompt-textarea')||document.querySelector('textarea');" +
         "var pending=c?((c.innerText||c.value||'').trim().length):0;" +
-        "var users=document.querySelectorAll('[data-message-author-role=\"user\"]').length;" +
-        "return JSON.stringify({a:out,busy:busy,pending:pending,users:users,input:!!c,url:location.href,title:document.title," +
+        "var users=document.querySelectorAll('[data-message-role=\"user\"],[data-message-author-role=\"user\"]').length;" +
+        "if(!users&&/\\/(uc|c)\\//.test(location.pathname))users=1;" +
+        "var complete=!!document.querySelector('[data-message-role=\"assistant\"][data-message-complete]');" +
+        "return JSON.stringify({a:out,busy:busy,complete:complete,pending:pending,users:users,input:!!c,url:location.href,title:document.title," +
         "body:(document.body?document.body.innerText:'').slice(0,240)," +
         "tail:(document.body?document.body.innerText:'').slice(-300)," +
         "dialog:[].slice.call(document.querySelectorAll('[role=\"dialog\"], [aria-modal=\"true\"]')).map(function(e){return (e.innerText||'').replace(/\\s+/g,' ').slice(0,200);}).join(' | ')});})()"
+    /**
+     * Turns an answer's page elements back into light Markdown, so dish names (headings and bold
+     * text) and lists survive. Plain innerText dropped that, and the titles looked like body text.
+     */
+    private val MD = """
+        function mdN(n){
+          if(n.nodeType===3)return n.nodeValue;
+          if(n.nodeType!==1)return '';
+          var t=n.tagName;
+          if(t==='IMG'){var u=n.currentSrc||n.getAttribute('src')||'';var w=n.naturalWidth||n.width||0;
+            return (u.indexOf('http')===0&&w>=80&&!/avatar|favicon|icon/i.test(u))?'\n![]('+u+')\n':'';}
+          if(t==='BUTTON'||t==='svg'||t==='SVG'||t==='STYLE'||t==='SCRIPT'||n.getAttribute('aria-hidden')==='true'||n.hasAttribute('data-message-actions'))return '';
+          var s='';for(var i=0;i<n.childNodes.length;i++)s+=mdN(n.childNodes[i]);
+          if(/^H[1-6]$/.test(t))return '\n\n### '+s.trim()+'\n';
+          if(t==='STRONG'||t==='B')return s.trim()?'**'+s.trim()+'** ':'';
+          if(t==='LI')return '\n• '+s.trim();
+          if(t==='BR')return '\n';
+          if(t==='P'||t==='UL'||t==='OL'||t==='DIV'||t==='SECTION'||t==='TABLE'||t==='TR'||t==='PRE'||t==='BLOCKQUOTE')return '\n'+s+'\n';
+          if(t==='TD'||t==='TH')return s+'  ';
+          return s;
+        }
+        function mdOf(el){var s='';for(var i=0;i<el.childNodes.length;i++)s+=mdN(el.childNodes[i]);
+          return s.replace(/\*\*\s+\*\*/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();}
+    """.trimIndent()
+    /** [READ] with the Markdown helper inside it. */
+    private val READ_MD by lazy { READ.replaceFirst("(function(){", "(function(){$MD\n") }
+
     // How the page is built (for the diagnostics when no answer is found): which conversation markers
     // exist, the input box, and whether our question appears anywhere.
     private const val PAGE_SHAPE = "(function(){function n(s){return document.querySelectorAll(s).length;}" +
@@ -90,6 +120,25 @@ object ChatGptBridge {
         "if(e){try{e.focus();}catch(x){}['keydown','keypress','keyup'].forEach(function(t){e.dispatchEvent(new KeyboardEvent(t,{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));});return 'enter';}" +
         "return 'none';})()"
 
+    /** Debug: show ChatGPT's hidden page (and make the chat see-through) to watch what it does. */
+    val seeThrough = MutableStateFlow(false)
+    fun setSeeThrough(on: Boolean) {
+        seeThrough.value = on
+        (web?.parent as? android.view.View)?.let { place(it, on) }
+    }
+
+    /**
+     * Where the hidden page sits. Android's WebView doesn't fully honour transparency, so the page
+     * showed faintly through the app. It's now moved down until only 2 pixels are left on screen
+     * (still "visible" to Android, so ChatGPT keeps writing), unless see-through mode is on.
+     */
+    private fun place(h: android.view.View, seeThrough: Boolean, hide: Boolean = !seeThrough && !fallback) {
+        h.alpha = if (seeThrough) 0.6f else 0.01f
+        h.translationY = if (hide) ((h.parent as? android.view.View)?.height ?: h.height).toFloat().let { (it - 2f).coerceAtLeast(0f) } else 0f
+    }
+    /** Set if ChatGPT stays silent while pushed down: then the page goes back on screen (at 1 %). */
+    @Volatile private var fallback = false
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun webView(a: Activity): WebView? {
         if (web != null && host?.get() === a) return web
@@ -101,12 +150,18 @@ object ChatGptBridge {
         val holder = object : FrameLayout(a) {
             override fun dispatchTouchEvent(ev: android.view.MotionEvent?) = false
             override fun onInterceptTouchEvent(ev: android.view.MotionEvent?) = false
-        }.apply { alpha = 0.01f; isClickable = false; isFocusable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
+        }.apply {
+            // WebView draws itself outside its parent's alpha unless the parent has its own layer;
+            // without this the "hidden" ChatGPT page showed faintly through the app.
+            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+            alpha = if (seeThrough.value) 0.6f else 0.01f; isClickable = false; isFocusable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
         root.addView(holder, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        holder.post { place(holder, seeThrough.value) }
         return WebView(a).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.userAgentString = settings.userAgentString.replace("; wv", "")
+            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webChromeClient = WebChromeClient()
             webViewClient = WebViewClient()
@@ -115,14 +170,13 @@ object ChatGptBridge {
         }.also { web = it }
     }
 
-    /** Starts a new conversation with [question] (shown short in the panel) using the prefilled [url]. */
     /** Which conversation is open: video id, the moment asked about, and the link it started with. */
     data class Session(val videoId: String, val atMs: Long, val url: String)
     val session = MutableStateFlow<Session?>(null)
 
     /** Starts a new conversation – unless this exact one is already going (then it just continues). */
     fun ask(a: Activity, url: String, question: String, videoId: String, atMs: Long) {
-        if (session.value?.let { it.videoId == videoId && it.atMs == atMs } == true && turns.value.isNotEmpty()) return
+        if (session.value?.let { it.videoId == videoId && it.atMs == atMs } == true && turns.value.isNotEmpty() && status.value != Status.FAILED) return
         session.value = Session(videoId, atMs, url)
         firstQuestion = android.net.Uri.parse(url).getQueryParameter("q").orEmpty()
         val w = webView(a) ?: run { fail("No window"); return }
@@ -133,9 +187,47 @@ object ChatGptBridge {
         error.value = null
         status.value = Status.THINKING
         pageUrl.value = url
-        w.loadUrl(url)
-        watch()
+        freshLoad(w, url)
     }
+
+    /**
+     * Every question is a brand-new, logged-out ChatGPT: cookies and site storage are wiped first,
+     * so ChatGPT never counts earlier chats and asks us to log in.
+     */
+    private fun freshLoad(@Suppress("UNUSED_PARAMETER") w: WebView, url: String) {
+        // A brand-new browser for every question: the old page is closed first, and only then are
+        // ChatGPT's cookies and storage wiped. Wiping while the old page still ran left the next
+        // page hanging, which is why follow-up questions never got an answer.
+        poll?.cancel()
+        val a = host?.get()
+        web?.let { old ->
+            old.stopLoading()
+            (old.parent as? ViewGroup)?.let { h -> (h.parent as? ViewGroup)?.removeView(h); h.removeView(old) }
+            old.destroy()
+        }
+        web = null
+        val cm = CookieManager.getInstance()
+        cm.removeAllCookies {
+            cm.flush()
+            android.webkit.WebStorage.getInstance().deleteAllData()
+            val fresh = a?.let { webView(it) }
+            if (fresh == null) { fail(com.faithscroll.app.util.tr("ChatGPT couldn't start. Try again.", "ChatGPT kunne ikke starte. Prøv igjen.")); return@removeAllCookies }
+            // (The HTTP cache is kept: ChatGPT's scripts load from it, which saves several seconds.)
+            fresh.loadUrl(url)
+            watch() // start reading only once the new page is on its way
+        }
+    }
+
+    /**
+     * Opens ChatGPT quietly in the background before you ask (when a video is paused), so its
+     * scripts are already loaded and cached. The question itself still goes to a fresh, wiped browser.
+     */
+    fun prewarm(a: Activity) {
+        if (web != null || status.value == Status.THINKING) return
+        webView(a)?.loadUrl("https://chatgpt.com/")
+    }
+
+    fun reset() { poll?.cancel(); session.value = null; turns.value = emptyList(); status.value = Status.STARTING; error.value = null }
 
     /** Everything shown before the answer being written now; the new answer is added after it. */
     @Volatile private var history: List<Turn> = emptyList()
@@ -162,9 +254,8 @@ object ChatGptBridge {
         error.value = null
         val url = android.net.Uri.parse("https://chatgpt.com/").buildUpon().appendQueryParameter("q", q).build().toString()
         pageUrl.value = url
-        Diag.log("ask", "follow-up sent as a new link (${q.length} chars)")
-        w.loadUrl(url)
-        watch()
+        log("ask", "follow-up sent as a new link (${q.length} chars)")
+        freshLoad(w, url)
     }
 
     /** The video + the conversation so far + the new question, kept short enough for a link. */
@@ -220,45 +311,58 @@ object ChatGptBridge {
             var last = ""
             var stableSince = 0L
             var nudged = 0L
+            var nudges = 0
             var typed = false      // the question is typed in at most once (never twice into the chat)
             var snapshot = false   // one look at how the page is built, if no answer shows up
             while (true) {
-                delay(600)
+                delay(300)
                 val w = web ?: return@launch
                 val raw = kotlinx.coroutines.suspendCancellableCoroutine<String?> { c -> w.evaluateJavascript(READ) { c.resumeWith(Result.success(it)) } }
                 val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
                 o.optString("url").takeIf { it.startsWith("http") }?.let { pageUrl.value = it }
                 val answers = o.optJSONArray("a") ?: JSONArray()
-                val text = (if (answers.length() >= expected) answers.optString(expected - 1).trim() else "").let(::clean)
+                // Every question is a fresh page, so all assistant parts belong to this one answer.
+                val text = (if (answers.length() >= expected) (0 until answers.length()).joinToString("\n\n") { answers.optString(it).trim() }.trim() else "").let(::clean)
                 if (text.isNotEmpty()) {
                     // Everything before + the answer as it's being written.
                     turns.value = history + Turn(false, text)
-                    if (last.isEmpty()) Diag.log("ask", "ChatGPT started answering after ${(System.currentTimeMillis() - t0) / 1000.0} s")
+                    if (last.isEmpty()) log("ask", "ChatGPT started answering after ${(System.currentTimeMillis() - t0) / 1000.0} s")
                     if (text != last) { last = text; stableSince = System.currentTimeMillis() }
                     val busy = o.optBoolean("busy")
                     // Finished: ChatGPT's stop button is gone and the text hasn't changed for 2.5 s.
-                    if (!busy && text.length >= 20 && System.currentTimeMillis() - stableSince > 2500) {
+                    // Done: ChatGPT marks the answer complete (instant), or the text stops changing for 1.5 s.
+                    val complete = o.optBoolean("complete")
+                    if (!busy && text.length >= 20 && (complete || System.currentTimeMillis() - stableSince > 1500)) {
                         status.value = Status.DONE
-                        Diag.log("ask", "ChatGPT answered in ${(System.currentTimeMillis() - t0) / 1000.0} s (${text.length} chars)")
+                        log("ask", "ChatGPT answered in ${(System.currentTimeMillis() - t0) / 1000.0} s (${text.length} chars)")
                         return@launch
                     }
                 } else {
                     // The question is filled in but wasn't sent (happens when the page isn't on screen): press send.
                     val waited = System.currentTimeMillis() - t0
-                    if (o.optInt("pending") > 0 && waited > 4_000 && System.currentTimeMillis() - nudged > 5_000) {
+                    // ChatGPT sends a question from the link by itself (usually within 2 s). Only if it's still
+                    // sitting unsent and no conversation started after 10 s, press send (at most twice).
+                    if (o.optInt("pending") > 0 && o.optInt("users") == 0 && waited > 10_000 && nudges < 2 &&
+                        System.currentTimeMillis() - nudged > 8_000) {
+                        nudges++
                         nudged = System.currentTimeMillis()
-                        w.evaluateJavascript(SEND) { r -> Diag.log("ask", "question was waiting unsent – pressed send ($r)") }
+                        w.evaluateJavascript(SEND) { r -> log("ask", "question was waiting unsent – pressed send ($r)") }
                     } else if (o.optInt("users") == 0 && o.optInt("pending") == 0 && o.optBoolean("input") &&
-                        waited > 6_000 && !typed && currentQ.isNotBlank()) {
+                        waited > 14_000 && !typed && currentQ.isNotBlank()) {
                         typed = true
                         // The link's question never arrived (e.g. a pop-up was in the way): type it in ourselves.
                         nudged = System.currentTimeMillis()
-                        Diag.log("ask", "question didn't arrive from the link – typing it in")
+                        log("ask", "question didn't arrive from the link – typing it in")
                         w.evaluateJavascript(typeJs(currentQ), null)
+                    }
+                    if (waited > 12_000 && !fallback && !seeThrough.value) {
+                        fallback = true
+                        (w.parent as? android.view.View)?.let { place(it, false, hide = false) }
+                        log("ask", "no answer while the page was pushed down – put it back on screen")
                     }
                     if (waited > 12_000 && !snapshot) {
                         snapshot = true
-                        w.evaluateJavascript(PAGE_SHAPE) { r -> Diag.log("ask", "page shape: ${runCatching { JSONTokener(r).nextValue() as String }.getOrDefault(r)}") }
+                        w.evaluateJavascript(PAGE_SHAPE) { r -> log("ask", "page shape: ${runCatching { JSONTokener(r).nextValue() as String }.getOrDefault(r)}") }
                     }
                     if (waited > 45_000) {
                         // What's blocking: a pop-up if there is one, else the end of the page (limits / log-in show there).
@@ -266,7 +370,7 @@ object ChatGptBridge {
                         val tail = o.optString("tail").replace("\n", " ").replace(Regex("\\s+"), " ").trim().takeLast(220)
                         val seen = dialog.ifBlank { tail }.ifBlank { o.optString("body").replace("\n", " ").take(160) }
                         val limit = Regex("(?i)(limit|too many|for mange|try again later|prøv igjen senere|grense|reached)").containsMatchIn(dialog + " " + tail)
-                        Diag.log("ask", "ChatGPT gave no answer: $seen")
+                        log("ask", "ChatGPT gave no answer: $seen")
                         fail(
                             if (limit) com.faithscroll.app.util.tr(
                                 "ChatGPT wants you to log in, or the free limit without an account is reached. Tap Open ChatGPT and log in once – then it answers here again.",
@@ -288,6 +392,8 @@ object ChatGptBridge {
     private fun clean(s: String): String = s.replace(junk, "")
         .lines().filterNot { it.isNotBlank() && junkLine.containsMatchIn(it.trim()) }.joinToString("\n")
         .replace(Regex("\\n{3,}"), "\n\n").trim()
+
+    private fun log(tag: String, msg: String) = Diag.log(tag, msg)
 
     private fun fail(msg: String) { error.value = msg; status.value = Status.FAILED }
 }
