@@ -334,6 +334,7 @@ object ChatGptBridge {
                     val complete = o.optBoolean("complete")
                     if (!busy && text.length >= 20 && (complete || System.currentTimeMillis() - stableSince > 1500)) {
                         status.value = Status.DONE
+                        hidePage()
                         log("ask", "ChatGPT answered in ${(System.currentTimeMillis() - t0) / 1000.0} s (${text.length} chars)")
                         return@launch
                     }
@@ -395,5 +396,11 @@ object ChatGptBridge {
 
     private fun log(tag: String, msg: String) = Diag.log(tag, msg)
 
-    private fun fail(msg: String) { error.value = msg; status.value = Status.FAILED }
+    private fun fail(msg: String) { error.value = msg; status.value = Status.FAILED; hidePage() }
+
+    /** Once answered (or given up), the page goes off screen again so it never shows through the app. */
+    private fun hidePage() {
+        fallback = false
+        if (!seeThrough.value) (web?.parent as? android.view.View)?.let { place(it, false, hide = true) }
+    }
 }

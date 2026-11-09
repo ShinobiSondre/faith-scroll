@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -113,6 +114,9 @@ fun VideoCard(
     var asking by remember(video.id) { mutableStateOf<Long?>(null) }
     var askBusy by remember(video.id) { mutableStateOf<String?>(null) }
     var chatAsk by remember(video.id) { mutableStateOf<Pair<Long, String>?>(null) } // (moment, ChatGPT link)
+    // Bible verses said so far in this video, and whether their list is open.
+    var versesSaid by remember(video.id) { mutableStateOf<List<com.faithscroll.app.data.VerseRefs.Ref>>(emptyList()) }
+    var showVerses by remember(video.id) { mutableStateOf(false) }
     val openPage = LocalOpenPage.current
     val isYouTube = video.direct.isBlank()
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
@@ -304,19 +308,16 @@ fun VideoCard(
             }
             val said = refs.filter { it.atMs <= pos + 1_500 }
             val latest = said.lastOrNull()
-            var showVerses by remember(video.id) { mutableStateOf(false) }
+            androidx.compose.runtime.SideEffect { versesSaid = said }
+            // Pops up for a moment when a verse is said; the "Bible verses" button on the right keeps them all.
             androidx.compose.animation.AnimatedVisibility(
-                visible = latest != null && (pos - latest.atMs < 60_000 || paused),
+                visible = latest != null && pos - latest.atMs in 0..15_000 && !paused,
                 enter = fadeIn(tween(400)) + androidx.compose.animation.slideInVertically { -it },
                 exit = fadeOut(tween(400)),
                 modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 62.dp, start = 16.dp)
             ) {
                 latest?.let { l -> VersePill(l, said.distinctBy { it.key }.size - 1) { paused = true; showVerses = true } }
             }
-            if (showVerses) VerseMentionsSheet(
-                said.distinctBy { it.key + "@" + it.atMs / 30_000 },
-                onSeek = { ms -> showVerses = false; playback.seekTo((ms - 2_000).coerceAtLeast(0)); paused = false }
-            ) { showVerses = false }
         }
 
         // Keep the screen awake while a video plays (no screen saver / dimming mid-video).
@@ -367,6 +368,14 @@ fun VideoCard(
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
             RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) { muted = !muted }
+            // Bible verses they've mentioned so far.
+            if (versesSaid.isNotEmpty()) Box {
+                RailButton(Icons.AutoMirrored.Filled.MenuBook, tr("Bible verses", "Bibelvers"), true, Gold) { paused = true; showVerses = true }
+                Text(
+                    "${versesSaid.distinctBy { it.key }.size}", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopEnd).clip(CircleShape).background(Gold).padding(horizontal = 6.dp, vertical = 1.dp)
+                )
+            }
             // A conversation with ChatGPT about this video: reopen it with one tap.
             val chat by com.faithscroll.app.data.ChatGptBridge.session.collectAsState()
             chat?.takeIf { it.videoId == video.id }?.let { c ->
@@ -403,6 +412,10 @@ fun VideoCard(
                 onChannel = if (isYouTube) ({ expanded = false; paused = true; openChannel(video) }) else null)
         }
         asking?.let { at -> AskSheet(video, at) { asking = null } }
+        if (showVerses) VerseMentionsSheet(
+            versesSaid.distinctBy { it.key + "@" + it.atMs / 30_000 },
+            onSeek = { ms -> showVerses = false; playback.seekTo((ms - 2_000).coerceAtLeast(0)); paused = false }
+        ) { showVerses = false }
         chatAsk?.let { (at, url) -> ChatGptSheet(video, at, url, onOpenPage = { chatAsk = null; openPage(it) }) { chatAsk = null } }
 
         // "What do they mean here?" – drawn last so it sits above the title, buttons and details,

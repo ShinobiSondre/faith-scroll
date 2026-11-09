@@ -83,11 +83,13 @@ object VerseRefs {
     }
 
     private val pattern: Regex by lazy {
-        val all = names.flatMap { it }.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }
+        // Every name, also without its number ("2. Korinterbrev" = "2." + "korinterbrev"), and with a dot after abbreviations.
+        val all = (names.flatten() + names.flatten().map { it.replace(Regex("^[123] "), "") })
+            .distinct().sortedByDescending { it.length }.joinToString("|") { Regex.escape(it).let { n -> if (it.length <= 5) "$n\\.?" else n } }
         Regex(
-            "(?i)(?<![\\p{L}])((?:(?:first|second|third|1st|2nd|3rd|første|andre|annen|tredje|[123]\\.?)\\s+)?(?:$all))" +
-                "\\s*(?:chapter|kapittel|kap\\.?)?\\s*(\\d{1,3})" +
-                "(?:\\s*[:,.]\\s*|\\s+(?:verse|verses|vers|v\\.)\\s*|\\s+)(\\d{1,3})(?:\\s*(?:-|–|to|til|through)\\s*(\\d{1,3}))?(?!\\d)"
+            "(?i)(?<![\\p{L}\\d])((?:(?:first|second|third|1st|2nd|3rd|første|andre|annen|tredje|[123]\\.?)\\s*)?(?:$all))" +
+                "(?![\\p{L}])\\s*(?:chapter|kapittel|kap\\.?)?\\s*(\\d{1,3})" +
+                "(?:(?:\\s*[:,.]\\s*|\\s+(?:verse|verses|vers|v\\.)\\s*|\\s+)(\\d{1,3})(?:\\s*(?:-|–|—|to|til|through)\\s*(\\d{1,3}))?)?(?![\\d\\p{L}])"
         )
     }
 
@@ -95,24 +97,40 @@ object VerseRefs {
         var s = raw.lowercase().replace(Regex("\\s+"), " ").trim()
         val first = s.substringBefore(' ')
         ordinals[first]?.let { s = it + " " + s.substringAfter(' ') }
-        s = s.replace(Regex("^([123])\\.\\s*"), "$1 ")
+        s = s.replace(Regex("^([123])\\.?\\s*(?=\\p{L})"), "$1 ")
         val i = names.indexOfFirst { s in it }
         if (i < 0) return null
         return i to (s in norwegianNames)
     }
 
     /** All references in [text] (said at [atMs]). */
-    fun inText(text: String, atMs: Long = 0L): List<Ref> {
-        val t = digits(text)
-        return pattern.findAll(t).mapNotNull { m ->
-            val (book, no) = bookOf(m.groupValues[1]) ?: return@mapNotNull null
-            val c = m.groupValues[2].toInt(); val a = m.groupValues[3].toInt()
-            val b = m.groupValues[4].toIntOrNull()?.takeIf { it >= a && it - a <= 30 } ?: a
-            if (c !in 1..150 || a !in 1..176) return@mapNotNull null
-            // Common words that are also book names need something that looks like a reference.
-            if (book in setOf(17, 43, 3) && !Regex("[:,.]|verse|vers|chapter|kapittel").containsMatchIn(m.value.lowercase())) return@mapNotNull null
-            Ref(book, c, a, b, atMs, no)
-        }.toList()
+    fun inText(text: String, atMs: Long = 0L): List<Ref> = pattern.findAll(digits(text)).mapNotNull { parse(it, atMs) }.toList()
+
+    /** References in written text (a ChatGPT answer) with where they are, so each can be tapped. */
+    fun hits(text: String): List<Pair<IntRange, Ref>> = pattern.findAll(text).mapNotNull { m -> parse(m, 0L)?.let { m.range to it } }.toList()
+
+    // Book names that are also ordinary words or short abbreviations: only with a verse ("Job 1:21"), never chapter alone.
+    private val needsVerse = setOf("job", "mark", "acts", "jude", "numbers", "judges", "ruth", "amos", "joel", "titus", "james", "daniel",
+        "john", "sal", "rom", "fil", "kol", "gal", "ef", "apg", "jes", "jer", "dan", "luk", "joh", "matt", "jak", "hebr", "fork", "ordspr",
+        "åp", "jos", "pet", "tim", "kor", "sam", "mos")
+
+    private fun parse(m: MatchResult, atMs: Long): Ref? {
+        val (book, no) = bookOf(m.groupValues[1].trimEnd('.')) ?: return null
+        val c = m.groupValues[2].toInt()
+        val a = m.groupValues[3].toIntOrNull()
+        if (c !in 1..150) return null
+        val bare = m.groupValues[1].lowercase().trimEnd('.').replace(Regex("^\\S*\\d\\.?\\s*|^(first|second|third|første|andre|annen|tredje)\\s+"), "")
+        if (a == null) {
+            // A whole chapter ("Efeserne 6", "Romans chapter 8").
+            val said = m.value.lowercase()
+            if (bare in needsVerse && !Regex("chapter|kapittel|kap").containsMatchIn(said)) return null
+            return Ref(book, c, 0, 0, atMs, no)
+        }
+        val b = m.groupValues[4].toIntOrNull()?.takeIf { it >= a && it - a <= 40 } ?: a
+        if (a !in 1..176) return null
+        // Common words that are also book names need something that looks like a reference.
+        if (book in setOf(17, 43, 3) && !Regex("[:,.]|verse|vers|chapter|kapittel").containsMatchIn(m.value.lowercase())) return null
+        return Ref(book, c, a, b, atMs, no)
     }
 
     /**
@@ -136,6 +154,7 @@ object VerseRefs {
     fun label(ctx: Context, r: Ref, norwegian: Boolean): String {
         val book = if (norwegian) BibleNo.bookName(ctx, r.book) else englishName(r.book)
         val sep = if (norwegian) "," else ":"
+        if (r.from == 0) return "$book ${r.chapter}"
         return "$book ${r.chapter}$sep${r.from}" + if (r.to != r.from) "–${r.to}" else ""
     }
 
@@ -150,9 +169,14 @@ object VerseRefs {
         val psalmMismatch = r.book == 18 && r.norwegian != norwegian
         val useNo = if (psalmMismatch) r.norwegian else norwegian
         if (useNo) {
-            BibleNo.chapter(ctx, r.book, r.chapter)?.let { ch -> (r.from..r.to).mapNotNull { ch.getOrNull(it - 1) }.joinToString(" ").trim().ifBlank { null } }
+            BibleNo.chapter(ctx, r.book, r.chapter)?.let { ch ->
+                if (r.from == 0) ch.withIndex().joinToString("  ") { (i, t) -> "${i + 1} $t" }.ifBlank { null } // whole chapter, numbered
+                else (r.from..r.to).mapNotNull { ch.getOrNull(it - 1) }.joinToString(" ").trim().ifBlank { null }
+            }
         } else {
-            BibleApi.chapter("${englishName(r.book)} ${r.chapter}")?.verses?.filter { it.number in r.from..r.to }?.joinToString(" ") { it.text }?.ifBlank { null }
+            BibleApi.chapter("${englishName(r.book)} ${r.chapter}")?.verses?.let { vs ->
+                if (r.from == 0) vs.joinToString("  ") { "${it.number} ${it.text}" } else vs.filter { it.number in r.from..r.to }.joinToString(" ") { it.text }
+            }?.ifBlank { null }
         }
     }
 }

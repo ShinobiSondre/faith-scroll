@@ -168,15 +168,27 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
                 // Your questions show short (the first one is the title above); ChatGPT's answers in full.
                 items(turns.drop(1)) { t ->
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (t.user) Alignment.End else Alignment.Start) {
+                        // Verses in the answer are gold and underlined: tap one to read it.
+                        val hits = remember(t.text) { if (t.user) emptyList() else com.faithscroll.app.data.VerseRefs.hits(t.text) }
+                        val shown = remember(t.text, hits) {
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                append(t.text)
+                                hits.forEach { (range, ref) ->
+                                    addStyle(androidx.compose.ui.text.SpanStyle(color = Gold, fontWeight = FontWeight.SemiBold,
+                                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline), range.first, range.last + 1)
+                                    addLink(androidx.compose.ui.text.LinkAnnotation.Clickable("v" + range.first) { verseOpen = listOf(ref) }, range.first, range.last + 1)
+                                }
+                            }
+                        }
                         Text(
-                            t.text, color = if (t.user) Ink else Color.White, fontSize = 15.sp, lineHeight = 22.sp,
+                            shown, color = if (t.user) Ink else Color.White, fontSize = 15.sp, lineHeight = 22.sp,
                             modifier = Modifier.clip(RoundedCornerShape(16.dp))
                                 .background(if (t.user) Gold else Color.White.copy(alpha = 0.08f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
-                        // Verses the answer mentions: tap to read them.
+                        // All verses the answer mentions, as buttons underneath.
                         if (!t.user && status != com.faithscroll.app.data.ChatGptBridge.Status.THINKING) {
-                            val refs = remember(t.text) { com.faithscroll.app.data.VerseRefs.inText(t.text).distinctBy { it.key } }
+                            val refs = remember(hits) { hits.map { it.second }.distinctBy { it.key } }
                             if (refs.isNotEmpty()) {
                                 Spacer(Modifier.height(8.dp))
                                 VerseChips(refs) { verseOpen = listOf(it) }
