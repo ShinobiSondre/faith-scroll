@@ -202,16 +202,53 @@ fun VideoCard(
             }
         }
 
-        // Tap = pause / play. Double-tap = fill / fit. Swipes go to the pager.
+        // Tap = controls / pause. Double-tap left = back 10 s, right = forward 10 s (each extra quick
+        // tap on the same side adds 10 s more), middle = fill / fit. Swipes go to the pager.
+        val seek = remember(video.id) { SeekTaps() }
         Box(
-            Modifier.fillMaxSize().pointerInput(video.id) {
+            Modifier.fillMaxSize().pointerInput(video.id, immersive) {
+                fun sideOf(x: Float) = when { x < size.width * 0.35f -> -1; x > size.width * 0.65f -> 1; else -> 0 }
+                fun jump(side: Int) {
+                    val p = playback.player ?: return
+                    val now = System.currentTimeMillis()
+                    if (now > seek.until || side != seek.side) seek.total = 0
+                    seek.side = side; seek.until = now + 800; seek.total += 10; seek.shown++
+                    val dur = p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                    playback.seekTo((p.currentPosition + side * 10_000L).coerceIn(0L, dur))
+                }
+                var consumed = false
                 detectTapGestures(
+                    onPress = { o ->
+                        val side = sideOf(o.x)
+                        consumed = side != 0 && side == seek.side && System.currentTimeMillis() < seek.until
+                        if (consumed) jump(side)
+                    },
                     // First touch shows the controls; touching again hides them.
-                    onTap = { if (immersive) paused = !paused else { controls = !controls; controlsTouch++ } },
-                    onDoubleTap = { fill = !useFill }
+                    onTap = { if (!consumed) { if (immersive) paused = !paused else { controls = !controls; controlsTouch++ } } },
+                    onDoubleTap = { o ->
+                        if (!consumed) { val side = sideOf(o.x); if (side == 0 || playback.player == null) fill = !(fill ?: (playback.portrait != screenLandscape)) else jump(side) }
+                    }
                 )
             }
         )
+        // "« 20 s" / "20 s »" on the side you tapped.
+        if (seek.shown > 0) androidx.compose.runtime.key(seek.shown) {
+            val a = remember { androidx.compose.animation.core.Animatable(1f) }
+            LaunchedEffect(Unit) { kotlinx.coroutines.delay(450); a.animateTo(0f, tween(350)) }
+            Box(
+                Modifier.fillMaxSize().graphicsLayer { alpha = a.value },
+                contentAlignment = if (seek.side < 0) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(0.38f).fillMaxSize()
+                        .background(Brush.horizontalGradient(
+                            if (seek.side < 0) listOf(Color.White.copy(alpha = 0.16f), Color.Transparent) else listOf(Color.Transparent, Color.White.copy(alpha = 0.16f)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (seek.side < 0) "«  ${seek.total} s" else "${seek.total} s  »", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
 
         if (isActive && !paused && !embedFailed && (playback.buffering && !embedPlaying)) {
             CircularProgressIndicator(color = Gold, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center).size(44.dp))
@@ -247,11 +284,47 @@ fun VideoCard(
         // "What do they mean here?" can ask right away.
         if (isActive && isYouTube && !suspended) {
             var ytCaptions by remember(video.id) { mutableStateOf<Boolean?>(null) }
-            LaunchedEffect(video.id) { ytCaptions = com.faithscroll.app.data.Transcripts.original(video.id) != null }
+            var ytCues by remember(video.id) { mutableStateOf<List<com.faithscroll.app.data.Cue>>(emptyList()) }
+            LaunchedEffect(video.id) {
+                val t = com.faithscroll.app.data.Transcripts.original(video.id)
+                ytCaptions = t != null; ytCues = t?.cues.orEmpty()
+            }
             val pos = if (playback.failed) embedPos else playback.position
             LaunchedEffect(video.id, pos / 5000, paused, ytCaptions) {
                 if (ytCaptions == false && !paused && pos >= 300) com.faithscroll.app.data.Asr.ensure(ctx, video.id, pos)
             }
+
+            // Bible verses they mention: listened for in the captions (or what the phone hears) and
+            // shown as a gold button; tap it to read what the verse says.
+            val heard by com.faithscroll.app.data.Asr.cues(video.id).collectAsState()
+            val cues = if (ytCues.isNotEmpty()) ytCues else heard
+            var refs by remember(video.id) { mutableStateOf<List<com.faithscroll.app.data.VerseRefs.Ref>>(emptyList()) }
+            LaunchedEffect(cues) {
+                refs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.faithscroll.app.data.VerseRefs.inCues(cues) }
+            }
+            val said = refs.filter { it.atMs <= pos + 1_500 }
+            val latest = said.lastOrNull()
+            var showVerses by remember(video.id) { mutableStateOf(false) }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = latest != null && (pos - latest.atMs < 60_000 || paused),
+                enter = fadeIn(tween(400)) + androidx.compose.animation.slideInVertically { -it },
+                exit = fadeOut(tween(400)),
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 62.dp, start = 16.dp)
+            ) {
+                latest?.let { l -> VersePill(l, said.distinctBy { it.key }.size - 1) { paused = true; showVerses = true } }
+            }
+            if (showVerses) VerseMentionsSheet(
+                said.distinctBy { it.key + "@" + it.atMs / 30_000 },
+                onSeek = { ms -> showVerses = false; playback.seekTo((ms - 2_000).coerceAtLeast(0)); paused = false }
+            ) { showVerses = false }
+        }
+
+        // Keep the screen awake while a video plays (no screen saver / dimming mid-video).
+        val keepAwake = isActive && !paused && !suspended
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(keepAwake, video.id) {
+            if (keepAwake) KeepAwake.hold(view, video.id)
+            onDispose { KeepAwake.release(view, video.id) }
         }
 
         // Caption: tap it to open the channel's page (all its videos); "more" shows the full details.
@@ -578,4 +651,19 @@ private fun VideoDetails(video: Video, onClose: () -> Unit, onGoToPage: () -> Un
             Spacer(Modifier.height(80.dp))
         }
     }
+}
+
+/** Double-tap seeking: which side, how far so far, and until when another quick tap adds to it. */
+private class SeekTaps {
+    var side by mutableIntStateOf(0)
+    var total by mutableIntStateOf(0)
+    var shown by mutableIntStateOf(0)
+    var until = 0L
+}
+
+/** Keeps the screen on while any video is playing. */
+private object KeepAwake {
+    private val holders = mutableSetOf<String>()
+    fun hold(v: android.view.View, id: String) { holders += id; v.keepScreenOn = true }
+    fun release(v: android.view.View, id: String) { holders -= id; v.keepScreenOn = holders.isNotEmpty() }
 }

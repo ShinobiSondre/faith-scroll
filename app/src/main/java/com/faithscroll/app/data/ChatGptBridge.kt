@@ -48,8 +48,8 @@ object ChatGptBridge {
         // Cookie banner and "log in" pop-ups: reject non-essential cookies / stay logged out.
         "var bs=document.querySelectorAll('button, a, [role=\"button\"]');for(var x=0;x<bs.length;x++){var bt=(bs[x].innerText||'').trim();" +
         "if(bt.length<45&&/(avvis|reject|forbli utlogget|stay logged out|fortsett uten|continue without|ikke nå|not now|maybe later|kanskje senere)/i.test(bt)){bs[x].click();}" +
-        // "Clear current chat?" (a new link while a chat is open): yes, start the new one.
-        "else if(/^(clear chat|clear|tøm chat|tøm chatten|tøm|slett chat|fjern chat|start new chat|ny chat)$/i.test(bt)&&bs[x].closest('[role=\"dialog\"],[role=\"alertdialog\"],[aria-modal=\"true\"],dialog')){bs[x].click();}}" +
+        // Never "Clear chat": that dialog is always hidden in the page, and clicking it wiped the answer.
+        "}" +
         // "Log in or sign up" sheets: close them (the X), we carry on logged out.
         "var dl=document.querySelectorAll('[role=\"dialog\"],dialog[open]');for(var y=0;y<dl.length;y++){var dt=dl[y].innerText||'';" +
         "if(/(log in|sign up|logg inn|registrer)/i.test(dt)&&!/(clear current chat|tøm)/i.test(dt)){var xb=dl[y].querySelector('button[aria-label*=\"lose\"],button[aria-label*=\"ukk\"],[data-testid=\"close-button\"]');if(xb)xb.click();}}" +

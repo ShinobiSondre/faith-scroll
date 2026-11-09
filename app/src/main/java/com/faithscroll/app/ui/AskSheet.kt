@@ -143,6 +143,7 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
     val error by B.error.collectAsState()
     val page by B.pageUrl.collectAsState()
     var input by remember { mutableStateOf("") }
+    var verseOpen by remember { mutableStateOf<List<com.faithscroll.app.data.VerseRefs.Ref>?>(null) }
     var context by remember { mutableStateOf<Int?>(null) } // lines gathered so far while fetching 5 minutes
     var usedContext by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
@@ -166,13 +167,21 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
             LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Your questions show short (the first one is the title above); ChatGPT's answers in full.
                 items(turns.drop(1)) { t ->
-                    Box(Modifier.fillMaxWidth(), contentAlignment = if (t.user) Alignment.CenterEnd else Alignment.CenterStart) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (t.user) Alignment.End else Alignment.Start) {
                         Text(
                             t.text, color = if (t.user) Ink else Color.White, fontSize = 15.sp, lineHeight = 22.sp,
                             modifier = Modifier.clip(RoundedCornerShape(16.dp))
                                 .background(if (t.user) Gold else Color.White.copy(alpha = 0.08f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
+                        // Verses the answer mentions: tap to read them.
+                        if (!t.user && status != com.faithscroll.app.data.ChatGptBridge.Status.THINKING) {
+                            val refs = remember(t.text) { com.faithscroll.app.data.VerseRefs.inText(t.text).distinctBy { it.key } }
+                            if (refs.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                VerseChips(refs) { verseOpen = listOf(it) }
+                            }
+                        }
                     }
                 }
                 if (status == com.faithscroll.app.data.ChatGptBridge.Status.THINKING && turns.lastOrNull()?.user != false) item {
@@ -211,4 +220,5 @@ fun ChatGptSheet(video: Video, atMs: Long, url: String, onOpenPage: (String) -> 
             }
         }
     }
+    verseOpen?.let { v -> VerseMentionsSheet(v, title = tr("Verse", "Vers"), onSeek = null) { verseOpen = null } }
 }
