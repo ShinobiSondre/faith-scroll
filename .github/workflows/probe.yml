@@ -1,0 +1,12 @@
+name: Probe ChatGPT
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/probe.yml", "tools/chatgpt_probe.py"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+      - run: python tools/chatgpt_probe.py

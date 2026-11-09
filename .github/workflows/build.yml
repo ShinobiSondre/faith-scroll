@@ -3,6 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    paths-ignore: [ "tools/**", ".github/workflows/probe.yml", ".github/workflows/models.yml", ".github/workflows/modern-bible.yml" ]
   workflow_dispatch:
 
 permissions:
