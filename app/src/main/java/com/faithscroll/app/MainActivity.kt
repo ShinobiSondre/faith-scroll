@@ -184,7 +184,9 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var socialVersion by remember { mutableIntStateOf(0) }
     var player by remember { mutableStateOf<Pair<Video, List<Video>>?>(null) }
     var playerFromFeed by remember { mutableStateOf(false) }
-    val openVideo: (Video, List<Video>) -> Unit = { v, q -> playerFromFeed = false; player = v to q }
+    // Opened last = shown on top: a channel opened from the player covers it, a video opened from a channel covers that.
+    var channelOnTop by remember { mutableStateOf(false) }
+    val openVideo: (Video, List<Video>) -> Unit = { v, q -> playerFromFeed = false; channelOnTop = false; player = v to q }
     var reading by remember { mutableStateOf<Verse?>(null) }
     var widgetVerse by remember { mutableStateOf<Verse?>(null) }
     var onboarding by remember { mutableStateOf(!Taste.isOnboarded(ctx)) }
@@ -275,7 +277,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
 
     androidx.compose.runtime.CompositionLocalProvider(
         com.faithscroll.app.ui.LocalOpenPage provides { url -> webPage = url },
-        com.faithscroll.app.ui.LocalOpenChannel provides { v -> channelOf = v }
+        com.faithscroll.app.ui.LocalOpenChannel provides { v -> channelOf = v; channelOnTop = true }
     ) {
     // Check videos in the background: feed candidates first, then the rest of Watch.
     LaunchedEffect(feedVideos, library) {
@@ -362,10 +364,17 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             onOpenVerse = { widgetVerse = it }
         ) { searchOpen = false }
         widgetVerse?.let { v -> VerseOverlay(v, state, onRead = { reading = it }) { widgetVerse = null } }
-        channelOf?.let { v -> com.faithscroll.app.ui.ChannelScreen(v, onOpenVideo = { video, list -> openVideo(video, list) }) { channelOf = null } }
+        // Movable, so the channel keeps its place and scroll when it moves under/over the player.
+        val channelLayer = remember {
+            androidx.compose.runtime.movableContentOf { v: Video ->
+                com.faithscroll.app.ui.ChannelScreen(v, onOpenVideo = { video, list -> openVideo(video, list) }) { channelOf = null; channelOnTop = false }
+            }
+        }
+        if (!channelOnTop) channelOf?.let { channelLayer(it) }
         player?.let { (v, q) ->
             PlayerScreen(v, q, state, onLeaveAt = { if (playerFromFeed) com.faithscroll.app.data.PlaybackMemory.returnTo.value = it }) { player = null }
         }
+        if (channelOnTop) channelOf?.let { channelLayer(it) }
 
         if (onboarding) OnboardingScreen {
             onboarding = false; tasteVersion++; tab = 0
