@@ -54,6 +54,9 @@ object TikTokFinder {
     fun share(ctx: Context): Int = ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE).getInt("tiktokShare", 50)
     fun setShare(ctx: Context, pct: Int) = ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE).edit().putInt("tiktokShare", pct.coerceIn(0, 100)).apply()
 
+    /** Takes a TikTok out of the list (e.g. found to be in another language). */
+    fun drop(id: String) { found.value = found.value.filter { it.id != id } }
+
     /** Unseen TikToks waiting. */
     fun waiting(ctx: Context) = found.value.count { !Seen.has(ctx, it.id) }
 
@@ -101,7 +104,10 @@ object TikTokFinder {
                         val caption = caption(it.optString("text"))
                         // Only Christian videos (topic pages mix in other things), in the app's languages.
                         val christian = faith.containsMatchIn(withTags)
-                        val langOk = caption.length < 25 || LangFilter.ok(caption)
+                        // Same strict rule as YouTube. Short captions (e.g. just "Psalm 91") are checked
+                        // again from the video's page (its speech captions) before it's played.
+                        val detected = if (caption.length >= 20) LangFilter.detect(caption) else null
+                        val langOk = detected == null || TikTokResolver.languageOk(if (detected == "nb" || detected == "nn") "no" else detected)
                         if (christian && langOk) results.putIfAbsent(id, TikTok(id, author, caption.take(200), it.optString("thumb").takeIf { t -> t.startsWith("http") }.orEmpty()))
                     }
                     got = o.length()

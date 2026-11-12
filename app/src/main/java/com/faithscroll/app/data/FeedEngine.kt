@@ -45,7 +45,7 @@ class FeedEngine(
         sinceMessage++
         // Inspiring TikToks (found automatically, or added by you) are mixed in with the videos.
         val tiks = ((social()?.tiktoks.orEmpty()) + TikTokFinder.found.value)
-            .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) }.distinctBy { it.id }
+            .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) && it.id !in LangFilter.blocked.value }.distinctBy { it.id }
         // Your TikTok / YouTube mix (Me tab), 50/50 by default.
         if (tiks.isNotEmpty() && rnd.nextDouble() * 100 < TikTokFinder.share(ctx)) {
             val t = tiks.random(rnd); shownTikToks += t.id
