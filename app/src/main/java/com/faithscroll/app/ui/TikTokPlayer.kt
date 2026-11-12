@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -332,3 +335,89 @@ object TikTokConsent {
         }
     }
 }
+
+/**
+ * A TikTok account inside the app: its own TikTok page (all its videos), with a Follow button.
+ * Tapping a video plays it in our own player – the page's other videos come next.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Video, List<com.faithscroll.app.data.Video>) -> Unit, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    var following by remember(user) { mutableStateOf(com.faithscroll.app.data.TikTokFollows.isFollowed(ctx, user)) }
+    var loading by remember { mutableStateOf(true) }
+    // Catches taps on videos (links or the page switching to a video) and hands them to the app.
+    val hook = "(function(){if(window.__fs)return;window.__fs=1;" +
+        "function all(){var o=[];document.querySelectorAll('a[href*=\"/video/\"]').forEach(function(a){if(o.indexOf(a.href)<0)o.push(a.href);});return JSON.stringify(o);}" +
+        "function go(u){try{FS.open(u,all());}catch(x){}}" +
+        "document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href*=\"/video/\"]'):null;if(a){e.preventDefault();e.stopPropagation();go(a.href);}},true);" +
+        "var ps=history.pushState;history.pushState=function(s,t,u){if(u&&/\\/video\\/\\d+/.test(String(u))){go(new URL(u,location.href).href);return;}return ps.apply(this,arguments);};})();"
+    Column(Modifier.fillMaxSize().background(Ink).zIndex(20f).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { }) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().statusBarsPaddingCompat().padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "Tilbake"), tint = Color.White) }
+            Column(Modifier.weight(1f)) {
+                Text("@$user", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("TikTok", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            }
+            Text(
+                if (following) "✓ " + tr("Following", "Følger") else "+ " + tr("Follow", "Følg"),
+                color = if (following) Gold else Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(CircleShape).background(if (following) Color.White.copy(alpha = 0.12f) else Gold)
+                    .clickable {
+                        if (following) com.faithscroll.app.data.TikTokFollows.unfollow(ctx, user) else com.faithscroll.app.data.TikTokFollows.follow(ctx, user)
+                        following = !following
+                    }.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { c ->
+                    TikTokConsent.prepare()
+                    WebView(c).apply {
+                        setBackgroundColor(android.graphics.Color.BLACK)
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = true
+                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        TikTokConsent.injectInto(this)
+                        runCatching {
+                            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT))
+                                androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, hook, setOf("https://www.tiktok.com"))
+                        }
+                        addJavascriptInterface(object {
+                            @JavascriptInterface fun open(url: String, list: String) {
+                                fun parse(u: String) = Regex("@([^/?#]+)/video/(\\d{15,})").find(u)?.let { m -> com.faithscroll.app.data.TikTok(m.groupValues[2], m.groupValues[1]).asVideo() }
+                                val v = parse(url) ?: return
+                                val all = runCatching { org.json.JSONArray(list).let { a -> (0 until a.length()).mapNotNull { parse(a.getString(it)) } } }.getOrDefault(emptyList())
+                                post { onOpenVideo(v, (listOf(v) + all.filter { it.id != v.id })) }
+                            }
+                        }, "FS")
+                        webChromeClient = WebChromeClient()
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                val u = request.url.toString()
+                                // A video: play it in the app. Other TikTok pages: stay here. Apps / other sites: not opened.
+                                Regex("@([^/?#]+)/video/(\\d{15,})").find(u)?.let { m ->
+                                    val v = com.faithscroll.app.data.TikTok(m.groupValues[2], m.groupValues[1]).asVideo()
+                                    onOpenVideo(v, listOf(v)); return true
+                                }
+                                return !(request.url.host.orEmpty().endsWith("tiktok.com"))
+                            }
+                            override fun onPageFinished(view: WebView, url: String?) { loading = false; view.evaluateJavascript(hook, null) }
+                        }
+                        loadUrl("https://www.tiktok.com/@$user")
+                    }
+                },
+                onRelease = { it.stopLoading(); it.destroy() }
+            )
+            if (loading) CircularProgressIndicator(color = Gold, modifier = Modifier.align(Alignment.Center).size(36.dp))
+        }
+    }
+}
+
+private fun Modifier.statusBarsPaddingCompat() = this.then(Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars))

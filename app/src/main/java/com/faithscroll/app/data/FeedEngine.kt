@@ -48,7 +48,9 @@ class FeedEngine(
             .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) && it.id !in LangFilter.blocked.value }.distinctBy { it.id }
         // Your TikTok / YouTube mix (Me tab), 50/50 by default.
         if (tiks.isNotEmpty() && rnd.nextDouble() * 100 < TikTokFinder.share(ctx)) {
-            val t = tiks.random(rnd); shownTikToks += t.id
+            // Accounts you follow first (most of the time), then everything else.
+            val followed = tiks.filter { it.id in TikTokFinder.followedIds || TikTokFollows.isFollowed(ctx, it.author) }
+            val t = (if (followed.isNotEmpty() && rnd.nextDouble() < 0.7) followed else tiks).random(rnd); shownTikToks += t.id
             // Played in our own player, like a YouTube video.
             return FeedItem.VideoItem(t.asVideo(), tr("From TikTok", "Fra TikTok"))
         }

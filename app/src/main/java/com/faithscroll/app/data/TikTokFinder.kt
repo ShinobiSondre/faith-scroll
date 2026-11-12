@@ -54,6 +54,9 @@ object TikTokFinder {
     fun share(ctx: Context): Int = ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE).getInt("tiktokShare", 50)
     fun setShare(ctx: Context, pct: Int) = ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE).edit().putInt("tiktokShare", pct.coerceIn(0, 100)).apply()
 
+    /** TikToks from accounts you follow (shown before the others). */
+    val followedIds: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+
     /** Takes a TikTok out of the list (e.g. found to be in another language). */
     fun drop(id: String) { found.value = found.value.filter { it.id != id } }
 
@@ -86,12 +89,16 @@ object TikTokFinder {
         val no = com.faithscroll.app.util.Lang.no
         val slugs = if (no) norwegian + (if (com.faithscroll.app.util.Lang.alsoEnglish) english.shuffled().take(2) else emptyList()) else english.shuffled().take(4)
         val results = LinkedHashMap<String, TikTok>()
+        // Accounts you follow come first (a few each time, taking turns).
+        val follows = TikTokFollows.all(a).shuffled().take(4)
+        val pages = follows.map { "@$it" } + slugs
         val web = withWebView(a) ?: return
         try {
-            for (slug in slugs) {
-                onStatus("tiktok.com/discover/$slug …")
+            for (slug in pages) {
+                val profile = slug.startsWith("@")
+                onStatus(if (profile) "tiktok.com/$slug …" else "tiktok.com/discover/$slug …")
                 val before = results.size
-                web.loadUrl("https://www.tiktok.com/discover/" + android.net.Uri.encode(slug))
+                web.loadUrl(if (profile) "https://www.tiktok.com/$slug" else "https://www.tiktok.com/discover/" + android.net.Uri.encode(slug))
                 var got = 0
                 for (i in 0 until 12) {
                     delay(1500)
@@ -103,7 +110,8 @@ object TikTokFinder {
                         val withTags = caption(it.optString("text"), keepTags = true)
                         val caption = caption(it.optString("text"))
                         // Only Christian videos (topic pages mix in other things), in the app's languages.
-                        val christian = faith.containsMatchIn(withTags)
+                        val christian = profile || faith.containsMatchIn(withTags) // you chose the accounts you follow
+                        if (profile && author.equals(slug.drop(1), true)) followedIds += id
                         // Same strict rule as YouTube. Short captions (e.g. just "Psalm 91") are checked
                         // again from the video's page (its speech captions) before it's played.
                         val detected = if (caption.length >= 20) LangFilter.detect(caption) else null
@@ -113,8 +121,8 @@ object TikTokFinder {
                     got = o.length()
                     if (got >= 20) break
                 }
-                Diag.log("tiktok", "discover/$slug: $got videos, ${results.size - before} Christian in the app's language")
-                report += "discover/$slug: $got " + com.faithscroll.app.util.tr("videos on the page, ${results.size - before} kept", "videoer på siden, ${results.size - before} beholdt")
+                Diag.log("tiktok", "${if (profile) "" else "discover/"}$slug: $got videos, ${results.size - before} kept")
+                report += "${if (profile) "" else "discover/"}$slug: $got " + com.faithscroll.app.util.tr("videos on the page, ${results.size - before} kept", "videoer på siden, ${results.size - before} beholdt")
             }
         } finally {
             (web.parent as? ViewGroup)?.let { h -> (h.parent as? ViewGroup)?.removeView(h) }
@@ -151,4 +159,18 @@ object TikTokFinder {
             holder.addView(this, FrameLayout.LayoutParams(1280, 2000))
         }
     }
+}
+
+/** TikTok accounts you follow: their new videos come first in your feed, and you can open their page. */
+object TikTokFollows {
+    private fun p(ctx: Context) = ctx.applicationContext.getSharedPreferences("tiktok_follows", Context.MODE_PRIVATE)
+    fun all(ctx: Context): List<String> = p(ctx).getStringSet("users", emptySet())!!.toList()
+    fun isFollowed(ctx: Context, user: String) = user.isNotBlank() && all(ctx).any { it.equals(user, true) }
+    fun follow(ctx: Context, user: String) {
+        if (user.isBlank()) return
+        p(ctx).edit().putStringSet("users", (all(ctx) + user).toSet()).apply()
+        // Look for their videos soon.
+        ctx.applicationContext.getSharedPreferences("tiktok_found", Context.MODE_PRIVATE).edit().putLong("at", 0L).apply()
+    }
+    fun unfollow(ctx: Context, user: String) = p(ctx).edit().putStringSet("users", all(ctx).filterNot { it.equals(user, true) }.toSet()).apply()
 }

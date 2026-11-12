@@ -27,6 +27,10 @@ object Prefetcher {
         val app = ctx.applicationContext
         val depth = VideoQuality.preloadDepth(app)
         val videos = upcoming.filterIsInstance<FeedItem.VideoItem>().map { it.video }.take(depth)
+        // TikToks further ahead: look up their file already (a quick page read), so they're never the slow one.
+        upcoming.filterIsInstance<FeedItem.VideoItem>().map { it.video }.drop(depth).take(3)
+            .filter { TikTokResolver.isTikTokId(it.id) && TikTokResolver.cached(it.id) == null }
+            .forEach { v -> scope.launch { TikTokResolver.resolve(v.id) } }
         val wanted = videos.map { it.id }.toSet()
 
         // Cancel preloads that are no longer just ahead.

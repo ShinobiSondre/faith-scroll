@@ -317,7 +317,20 @@ object StreamResolver {
     /** Downloads the first seconds of a video into the cache so it starts instantly later. */
     @OptIn(UnstableApi::class)
     suspend fun preload(ctx: Context, id: String) = withContext(Dispatchers.IO) {
-        if (TikTokResolver.isTikTokId(id)) { TikTokResolver.resolve(id); return@withContext } // its file needs its cookies: just look it up
+        if (TikTokResolver.isTikTokId(id)) {
+            // Look the file up and download its first seconds into the cache (with TikTok's cookies),
+            // under the same name the player uses – so it starts instantly when you swipe to it.
+            val t = TikTokResolver.resolve(id) ?: return@withContext
+            val c = media ?: return@withContext
+            val http = DefaultHttpDataSource.Factory().setUserAgent(TikTokResolver.UA).setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000).setDefaultRequestProperties(t.headers)
+            val ds = CacheDataSource.Factory().setCache(c).setUpstreamDataSourceFactory(http).createDataSource()
+            val spec = DataSpec.Builder().setUri(t.url).setPosition(0).setLength(VideoQuality.preloadBytes(ctx) * 3 / 2).setKey("tt-$id").build()
+            val writer = CacheWriter(ds, spec, null, null)
+            val handle = coroutineContext[Job]?.invokeOnCompletion { writer.cancel() }
+            try { writer.cache(); Diag.log("tiktok", "$id: first seconds ready") } catch (_: Exception) { } finally { handle?.dispose() }
+            return@withContext
+        }
         val r = resolve(id) ?: return@withContext
         val c = choose(r, VideoQuality.targetHeight(ctx))
         val bytes = VideoQuality.preloadBytes(ctx)

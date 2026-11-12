@@ -64,6 +64,7 @@ val LocalOpenChannel = compositionLocalOf<(Video) -> Unit> { {} }
 /** A YouTube channel inside the app: all its videos, newest first; scroll for more, tap to watch. */
 @Composable
 fun ChannelScreen(from: Video, onOpenVideo: (Video, List<Video>) -> Unit, onClose: () -> Unit) {
+    if (from.isTikTok) { TikTokChannelScreen(from.channel.removePrefix("@"), onOpenVideo, onClose); return }
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
     var source by remember { mutableStateOf<ChannelVideos?>(null) }

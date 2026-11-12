@@ -371,7 +371,7 @@ fun VideoCard(
         if (uiAlpha > 0f) Column(
             Modifier.align(Alignment.BottomStart).then(uiMod).padding(start = 20.dp, end = 90.dp, bottom = bottomInset + 44.dp)
                 .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {
-                    if (isYouTube) { paused = true; openChannel(video) } else expanded = true
+                    if (isYouTube || video.isTikTok) { paused = true; openChannel(video) } else expanded = true
                 }
         ) {
             if (reason != null) {
@@ -389,8 +389,8 @@ fun VideoCard(
                 color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
             )
             Spacer(Modifier.height(6.dp))
-            Text(video.channel + if (isYouTube) "  ›" else "", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
-                modifier = if (isYouTube) Modifier.clickable { paused = true; openChannel(video) } else Modifier)
+            Text(video.channel + if (isYouTube || video.isTikTok) "  ›" else "", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                modifier = if (isYouTube || video.isTikTok) Modifier.clickable { paused = true; openChannel(video) } else Modifier)
             Spacer(Modifier.height(4.dp))
             Text(video.title, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(tr("more", "mer"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
@@ -424,6 +424,22 @@ fun VideoCard(
             chat?.takeIf { it.videoId == video.id }?.let { c ->
                 RailButton(Icons.Filled.Forum, tr("Answer", "Svar"), true, Gold) { paused = true; chatAsk = c.atMs to c.url }
             }
+            // TikTok: follow the account (its new videos come first in your feed).
+            if (video.isTikTok) {
+                val user = video.channel.removePrefix("@")
+                var following by remember(user) { mutableStateOf(com.faithscroll.app.data.TikTokFollows.isFollowed(ctx, user)) }
+                if (user.isNotBlank() && user != "TikTok") RailButton(
+                    if (following) Icons.Filled.Check else Icons.Filled.PersonAdd,
+                    if (following) tr("Following", "Følger") else tr("Follow", "Følg"), following, if (following) Gold else Color.White
+                ) {
+                    if (following) com.faithscroll.app.data.TikTokFollows.unfollow(ctx, user)
+                    else {
+                        com.faithscroll.app.data.TikTokFollows.follow(ctx, user)
+                        android.widget.Toast.makeText(ctx, tr("More from @$user coming to your feed", "Mer fra @$user kommer i feeden din"), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    following = !following
+                }
+            }
             if (isYouTube) RailButton(
                 if (subscribed) Icons.Filled.Check else Icons.Filled.PersonAdd,
                 if (subscribed) tr("Subscribed", "Abonnerer") else tr("Subscribe", "Abonner"), subscribed, if (subscribed) Gold else Color.White
@@ -452,7 +468,7 @@ fun VideoCard(
             modifier = Modifier.fillMaxSize()
         ) {
             VideoDetails(video, onClose = { expanded = false }, onGoToPage = { expanded = false; paused = true; openPage(video.url) },
-                onChannel = if (isYouTube) ({ expanded = false; paused = true; openChannel(video) }) else null)
+                onChannel = if (isYouTube || video.isTikTok) ({ expanded = false; paused = true; openChannel(video) }) else null)
         }
         asking?.let { at -> AskSheet(video, at) { asking = null } }
         if (showCast) com.faithscroll.app.cast.CastSheet(video, { if (playback.failed) embedPos else playback.player?.currentPosition ?: playback.position }) { showCast = false }
