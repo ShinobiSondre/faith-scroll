@@ -20,16 +20,20 @@ with sync_playwright() as p:
     note("message types", kinds)
     note("samples", [m for m in msgs if "CurrentTime" in m or "State" in m][:4])
     f = [fr for fr in page.frames if "tiktok.com" in fr.url][0]
-    banner = f.evaluate("""(()=>{const out=[];document.querySelectorAll('*').forEach(e=>{if(e.shadowRoot){out.push(e.tagName+':'+[...e.shadowRoot.querySelectorAll('button')].map(b=>b.innerText.trim()).join('|'))}});
-      const bs=[...document.querySelectorAll('button')].map(b=>b.innerText.trim()).filter(t=>/cookie|allow|tillat|godta|decline/i.test(t));return {shadow:out.slice(0,5),buttons:bs}})()""")
-    note("banner", banner)
+    DEEP = """(()=>{function walk(root,out){root.querySelectorAll('*').forEach(e=>{out.push(e);if(e.shadowRoot)walk(e.shadowRoot,out)});return out}
+      const all=walk(document,[]);const btn=all.filter(e=>(e.tagName==='BUTTON'||e.getAttribute&&e.getAttribute('role')==='button')&&/allow|tillat|godta|accept|decline|avslå/i.test(e.textContent||''));
+      return btn.map(b=>b.tagName+':'+(b.textContent||'').trim().slice(0,40))})()"""
+    time.sleep(4)
+    note("banner buttons", f.evaluate(DEEP))
     before = {c["name"] for c in ctx.cookies("https://www.tiktok.com")}
-    clicked = f.evaluate("""(()=>{const all=[];document.querySelectorAll('*').forEach(e=>{if(e.shadowRoot)all.push(...e.shadowRoot.querySelectorAll('button'))});all.push(...document.querySelectorAll('button'));
-      const b=all.find(b=>/^(allow all|tillat alle|godta alle|accept all)$/i.test(b.innerText.trim()));if(b){b.click();return b.innerText}return null})()""")
+    clicked = f.evaluate("""(()=>{function walk(root,out){root.querySelectorAll('*').forEach(e=>{out.push(e);if(e.shadowRoot)walk(e.shadowRoot,out)});return out}
+      const b=walk(document,[]).find(e=>(e.tagName==='BUTTON'||(e.getAttribute&&e.getAttribute('role')==='button'))&&/^(allow all|tillat alle|godta alle|accept all)$/i.test((e.textContent||'').trim()));
+      if(b){b.click();return b.textContent.trim()}return null})()""")
     time.sleep(2)
     after = ctx.cookies("https://www.tiktok.com")
     note("clicked", clicked)
-    note("new cookies", [(c["name"], c["value"][:200], c["domain"]) for c in after if c["name"] not in before])
+    note("new cookies", [(c["name"], c["value"][:300], c["domain"]) for c in after if c["name"] not in before])
+    note("all cookie names", sorted(c["name"] for c in after))
     # seek test
     page.evaluate("document.getElementById('p').contentWindow.postMessage({type:'seekTo',value:20,'x-tiktok-player':true},'*')"); time.sleep(2)
     note("after seekTo 20", [m for m in page.evaluate("window.msgs") if "CurrentTime" in m][-1:])
