@@ -11,7 +11,7 @@ object Diag {
     private val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
     val lines = MutableStateFlow<List<String>>(emptyList())
     // Lines that matter for troubleshooting are kept apart, so hundreds of video checks can't push them out.
-    private val importantTags = setOf("ask", "asr", "whisper", "prayer", "youtube", "discover", "test", "search", "play", "ai")
+    private val importantTags = setOf("ask", "asr", "whisper", "prayer", "youtube", "discover", "test", "search", "play", "ai", "tiktok", "cast")
     private val important = ArrayDeque<String>()
 
     @Synchronized fun log(tag: String, msg: String) {
