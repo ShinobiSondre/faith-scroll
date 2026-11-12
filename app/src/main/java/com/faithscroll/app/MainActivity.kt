@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.faithscroll.app.util.Lang.init(this)
         com.faithscroll.app.ui.SeasonTheme.init(this) // colours for this season and day
+        com.faithscroll.app.data.TopicFilter.init(this) // topics you don't want in the feed
         // Save the details of any crash so they can be shown (and copied) on the next launch.
         val crashFile = java.io.File(filesDir, "last_crash.txt")
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -322,7 +323,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             // card and moment in the video. It just pauses while you're elsewhere.
             key(tasteVersion) {
                 val ok by com.faithscroll.app.data.VideoCheck.verified.collectAsState()
-                val verifiedFeed = remember(feedVideos, ok) { feedVideos.filter { it.id in ok } }
+                val verifiedFeed = remember(feedVideos, ok) { feedVideos.filter { it.id in ok && com.faithscroll.app.data.TopicFilter.ok(it) } }
                 FeedScreen(
                     state, verifiedFeed, social, bottomInset,
                     suspended = tab != 0 || player != null || widgetVerse != null || onboarding || beStill || webPage != null || channelOf != null || searchOpen,
@@ -346,9 +347,9 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                             library?.let { l ->
                                 val found = discovered.filter { it.id in ok }
                                 VideoLibrary(
-                                    (l.stories + found.filter { it.kind == Video.KIND_STORY }).filter { it.id in ok }.distinctBy { it.id },
-                                    (l.sermons + found.filter { it.kind == Video.KIND_SERMON }).filter { it.id in ok }.distinctBy { it.id },
-                                    (l.shorts + found.filter { it.kind == Video.KIND_SHORT }).filter { it.id in ok }.distinctBy { it.id }
+                                    (l.stories + found.filter { it.kind == Video.KIND_STORY }).filter { it.id in ok && com.faithscroll.app.data.TopicFilter.ok(it) }.distinctBy { it.id },
+                                    (l.sermons + found.filter { it.kind == Video.KIND_SERMON }).filter { it.id in ok && com.faithscroll.app.data.TopicFilter.ok(it) }.distinctBy { it.id },
+                                    (l.shorts + found.filter { it.kind == Video.KIND_SHORT }).filter { it.id in ok && com.faithscroll.app.data.TopicFilter.ok(it) }.distinctBy { it.id }
                                 )
                             }
                         }
@@ -380,7 +381,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
 
 
         if (searchOpen) com.faithscroll.app.ui.SearchScreen(
-            inApp = (feedVideos + (library?.all ?: emptyList()) + discovered).distinctBy { it.id }
+            inApp = (feedVideos + (library?.all ?: emptyList()) + discovered).distinctBy { it.id }.filter { com.faithscroll.app.data.TopicFilter.ok(it) }
                 .filter { it.id in com.faithscroll.app.data.VideoCheck.verified.value },
             onOpenVideo = { v, list -> openVideo(v, list) },
             onOpenVerse = { widgetVerse = it }

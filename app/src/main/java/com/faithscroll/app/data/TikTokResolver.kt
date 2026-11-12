@@ -89,6 +89,9 @@ object TikTokResolver {
                 LangFilter.block(id, lang)
                 TikTokFinder.drop(id)
             }
+            TopicFilter.hit(item.optString("desc"))?.let { topic ->
+                Diag.log("tiktok", "$id: left out – topic $topic"); LangFilter.block(id, "topic"); TikTokFinder.drop(id)
+            }
             val cookies = synchronized(jar.store) { jar.store.joinToString("; ") { "${it.name}=${it.value}" } }
             Stream(url, mapOf("Cookie" to cookies, "Referer" to "https://www.tiktok.com/"), v.optLong("duration") * 1000, item.optString("desc"), lang)
         }.onFailure { Diag.log("tiktok", "$id: couldn't get the video file – ${it.message}") }

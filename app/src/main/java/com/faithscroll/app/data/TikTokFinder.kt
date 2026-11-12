@@ -116,7 +116,7 @@ object TikTokFinder {
                         // again from the video's page (its speech captions) before it's played.
                         val detected = if (caption.length >= 20) LangFilter.detect(caption) else null
                         val langOk = detected == null || TikTokResolver.languageOk(if (detected == "nb" || detected == "nn") "no" else detected)
-                        if (christian && langOk) results.putIfAbsent(id, TikTok(id, author, caption.take(200), it.optString("thumb").takeIf { t -> t.startsWith("http") }.orEmpty()))
+                        if (christian && langOk && TopicFilter.ok(withTags)) results.putIfAbsent(id, TikTok(id, author, caption.take(200), it.optString("thumb").takeIf { t -> t.startsWith("http") }.orEmpty()))
                     }
                     got = o.length()
                     if (got >= 20) break
@@ -159,6 +159,7 @@ object TikTokFinder {
                 o.keys().forEach { id ->
                     val it = o.getJSONObject(id)
                     if (!it.optString("author").equals(user, true)) return@forEach
+                    if (!TopicFilter.ok(caption(it.optString("text"), keepTags = true))) return@forEach
                     out.putIfAbsent(id, TikTok(id, it.optString("author"), caption(it.optString("text")).take(200), it.optString("thumb").takeIf { t -> t.startsWith("http") }.orEmpty()))
                 }
                 if (out.size > before) { still = 0; onUpdate(out.values.toList()) } else if (out.isNotEmpty() && ++still >= 4) break

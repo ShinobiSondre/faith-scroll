@@ -141,6 +141,8 @@ fun WidgetScreen(
         Spacer(Modifier.height(16.dp))
         MixCard()
         Spacer(Modifier.height(16.dp))
+        TopicsCard()
+        Spacer(Modifier.height(16.dp))
         SeasonColorsCard()
         Spacer(Modifier.height(16.dp))
         CastCard()
@@ -581,6 +583,36 @@ private fun SeasonColorsCard() {
             on = it; SeasonTheme.setEnabled(ctx, it)
             (ctx as? android.app.Activity)?.recreate()
         }, colors = SwitchDefaults.colors(checkedTrackColor = Gold, checkedThumbColor = Ink))
+    }
+}
+
+/** Topics left out of the feed (videos, TikToks and pictures about them are never shown). */
+@Composable
+private fun TopicsCard() {
+    val ctx = LocalContext.current
+    var extra by remember { mutableStateOf(com.faithscroll.app.data.TopicFilter.extraWords(ctx)) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text("🚫 " + tr("Hidden topics", "Skjulte temaer"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(tr("Videos, TikToks and pictures about these are left out of your feed, search and lists.",
+            "Videoer, TikToks og bilder om dette holdes utenfor feeden, søk og listene."), color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        com.faithscroll.app.data.TopicFilter.topics.forEach { t ->
+            var on by remember(t.key) { mutableStateOf(com.faithscroll.app.data.TopicFilter.isOn(ctx, t.key)) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable {
+                on = !on; com.faithscroll.app.data.TopicFilter.setOn(ctx, t.key, on)
+            }) {
+                Text(tr(t.en, t.no), color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Switch(checked = on, onCheckedChange = { on = it; com.faithscroll.app.data.TopicFilter.setOn(ctx, t.key, it) },
+                    colors = SwitchDefaults.colors(checkedTrackColor = Gold, checkedThumbColor = Ink))
+            }
+        }
+        androidx.compose.material3.OutlinedTextField(
+            value = extra, onValueChange = { extra = it; com.faithscroll.app.data.TopicFilter.setExtraWords(ctx, it) },
+            label = { Text(tr("More words to hide (comma between)", "Flere ord å skjule (komma mellom)")) },
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp), singleLine = false, maxLines = 3,
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, cursorColor = Gold,
+                focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedLabelColor = Gold)
+        )
     }
 }
 

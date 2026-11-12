@@ -45,7 +45,7 @@ class FeedEngine(
         sinceMessage++
         // Inspiring TikToks (found automatically, or added by you) are mixed in with the videos.
         val tiks = ((social()?.tiktoks.orEmpty()) + TikTokFinder.found.value)
-            .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) && it.id !in LangFilter.blocked.value }.distinctBy { it.id }
+            .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) && it.id !in LangFilter.blocked.value && TopicFilter.ok(it.caption + " " + it.author) }.distinctBy { it.id }
         // Your TikTok / YouTube mix (Me tab), 50/50 by default.
         if (tiks.isNotEmpty() && rnd.nextDouble() * 100 < TikTokFinder.share(ctx)) {
             // Accounts you follow first (most of the time), then everything else.
@@ -61,7 +61,7 @@ class FeedEngine(
     private fun pickIllustration(): FeedItem {
         val pins = social()?.pins.orEmpty()
         if (pins.isEmpty() || rnd.nextDouble() < 0.2) return pickMessage()
-        val pool = Seen.freshFirst(ctx, pins.filter { it.id !in shownPins }.ifEmpty { shownPins.clear(); pins }, { it.id })
+        val pool = Seen.freshFirst(ctx, pins.filter { it.id !in shownPins && TopicFilter.ok(it.title) }.ifEmpty { shownPins.clear(); pins }, { it.id })
         val random = rnd.nextDouble() < explore
         val pin = if (random) pool.random(rnd) else Taste.weightedPick(pool, { p ->
             Taste.topicsOf(p.title).maxOfOrNull { Taste.themeWeight(ctx, it) } ?: 0f
@@ -91,7 +91,7 @@ class FeedEngine(
     }
 
     private fun pickVideo(all: List<Video>): FeedItem? {
-        val usable = all.filter { it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) && !LangFilter.isBlockedChannel(it.channel) && !LangFilter.isNews(it.title, it.channel) }
+        val usable = all.filter { TopicFilter.ok(it) && it.id !in LangFilter.blocked.value && !Taste.isMuted(ctx, it.channel) && !LangFilter.isBlockedChannel(it.channel) && !LangFilter.isNews(it.title, it.channel) }
         // Never a video you've already watched. If none are left, an illustration or message
         // fills the spot while new videos are being found in the background.
         val unwatched = usable.filter { !Seen.has(ctx, it.id) }
