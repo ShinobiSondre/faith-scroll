@@ -1,40 +1,38 @@
-"""TikTok player in a frame: its messages (time, state), and the cookie banner (what 'Allow all' stores)."""
-import time, json
-from playwright.sync_api import sync_playwright
+"""Can we get a TikTok's own video file (to play it in our player, like YouTube)? Plain HTTP like the phone."""
+import re, json, http.cookiejar, urllib.request
 def note(t, m): print(f"::notice title={t}::{str(m).replace(chr(10),' ')[:900]}")
-VID = "7706804780441685278"
-SRC = f"https://www.tiktok.com/player/v1/{VID}?autoplay=1&loop=0&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0"
-PAGE = f"""<html><body style="margin:0;background:#000"><iframe id=p src="{SRC}" style="border:0;width:100vw;height:100vh" allow="autoplay"></iframe>
-<script>window.msgs=[];window.addEventListener('message',e=>{{try{{window.msgs.push(JSON.stringify(e.data).slice(0,160))}}catch(x){{}}}});</script></body></html>"""
-with sync_playwright() as p:
-    br = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
-    ctx = br.new_context(**p.devices["Pixel 7"], locale="nb-NO"); page = ctx.new_page()
-    page.route("https://faithscroll.app/", lambda r: r.fulfill(status=200, content_type="text/html", body=PAGE))
-    page.goto("https://faithscroll.app/"); time.sleep(8)
-    msgs = page.evaluate("window.msgs")
-    kinds = {}
-    for m in msgs:
-        try: t = json.loads(m).get("type")
-        except Exception: t = m[:30]
-        kinds[t] = kinds.get(t, 0) + 1
-    note("message types", kinds)
-    note("samples", [m for m in msgs if "CurrentTime" in m or "State" in m][:4])
-    f = [fr for fr in page.frames if "tiktok.com" in fr.url][0]
-    DEEP = """(()=>{function walk(root,out){root.querySelectorAll('*').forEach(e=>{out.push(e);if(e.shadowRoot)walk(e.shadowRoot,out)});return out}
-      const all=walk(document,[]);const btn=all.filter(e=>(e.tagName==='BUTTON'||e.getAttribute&&e.getAttribute('role')==='button')&&/allow|tillat|godta|accept|decline|avslå/i.test(e.textContent||''));
-      return btn.map(b=>b.tagName+':'+(b.textContent||'').trim().slice(0,40))})()"""
-    time.sleep(4)
-    note("banner buttons", f.evaluate(DEEP))
-    before = {c["name"] for c in ctx.cookies("https://www.tiktok.com")}
-    clicked = f.evaluate("""(()=>{function walk(root,out){root.querySelectorAll('*').forEach(e=>{out.push(e);if(e.shadowRoot)walk(e.shadowRoot,out)});return out}
-      const b=walk(document,[]).find(e=>(e.tagName==='BUTTON'||(e.getAttribute&&e.getAttribute('role')==='button'))&&/^(allow all|tillat alle|godta alle|accept all)$/i.test((e.textContent||'').trim()));
-      if(b){b.click();return b.textContent.trim()}return null})()""")
-    time.sleep(2)
-    after = ctx.cookies("https://www.tiktok.com")
-    note("clicked", clicked)
-    note("new cookies", [(c["name"], c["value"][:300], c["domain"]) for c in after if c["name"] not in before])
-    note("all cookie names", sorted(c["name"] for c in after))
-    # seek test
-    page.evaluate("document.getElementById('p').contentWindow.postMessage({type:'seekTo',value:20,'x-tiktok-player':true},'*')"); time.sleep(2)
-    note("after seekTo 20", [m for m in page.evaluate("window.msgs") if "CurrentTime" in m][-1:])
-    br.close()
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+VIDS = [("alisoncarolena", "7706804780441685278"), ("prettygirlslive4jesus", "7699185313272450335"), ("faith.minutes", "7699501063505726738")]
+for author, vid in VIDS:
+    jar = http.cookiejar.CookieJar()
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    def get(u, headers=None, rng=False):
+        h = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.tiktok.com/"}
+        if rng: h["Range"] = "bytes=0-2047"
+        h.update(headers or {})
+        r = op.open(urllib.request.Request(u, headers=h), timeout=20)
+        return r.status, r.headers.get("Content-Type"), r.read()
+    try:
+        st, ct, body = get(f"https://www.tiktok.com/@{author}/video/{vid}")
+        html = body.decode("utf-8", "replace")
+        m = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', html, re.S)
+        if not m: note(f"{vid[-4:]} page", {"status": st, "len": len(html), "rehydration": False}); continue
+        d = json.loads(m.group(1))
+        item = d.get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail", {}).get("itemInfo", {}).get("itemStruct", {})
+        v = item.get("video", {})
+        play = v.get("playAddr") or ""
+        down = v.get("downloadAddr") or ""
+        br = [(b.get("GearName"), b.get("PlayAddr", {}).get("UrlList", [""])[0][:60]) for b in v.get("bitrateInfo", [])][:3]
+        note(f"{vid[-4:]} page", {"status": st, "desc": item.get("desc", "")[:60], "dur": v.get("duration"), "play": play[:90], "download": bool(down),
+             "bitrates": br, "cookies": sorted(c.name for c in jar)})
+        for name, url in (("playAddr", play), ("downloadAddr", down)):
+            if not url: continue
+            try:
+                s2, c2, b2 = get(url, rng=True)
+                note(f"{vid[-4:]} {name} with cookies", {"status": s2, "type": c2, "bytes": len(b2), "mp4": b2[4:8] == b"ftyp"})
+            except Exception as e: note(f"{vid[-4:]} {name} with cookies error", str(e)[:200])
+            try:
+                r = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA, "Range": "bytes=0-2047", "Referer": "https://www.tiktok.com/"}), timeout=20)
+                note(f"{vid[-4:]} {name} WITHOUT cookies", {"status": r.status, "bytes": len(r.read())})
+            except Exception as e: note(f"{vid[-4:]} {name} WITHOUT cookies error", str(e)[:200])
+    except Exception as e: note(f"{vid[-4:]} error", str(e)[:300])
