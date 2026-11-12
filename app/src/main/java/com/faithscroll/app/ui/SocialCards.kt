@@ -196,9 +196,13 @@ fun TikTokCard(tiktok: TikTok, reason: String?, isActive: Boolean, bottomInset: 
                         // TikTok's player only plays when it's embedded in a page (opened on its own it shows
                         // "Server error"), so it's put in a frame on a small page of our own – like a website would.
                         val src = "https://www.tiktok.com/player/v1/${tiktok.id}?autoplay=1&loop=1&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0"
-                        val html = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'></head>" +
-                            "<body style='margin:0;background:#000;overflow:hidden'><iframe id=p src='$src' allow='autoplay; fullscreen; encrypted-media' " +
-                            "style='border:0;width:100vw;height:100vh;display:block'></iframe></body></html>"
+                        // The frame fills the page by position (not 100vh, which was 0 when the page was first laid
+                        // out – then only the sound played), and is resized again whenever the view changes size.
+                        val html = "<!doctype html><html style='height:100%'><head><meta name=viewport content='width=device-width,initial-scale=1'></head>" +
+                            "<body style='margin:0;height:100%;background:#000;overflow:hidden'><iframe id=p src='$src' allow='autoplay; fullscreen; encrypted-media' " +
+                            "style='position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;border:0;display:block'></iframe>" +
+                            "<script>function fit(){var f=document.getElementById('p');f.style.height=window.innerHeight+'px';f.style.width=window.innerWidth+'px';}" +
+                            "window.addEventListener('resize',fit);setTimeout(fit,300);setTimeout(fit,1500);</script></body></html>"
                         loadDataWithBaseURL("https://faithscroll.app/", html, "text/html", "utf-8", null)
                         web = this
                     }

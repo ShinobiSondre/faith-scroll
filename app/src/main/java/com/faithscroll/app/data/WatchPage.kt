@@ -75,10 +75,15 @@ object WatchPage {
             ).execute().use { it.body?.string() }
         }.onFailure { Diag.err("page", "$videoId page", it) }.getOrNull() ?: return@withContext null
         Regex("\"INNERTUBE_API_KEY\":\\s*\"([a-zA-Z0-9_-]+)\"").find(html)?.groupValues?.get(1)?.let { apiKey = it }
-        val key = apiKey
+        // A short page without the key (YouTube's "unusual traffic" / consent page): use YouTube's public
+        // website key, so the Android player request still works.
+        val key = apiKey ?: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
         val page = extractJson(html, "ytInitialPlayerResponse")?.let { runCatching { JSONObject(it) }.getOrNull() }
         val android = key?.let { androidPlayer(videoId, it) }
-        if (android == null && page == null) { Diag.log("page", "$videoId: nothing readable (${html.length} chars, key=${key != null})"); return@withContext null }
+        if (android == null && page == null) {
+            val title = Regex("<title>([^<]{0,80})").find(html)?.groupValues?.get(1).orEmpty()
+            Diag.log("page", "$videoId: nothing readable (${html.length} chars, key=${apiKey != null}, page '$title')"); return@withContext null
+        }
         val ps = android?.optJSONObject("playabilityStatus")
         val status = ps?.optString("status").orEmpty()
         val tracks = android?.let { tracksOf(it, true) }.orEmpty().ifEmpty { page?.let { tracksOf(it, false) }.orEmpty() }
