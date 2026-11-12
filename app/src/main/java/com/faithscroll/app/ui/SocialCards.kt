@@ -171,7 +171,8 @@ fun TikTokCard(tiktok: TikTok, reason: String?, isActive: Boolean, bottomInset: 
 
     fun send(type: String, value: String? = null) {
         val v = if (value != null) ",value:$value" else ""
-        web?.evaluateJavascript("window.postMessage({type:'$type'$v,'x-tiktok-player':true},'*')", null)
+        // The player sits in a frame on our page; commands go to that frame.
+        web?.evaluateJavascript("(function(){var f=document.getElementById('p');if(f&&f.contentWindow)f.contentWindow.postMessage({type:'$type'$v,'x-tiktok-player':true},'*');})()", null)
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -184,6 +185,7 @@ fun TikTokCard(tiktok: TikTok, reason: String?, isActive: Boolean, bottomInset: 
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
+                        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                         webChromeClient = WebChromeClient()
                         webViewClient = object : WebViewClient() {
                             // Keep everything inside the app (no jumping to the TikTok app).
@@ -191,7 +193,13 @@ fun TikTokCard(tiktok: TikTok, reason: String?, isActive: Boolean, bottomInset: 
                                 !(request.url.scheme == "http" || request.url.scheme == "https")
                         }
                         setOnTouchListener { _, _ -> true }
-                        loadUrl("https://www.tiktok.com/player/v1/${tiktok.id}?autoplay=1&loop=1&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0")
+                        // TikTok's player only plays when it's embedded in a page (opened on its own it shows
+                        // "Server error"), so it's put in a frame on a small page of our own – like a website would.
+                        val src = "https://www.tiktok.com/player/v1/${tiktok.id}?autoplay=1&loop=1&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0"
+                        val html = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'></head>" +
+                            "<body style='margin:0;background:#000;overflow:hidden'><iframe id=p src='$src' allow='autoplay; fullscreen; encrypted-media' " +
+                            "style='border:0;width:100vw;height:100vh;display:block'></iframe></body></html>"
+                        loadDataWithBaseURL("https://faithscroll.app/", html, "text/html", "utf-8", null)
                         web = this
                     }
                 },
