@@ -139,9 +139,41 @@ object TikTokFinder {
         Diag.log("tiktok", "found ${fresh.size} new TikToks (${all.size} kept)")
     }
 
+    /**
+     * All the videos on a TikTok account's page, read in a hidden browser (like the YouTube channel
+     * list). [onUpdate] gets the list as it grows while the page loads and scrolls.
+     */
+    suspend fun profile(a: Activity, user: String, onUpdate: (List<TikTok>) -> Unit): List<TikTok> {
+        com.faithscroll.app.ui.TikTokConsent.prepare()
+        val web = withWebView(a, images = true) ?: return emptyList()
+        com.faithscroll.app.ui.TikTokConsent.injectInto(web)
+        val out = LinkedHashMap<String, TikTok>()
+        try {
+            web.loadUrl("https://www.tiktok.com/@" + user)
+            var still = 0
+            for (i in 0 until 24) {
+                delay(1200)
+                val raw = suspendCancellableCoroutine<String?> { c -> web.evaluateJavascript(READ) { c.resumeWith(Result.success(it)) } }
+                val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
+                val before = out.size
+                o.keys().forEach { id ->
+                    val it = o.getJSONObject(id)
+                    if (!it.optString("author").equals(user, true)) return@forEach
+                    out.putIfAbsent(id, TikTok(id, it.optString("author"), caption(it.optString("text")).take(200), it.optString("thumb").takeIf { t -> t.startsWith("http") }.orEmpty()))
+                }
+                if (out.size > before) { still = 0; onUpdate(out.values.toList()) } else if (out.isNotEmpty() && ++still >= 4) break
+            }
+        } finally {
+            (web.parent as? ViewGroup)?.let { h -> (h.parent as? ViewGroup)?.removeView(h) }
+            web.destroy()
+        }
+        Diag.log("tiktok", "@$user page: ${out.size} videos")
+        return out.values.toList()
+    }
+
     /** A browser that's part of the screen (so the page lays out and loads its videos) but pushed out of sight. */
     @SuppressLint("SetJavaScriptEnabled")
-    private fun withWebView(a: Activity): WebView? {
+    private fun withWebView(a: Activity, images: Boolean = false): WebView? {
         val root = a.findViewById<ViewGroup>(android.R.id.content) ?: return null
         val holder = object : FrameLayout(a) {
             override fun dispatchTouchEvent(ev: android.view.MotionEvent?) = false
@@ -154,7 +186,7 @@ object TikTokFinder {
             settings.domStorageEnabled = true
             settings.userAgentString = DESKTOP_UA
             settings.mediaPlaybackRequiresUserGesture = true
-            settings.blockNetworkImage = true // only the links are needed
+            settings.blockNetworkImage = !images // usually only the links are needed
             webViewClient = WebViewClient()
             holder.addView(this, FrameLayout.LayoutParams(1280, 2000))
         }

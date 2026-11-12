@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.shape.CircleShape
@@ -341,7 +342,7 @@ object TikTokConsent {
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Video, List<com.faithscroll.app.data.Video>) -> Unit, onClose: () -> Unit) {
+fun TikTokWebPage(user: String, onOpenVideo: (com.faithscroll.app.data.Video, List<com.faithscroll.app.data.Video>) -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     androidx.activity.compose.BackHandler(onBack = onClose)
     var following by remember(user) { mutableStateOf(com.faithscroll.app.data.TikTokFollows.isFollowed(ctx, user)) }
@@ -419,3 +420,93 @@ fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Vid
     }
 }
 
+
+/**
+ * A TikTok account inside the app, like a YouTube channel: its videos in a grid (read from its page in
+ * the background), a Follow button, and tap a video to play it – the others come next when you swipe.
+ */
+@Composable
+fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Video, List<com.faithscroll.app.data.Video>) -> Unit, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    var web by remember { mutableStateOf(false) }
+    if (web) { TikTokWebPage(user, onOpenVideo) { web = false }; return }
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    var following by remember(user) { mutableStateOf(com.faithscroll.app.data.TikTokFollows.isFollowed(ctx, user)) }
+    // What we already know about them shows straight away; their page fills in the rest.
+    val known = remember(user) {
+        (com.faithscroll.app.data.TikTokFinder.found.value.filter { it.author.equals(user, true) } +
+            WatchHistory.items.value.map { it.video }.filter { it.isTikTok && it.channel.removePrefix("@").equals(user, true) }.map { it.asTikTok() })
+            .distinctBy { it.id }
+    }
+    val videos = remember(user) { androidx.compose.runtime.mutableStateListOf<TikTok>().apply { addAll(known) } }
+    var loading by remember { mutableStateOf(true) }
+    LaunchedEffect(user) {
+        val a = ctx as? android.app.Activity
+        if (a != null) runCatching {
+            com.faithscroll.app.data.TikTokFinder.profile(a, user) { list ->
+                // Page order (newest first); ones we knew but the page didn't show go last.
+                val merged = (list + videos.filter { v -> list.none { it.id == v.id } }).distinctBy { it.id }
+                videos.clear(); videos.addAll(merged)
+            }
+        }
+        loading = false
+    }
+    Column(Modifier.fillMaxSize().background(Ink).zIndex(20f).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { }) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "Tilbake"), tint = Color.White) }
+            Column(Modifier.weight(1f)) {
+                Text("@$user", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("TikTok · " + tr("${videos.size} videos", "${videos.size} videoer"), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Text(
+                if (following) "✓ " + tr("Following", "Følger") else "+ " + tr("Follow", "Følg"),
+                color = if (following) Gold else Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(CircleShape).background(if (following) Color.White.copy(alpha = 0.12f) else Gold)
+                    .clickable {
+                        if (following) com.faithscroll.app.data.TikTokFollows.unfollow(ctx, user) else com.faithscroll.app.data.TikTokFollows.follow(ctx, user)
+                        following = !following
+                    }.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+        if (loading) androidx.compose.material3.LinearProgressIndicator(color = Gold, trackColor = Color.Transparent, modifier = Modifier.fillMaxWidth().height(2.dp))
+        if (videos.isEmpty() && !loading) {
+            Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text(tr("TikTok didn't show this account's videos to the app.", "TikTok viste ikke videoene til denne kontoen for appen."),
+                    color = Color.White.copy(alpha = 0.75f), fontSize = 15.sp)
+                Spacer(Modifier.height(14.dp))
+                Text(tr("Open their TikTok page here", "Åpne TikTok-siden deres her"), color = Ink, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(CircleShape).background(Gold).clickable { web = true }.padding(horizontal = 18.dp, vertical = 10.dp))
+            }
+            return@Column
+        }
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            androidx.compose.foundation.lazy.grid.GridCells.Adaptive(118.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 40.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(videos.size, key = { videos[it].id }) { i ->
+                val t = videos[i]
+                val seen = com.faithscroll.app.data.Seen.has(ctx, t.id)
+                Box(
+                    Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(Plum)
+                        .clickable { val all = videos.map { it.asVideo() }; onOpenVideo(all[i], all.drop(i) + all.take(i)) }
+                ) {
+                    if (t.thumb.isNotBlank()) coil.compose.AsyncImage(t.thumb, null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.75f))))
+                    if (t.caption.isNotBlank()) Text(t.caption, color = Color.White, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp))
+                    if (seen) Text(tr("Watched", "Sett"), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(5.dp).clip(CircleShape).background(Gold).padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+            if (videos.isNotEmpty()) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                Text(tr("Open their TikTok page here", "Åpne TikTok-siden deres her"), color = Gold, fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { web = true }.padding(16.dp))
+            }
+        }
+    }
+}
