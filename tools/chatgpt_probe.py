@@ -1,25 +1,36 @@
-"""Which TikTok /discover pages have Norwegian Christian videos? (headless Chromium, desktop)"""
+"""Which way of embedding a TikTok actually plays? (headless Chromium, phone)"""
 import time
 from playwright.sync_api import sync_playwright
-def note(t, m): print(f"::notice title={t}::{str(m).replace(chr(10),' ')[:700]}")
-READ = """(()=>{const o={};document.querySelectorAll('a[href*="/video/"]').forEach(a=>{const m=a.href.match(/@([^/?#]+)\\/video\\/(\\d{15,})/);if(!m)return;
-const b=a.closest('[data-e2e]')||a.parentElement;let t=(a.getAttribute('title')||a.innerText||'')+' '+((b&&b.innerText)||'');const i=a.querySelector('img');if(i&&i.alt)t+=' '+i.alt;o[m[2]]=t.replace(/\\s+/g,' ').slice(0,120)});window.scrollBy(0,2500);return o})()"""
-slugs = ["bibelvers", "bibelvers-på-norsk", "norske-bibelvers", "kristen-norsk", "norsk-kristen", "jesus-norsk", "kristne-sanger-norsk",
-         "bønn-norsk", "kristen-tiktok-norge", "norwegian-christian", "jesus-norge", "lovsang-norsk", "dagens-bibelvers", "bible-verse-of-the-day", "christian-motivation"]
+def note(t, m): print(f"::notice title={t}::{str(m).replace(chr(10),' ')[:600]}")
+IDS = ["7699185313272450335", "7706804780441685278", "7701465373933194527"]
+PARAMS = "autoplay=1&loop=1&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0"
+STATE = """(()=>{const v=document.querySelector('video');const t=document.body?document.body.innerText.slice(0,120):'';
+return {video:!!v, t:v?v.currentTime:-1, ready:v?v.readyState:-1, src:v?(v.currentSrc||'').slice(0,60):'', text:t}})()"""
+def frame_state(page):
+    out = []
+    for f in page.frames:
+        try: out.append(f.evaluate(STATE))
+        except Exception: pass
+    return out
 with sync_playwright() as p:
-    br = p.chromium.launch()
-    ctx = br.new_context(viewport={"width": 1280, "height": 900}, locale="nb-NO",
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36")
-    page = ctx.new_page()
-    for s in slugs:
-        try:
-            page.goto("https://www.tiktok.com/discover/" + s, wait_until="domcontentloaded", timeout=40000)
-            o = {}
-            for _ in range(8):
-                time.sleep(1.5)
-                try: o = page.evaluate(READ)
-                except Exception: pass
-                if len(o) >= 15: break
-            note(f"{s}: {len(o)} videos  (title: {page.title()[:40]})", list(o.values())[:4])
-        except Exception as e: note(f"{s} error", e)
+    br = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+    for vid in IDS[:2]:
+        for name, mode, url in [
+            ("player top-level", "top", f"https://www.tiktok.com/player/v1/{vid}?{PARAMS}"),
+            ("embed/v2 top-level", "top", f"https://www.tiktok.com/embed/v2/{vid}"),
+            ("player in iframe @example.com", "iframe", f"https://www.tiktok.com/player/v1/{vid}?{PARAMS}"),
+            ("player in iframe @faithscroll.app", "iframe2", f"https://www.tiktok.com/player/v1/{vid}?{PARAMS}"),
+        ]:
+            ctx = br.new_context(**p.devices["Pixel 7"], locale="nb-NO"); page = ctx.new_page()
+            try:
+                if mode == "top": page.goto(url, wait_until="domcontentloaded", timeout=40000)
+                else:
+                    host = "https://example.com/" if mode == "iframe" else "https://faithscroll.app/"
+                    page.route(host, lambda r: r.fulfill(status=200, content_type="text/html",
+                        body=f'<html><body style="margin:0;background:#000"><iframe src="{url}" style="border:0;width:100vw;height:100vh" allow="autoplay; fullscreen"></iframe></body></html>'))
+                    page.goto(host, timeout=40000)
+                time.sleep(8)
+                note(f"{vid[-4:]} {name}", frame_state(page))
+            except Exception as e: note(f"{vid[-4:]} {name} error", e)
+            ctx.close()
     br.close()
