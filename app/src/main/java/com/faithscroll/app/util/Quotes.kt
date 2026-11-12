@@ -7,6 +7,7 @@ package com.faithscroll.app.util
  * outer marks are only added when the verse has none of its own.
  */
 object Quotes {
+    private fun closes(next: Char?) = next == null || next.isWhitespace() || next in ".,;:!?)»’”"
     private fun opens(prev: Char?) = prev == null || prev.isWhitespace() || prev in "([«‘“:—–-"
 
     /** ” / ' / ’ used as quotes → «» and ‘’ (an apostrophe inside a word stays as it is). */
@@ -18,9 +19,11 @@ object Quotes {
             val next = s.getOrNull(i + 1)
             out.append(
                 when (c) {
-                    '”', '“' -> if (opens(prev)) '«' else '»'
+                    // Closing when nothing follows it (end, space, punctuation), else opening when it starts a word.
+                    '”', '“' -> if (closes(next)) '»' else if (opens(prev)) '«' else '»'
                     '’', '\'' -> when {
                         prev != null && prev.isLetter() && next != null && next.isLetter() -> c // apostrophe in a word
+                        closes(next) -> '’'
                         opens(prev) -> '‘'
                         else -> '’'
                     }
