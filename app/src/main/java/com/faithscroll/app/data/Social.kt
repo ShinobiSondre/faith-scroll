@@ -27,7 +27,7 @@ data class Pin(val id: String, val image: String, val title: String, val link: S
 data class TikTok(val id: String, val author: String, val caption: String = "", val thumb: String = "") {
     val url: String get() = if (author.isNotBlank()) "https://www.tiktok.com/@$author/video/$id" else "https://www.tiktok.com/video/$id"
     /** As a video, so it can be saved, kept in the history and opened again like the others. */
-    fun asVideo(): Video = Video(id, caption.ifBlank { "TikTok · @$author" }, if (author.isNotBlank()) "@$author" else "TikTok", Video.KIND_SHORT, thumb = thumb, link = url)
+    fun asVideo(): Video = also { if (author.isNotBlank()) TikTokResolver.authors[id] = author }.let { Video(id, caption.ifBlank { "TikTok · @$author" }, if (author.isNotBlank()) "@$author" else "TikTok", Video.KIND_SHORT, thumb = thumb, link = url) }
 }
 
 data class SocialLibrary(val pins: List<Pin>, val tiktoks: List<TikTok>, val clips: List<Video> = emptyList())

@@ -183,6 +183,11 @@ object StreamResolver {
     fun registerDirect(id: String, url: String) { if (url.isNotBlank()) direct[id] = url }
 
     suspend fun resolve(id: String): ResolvedStream? {
+        // TikTok: its own video file (played with the cookies its page gave).
+        if (TikTokResolver.isTikTokId(id)) {
+            val t = TikTokResolver.resolve(id) ?: return null
+            return ResolvedStream(emptyList(), emptyList(), listOf(StreamOption(t.url, 720, 0)), null, description = t.caption)
+        }
         direct[id]?.let { u ->
             return if (u.contains(".m3u8")) ResolvedStream(emptyList(), emptyList(), emptyList(), u)
             else ResolvedStream(emptyList(), emptyList(), listOf(StreamOption(u, 720, 0)), null)
@@ -290,6 +295,12 @@ object StreamResolver {
 
     @OptIn(UnstableApi::class)
     fun mediaSource(id: String, r: ResolvedStream, target: Int): MediaSource {
+        TikTokResolver.cached(id)?.let { t ->
+            val http = DefaultHttpDataSource.Factory().setUserAgent(TikTokResolver.UA).setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000).setDefaultRequestProperties(t.headers)
+            val src = media?.let { CacheDataSource.Factory().setCache(it).setUpstreamDataSourceFactory(http).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR) } ?: http
+            return ProgressiveMediaSource.Factory(src).createMediaSource(item(t.url, "tt-$id"))
+        }
         val c = choose(r, target)
         val progressive = ProgressiveMediaSource.Factory(cachedFactory())
         return when {
@@ -306,6 +317,7 @@ object StreamResolver {
     /** Downloads the first seconds of a video into the cache so it starts instantly later. */
     @OptIn(UnstableApi::class)
     suspend fun preload(ctx: Context, id: String) = withContext(Dispatchers.IO) {
+        if (TikTokResolver.isTikTokId(id)) { TikTokResolver.resolve(id); return@withContext } // its file needs its cookies: just look it up
         val r = resolve(id) ?: return@withContext
         val c = choose(r, VideoQuality.targetHeight(ctx))
         val bytes = VideoQuality.preloadBytes(ctx)

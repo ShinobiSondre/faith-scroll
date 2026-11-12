@@ -48,7 +48,8 @@ class FeedEngine(
             .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) }.distinctBy { it.id }
         if (tiks.isNotEmpty() && rnd.nextDouble() < 0.2) {
             val t = tiks.random(rnd); shownTikToks += t.id
-            return FeedItem.TikTokItem(t, tr("From TikTok", "Fra TikTok"))
+            // Played in our own player, like a YouTube video.
+            return FeedItem.VideoItem(t.asVideo(), tr("From TikTok", "Fra TikTok"))
         }
         return pickVideo(vids) ?: pickIllustration()
     }

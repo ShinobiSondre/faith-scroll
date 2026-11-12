@@ -371,7 +371,13 @@ private fun DiagnosticsCard() {
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color.Black)) {
-                TikTokCard(t, tr("Test · ${com.faithscroll.app.data.TikTokFinder.found.value.size} found", "Test · ${com.faithscroll.app.data.TikTokFinder.found.value.size} funnet"), isActive = true, bottomInset = 24.dp)
+                androidx.compose.runtime.key(t.id) {
+                    VideoCard(
+                        video = t.asVideo(),
+                        reason = tr("Test · ${com.faithscroll.app.data.TikTokFinder.found.value.size} found", "Test · ${com.faithscroll.app.data.TikTokFinder.found.value.size} funnet"),
+                        isActive = true, saved = false, onSave = {}, bottomInset = 24.dp
+                    )
+                }
                 TextButton(onClick = { tikPlay = null }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)) {
                     Text(tr("Close", "Lukk"), color = Color.White)
                 }

@@ -111,11 +111,6 @@ fun VideoCard(
     immersive: Boolean = false, // full screen: nothing but the video while it plays; everything returns on pause
     onPausedChange: (Boolean) -> Unit = {}
 ) {
-    // Saved / history TikToks open in TikTok's player, with the same buttons.
-    if (video.isTikTok) {
-        TikTokCard(video.asTikTok(), reason, isActive && !suspended, bottomInset, saved, onSave, onEnded)
-        return
-    }
     val ctx = LocalContext.current
     var paused by remember(video.id) { mutableStateOf(false) }
     var controls by remember(video.id) { mutableStateOf(false) }
@@ -133,7 +128,7 @@ fun VideoCard(
         if (castingThis) paused = true
     }
     val openPage = LocalOpenPage.current
-    val isYouTube = video.direct.isBlank()
+    val isYouTube = video.direct.isBlank() && !video.isTikTok
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
     // Captions available for this video? If they don't load, subtitles are simply turned off for it.
     var hasCaptions by remember(video.id) { mutableStateOf<Boolean?>(null) }
@@ -147,6 +142,11 @@ fun VideoCard(
     var muted by remember { mutableStateOf(false) }
     var fill by remember(video.id) { mutableStateOf<Boolean?>(null) } // null = automatic
     val playback = remember(video.id) { PlaybackState() }
+    // A TikTok whose video file couldn't be fetched: TikTok's own player instead.
+    if (video.isTikTok && playback.failed) {
+        TikTokCard(video.asTikTok(), reason, isActive && !suspended, bottomInset, saved, onSave, onEnded)
+        return
+    }
     var embedPlaying by remember(video.id) { mutableStateOf(false) }
     var embedFailed by remember(video.id) { mutableStateOf(false) }
     var embedPos by remember(video.id) { mutableStateOf(0L) }
@@ -197,7 +197,7 @@ fun VideoCard(
     // Prepare the stream URL as soon as the card exists, so it starts instantly when swiped to.
     LaunchedEffect(video.id) {
         StreamResolver.resolve(video.id)?.let { r ->
-            if (video.direct.isBlank() && !com.faithscroll.app.data.LangFilter.spokenOk(r.spoken)) com.faithscroll.app.data.LangFilter.block(video.id, r.spoken)
+            if (video.direct.isBlank() && !video.isTikTok && !com.faithscroll.app.data.LangFilter.spokenOk(r.spoken)) com.faithscroll.app.data.LangFilter.block(video.id, r.spoken)
         }
     }
 
@@ -380,6 +380,7 @@ fun VideoCard(
             }
             Text(
                 when {
+                    video.isTikTok -> "TIKTOK"
                     video.kind == Video.KIND_SERMON -> tr("SERMON", "PREKEN")
                     video.channel.startsWith("r/") -> tr("FROM REDDIT", "FRA REDDIT")
                     video.kind == Video.KIND_SHORT -> tr("SHORT", "KORT")
@@ -466,6 +467,17 @@ fun VideoCard(
         ) { showVerses = false }
         chatAsk?.let { (at, url) -> ChatGptSheet(video, at, url, onOpenPage = { chatAsk = null; openPage(it) }) { chatAsk = null } }
 
+        // TikTok: "What do they mean here?" with the link, caption and moment (no transcript).
+        if (isActive && paused && video.isTikTok && !expanded) {
+            Text(
+                "✦ " + tr("What do they mean here?", "Hva mener de her?"),
+                color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Center).offset(y = 82.dp).zIndex(5f)
+                    .shadow(8.dp, CircleShape).clip(CircleShape).background(Gold)
+                    .clickable { chatAsk = playback.position to tikTokAskUrl(video.asTikTok(), playback.position) }
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+        }
         // "What do they mean here?" – drawn last so it sits above the title, buttons and details,
         // just under the play button (clear of the text at the bottom, also on a small folded screen).
         if (isActive && paused && isYouTube && !expanded && askBusy == null && (!playback.failed || usingEmbed)) {

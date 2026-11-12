@@ -273,7 +273,7 @@ fun TikTokCard(
             color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.align(Alignment.Center).offset(y = 82.dp).zIndex(5f)
                 .shadow(8.dp, CircleShape).clip(CircleShape).background(Gold)
-                .clickable { chatAsk = position to askUrl(tiktok, position) }
+                .clickable { chatAsk = position to tikTokAskUrl(tiktok, position) }
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         )
         chatAsk?.let { (at, url) -> ChatGptSheet(video, at, url, onOpenPage = { chatAsk = null; openPage(it) }) { chatAsk = null } }
@@ -292,7 +292,7 @@ fun TikTokCard(
     }
 }
 
-private fun askUrl(t: TikTok, atMs: Long): String {
+internal fun tikTokAskUrl(t: TikTok, atMs: Long): String {
     val at = AskPrompt.time(atMs)
     val q = if (Lang.no) "TikTok-video: ${t.url}" + (if (t.author.isNotBlank()) " av @${t.author}" else "") + ". Pauset ved $at.\n" +
         (if (t.caption.isNotBlank()) "Teksten til videoen: «${t.caption}»\n\n" else "\n") +
