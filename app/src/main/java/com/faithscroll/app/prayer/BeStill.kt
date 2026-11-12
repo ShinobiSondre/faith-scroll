@@ -95,6 +95,7 @@ class PrayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Lang.init(this)
+        com.faithscroll.app.ui.SeasonTheme.init(this)
         // Shows on top of the lock screen and wakes the screen when the reminder comes.
         if (android.os.Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         NotificationManagerCompat.from(this).cancel(7001)

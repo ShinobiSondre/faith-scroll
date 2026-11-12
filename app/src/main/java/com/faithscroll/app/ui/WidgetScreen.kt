@@ -139,6 +139,8 @@ fun WidgetScreen(
         Spacer(Modifier.height(16.dp))
         QualityCard()
         Spacer(Modifier.height(16.dp))
+        SeasonColorsCard()
+        Spacer(Modifier.height(16.dp))
         CastCard()
         Spacer(Modifier.height(16.dp))
         YouTubeCard(onChanged = { sourcesChanged() })
@@ -505,6 +507,27 @@ private fun LanguageCard() {
             tr("Bible verses: King James Version.", "Bibelvers: " + com.faithscroll.app.data.BibleNo.CREDITS),
             color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
         )
+    }
+}
+
+/** App colours that follow the season and the weekday (or the classic gold and plum). */
+@Composable
+private fun SeasonColorsCard() {
+    val ctx = LocalContext.current
+    var on by remember { mutableStateOf(SeasonTheme.enabled(ctx)) }
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("🎨 " + tr("Colours follow the season", "Farger etter årstid"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (on) tr("Now: ${SeasonTheme.current.name}, with a touch of today's colour.", "Nå: ${SeasonTheme.current.name}, med et snev av dagens farge.")
+                else tr("Classic gold and plum.", "Klassisk gull og lilla."),
+                color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp
+            )
+        }
+        Switch(checked = on, onCheckedChange = {
+            on = it; SeasonTheme.setEnabled(ctx, it)
+            (ctx as? android.app.Activity)?.recreate()
+        }, colors = SwitchDefaults.colors(checkedTrackColor = Gold, checkedThumbColor = Ink))
     }
 }
 

@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.faithscroll.app.util.Lang.init(this)
+        com.faithscroll.app.ui.SeasonTheme.init(this) // colours for this season and day
         // Save the details of any crash so they can be shown (and copied) on the next launch.
         val crashFile = java.io.File(filesDir, "last_crash.txt")
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -163,6 +164,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Updater.onResume(this)
+        // A new day (or season) since the app was opened: switch to its colours.
+        val before = com.faithscroll.app.ui.SeasonTheme.current
+        com.faithscroll.app.ui.SeasonTheme.init(this)
+        if (before != com.faithscroll.app.ui.SeasonTheme.current) recreate()
     }
 
     override fun onNewIntent(intent: Intent) {

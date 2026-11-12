@@ -6,28 +6,36 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
-val Gold = Color(0xFFF3D27A)
-val Ink = Color(0xFF0D0A14)
-val Plum = Color(0xFF1B1530)
+// Follow the season and the day (see SeasonTheme); set once when the app starts.
+val Gold: Color get() = SeasonTheme.current.accent
+val Ink: Color get() = SeasonTheme.current.ink
+val Plum: Color get() = SeasonTheme.current.plum
 val HeartRed = Color(0xFFFF4D6D)
 
-private val scheme = darkColorScheme(
-    primary = Gold,
-    onPrimary = Ink,
-    secondary = Color(0xFFB9A6FF),
-    background = Ink,
-    onBackground = Color.White,
-    surface = Plum,
-    onSurface = Color.White,
-    surfaceVariant = Color(0xFF261E40),
-    onSurfaceVariant = Color(0xFFCFC8E3),
-    surfaceContainer = Plum,
-    surfaceContainerHigh = Color(0xFF241C3A),
-    surfaceContainerLow = Color(0xFF161126)
-)
+private fun scheme() = SeasonTheme.current.let { c ->
+    darkColorScheme(
+        primary = c.accent,
+        onPrimary = c.ink,
+        secondary = c.secondary,
+        background = c.ink,
+        onBackground = Color.White,
+        surface = c.plum,
+        onSurface = Color.White,
+        surfaceVariant = androidx.compose.ui.graphics.lerp(c.plum, Color.White, 0.06f),
+        onSurfaceVariant = Color(0xFFD6D0E6),
+        surfaceContainer = c.plum,
+        surfaceContainerHigh = androidx.compose.ui.graphics.lerp(c.plum, Color.White, 0.04f),
+        surfaceContainerLow = androidx.compose.ui.graphics.lerp(c.plum, c.ink, 0.5f)
+    )
+}
 
 @Composable
-fun FaithTheme(content: @Composable () -> Unit) = MaterialTheme(colorScheme = scheme, content = content)
+fun FaithTheme(content: @Composable () -> Unit) {
+    // Re-made when the season/day colours are switched on or off in the Me tab.
+    val version = SeasonTheme.version.value
+    val colors = androidx.compose.runtime.remember(version) { scheme() }
+    MaterialTheme(colorScheme = colors, content = content)
+}
 
 /** Gradient palettes for verse cards, picked per theme so each topic has its own mood. */
 object Palettes {

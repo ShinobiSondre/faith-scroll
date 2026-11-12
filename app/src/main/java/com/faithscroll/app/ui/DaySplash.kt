@@ -112,31 +112,31 @@ private fun DrawScope.drawSeason(s: Season, t: Float) {
         val speed = 0.6f + seed2 * 0.8f
         val p = ((t * speed + seed) % 1f)
         when (s.kind) {
-            Kind.WINTER, Kind.ADVENT, Kind.CHRISTMAS -> { // snow falling (gold sparks in Advent/Christmas)
+            SeasonKind.WINTER, SeasonKind.ADVENT, SeasonKind.CHRISTMAS -> { // snow falling (gold sparks in Advent/Christmas)
                 val x = (seed + 0.05f * sin((p * 6 + i).toDouble()).toFloat()) * size.width
                 val y = p * size.height
-                val col = if (s.kind == Kind.WINTER || i % 3 != 0) Color.White.copy(alpha = 0.55f) else s.accent.copy(alpha = 0.8f)
+                val col = if (s.kind == SeasonKind.WINTER || i % 3 != 0) Color.White.copy(alpha = 0.55f) else s.accent.copy(alpha = 0.8f)
                 drawCircle(col, 2f + seed2 * 4f, Offset(x, y))
             }
-            Kind.SPRING -> { // petals drifting down and sideways
+            SeasonKind.SPRING -> { // petals drifting down and sideways
                 val x = ((seed + p * 0.3f) % 1f) * size.width
                 val y = p * size.height
                 rotate(p * 360f + i * 20, Offset(x, y)) {
                     drawOval(Color(0xFFF8C8DC).copy(alpha = 0.6f), Offset(x - 6f, y - 3.5f), Size(12f + seed2 * 6f, 7f))
                 }
             }
-            Kind.SUMMER, Kind.PENTECOST -> { // floating light motes rising
+            SeasonKind.SUMMER, SeasonKind.PENTECOST -> { // floating light motes rising
                 val x = seed * size.width + 20f * sin((p * 2 * PI + i).toFloat())
                 val y = (1f - p) * size.height
                 drawCircle(s.accent.copy(alpha = 0.25f + 0.35f * sin(p * PI.toFloat())), 3f + seed2 * 5f, Offset(x, y))
             }
-            Kind.AUTUMN -> { // leaves tumbling
+            SeasonKind.AUTUMN -> { // leaves tumbling
                 val x = ((seed + p * 0.4f) % 1f) * size.width
                 val y = p * size.height
                 val leaf = listOf(Color(0xFFE07A2F), Color(0xFFC0392B), Color(0xFFE9B949))[i % 3].copy(alpha = 0.65f)
                 rotate(p * 540f + i * 30, Offset(x, y)) { drawOval(leaf, Offset(x - 9f, y - 5f), Size(18f, 10f)) }
             }
-            Kind.EASTER -> { // sunrise rays turning slowly behind everything
+            SeasonKind.EASTER -> { // sunrise rays turning slowly behind everything
                 if (i < 12) {
                     val a = (i / 12.0 * 2 * PI + t * 2 * PI / 6).toFloat()
                     val c = Offset(size.width / 2, size.height * 0.38f)
@@ -150,11 +150,11 @@ private fun DrawScope.drawSeason(s: Season, t: Float) {
 /** Shown once per app start. */
 object SplashGate { @Volatile var shown = false }
 
-private enum class Kind { WINTER, SPRING, SUMMER, AUTUMN, ADVENT, CHRISTMAS, EASTER, PENTECOST }
-private data class Season(val kind: Kind, val label: String, val colors: List<Color>, val accent: Color)
-private data class Day(val title: String, val line: String, val verse: String, val ref: String)
+enum class SeasonKind { WINTER, SPRING, SUMMER, AUTUMN, ADVENT, CHRISTMAS, EASTER, PENTECOST }
+data class Season(val kind: SeasonKind, val label: String, val colors: List<Color>, val accent: Color)
+data class Day(val title: String, val line: String, val verse: String, val ref: String)
 
-private object SplashLook {
+object SplashLook {
     data class Look(val season: Season, val day: Day)
 
     fun today(): Look {
@@ -170,7 +170,7 @@ private object SplashLook {
         return Calendar.getInstance().apply { clear(); set(year, month - 1, day) }
     }
 
-    private fun season(c: Calendar): Season {
+    fun season(c: Calendar = Calendar.getInstance()): Season {
         val year = c.get(Calendar.YEAR)
         val doy = c.get(Calendar.DAY_OF_YEAR)
         val month = c.get(Calendar.MONTH) // 0-based
@@ -181,21 +181,21 @@ private object SplashLook {
             .get(Calendar.DAY_OF_YEAR)
         return when {
             (month == Calendar.DECEMBER && dom >= 24) || (month == Calendar.JANUARY && dom <= 6) ->
-                Season(Kind.CHRISTMAS, tr("Christmas", "Jul"), listOf(Color(0xFF3A0D16), Color(0xFF14243A)), Color(0xFFF2C14E))
+                Season(SeasonKind.CHRISTMAS, tr("Christmas", "Jul"), listOf(Color(0xFF3A0D16), Color(0xFF14243A)), Color(0xFFF2C14E))
             doy >= advent && month == Calendar.DECEMBER || doy >= advent && month == Calendar.NOVEMBER ->
-                Season(Kind.ADVENT, tr("Advent", "Advent"), listOf(Color(0xFF2A1240), Color(0xFF120A24)), Color(0xFFD9A8FF))
+                Season(SeasonKind.ADVENT, tr("Advent", "Advent"), listOf(Color(0xFF2A1240), Color(0xFF120A24)), Color(0xFFD9A8FF))
             doy in (e - 7)..(e + 7) ->
-                Season(Kind.EASTER, tr("Easter", "Påske"), listOf(Color(0xFF3B2A5C), Color(0xFFE9A86B)), Color(0xFFFFE3A3))
+                Season(SeasonKind.EASTER, tr("Easter", "Påske"), listOf(Color(0xFF3B2A5C), Color(0xFFE9A86B)), Color(0xFFFFE3A3))
             doy in (e + 48)..(e + 50) ->
-                Season(Kind.PENTECOST, tr("Pentecost", "Pinse"), listOf(Color(0xFF5A1010), Color(0xFF1E0A0A)), Color(0xFFFF9A4D))
+                Season(SeasonKind.PENTECOST, tr("Pentecost", "Pinse"), listOf(Color(0xFF5A1010), Color(0xFF1E0A0A)), Color(0xFFFF9A4D))
             month in listOf(Calendar.DECEMBER, Calendar.JANUARY, Calendar.FEBRUARY) ->
-                Season(Kind.WINTER, tr("Winter", "Vinter"), listOf(Color(0xFF0F2342), Color(0xFF06101F)), Color(0xFFBFE3FF))
+                Season(SeasonKind.WINTER, tr("Winter", "Vinter"), listOf(Color(0xFF0F2342), Color(0xFF06101F)), Color(0xFFBFE3FF))
             month in Calendar.MARCH..Calendar.MAY ->
-                Season(Kind.SPRING, tr("Spring", "Vår"), listOf(Color(0xFF1F4A3A), Color(0xFF3D2348)), Color(0xFFF8C8DC))
+                Season(SeasonKind.SPRING, tr("Spring", "Vår"), listOf(Color(0xFF1F4A3A), Color(0xFF3D2348)), Color(0xFFF8C8DC))
             month in Calendar.JUNE..Calendar.AUGUST ->
-                Season(Kind.SUMMER, tr("Summer", "Sommer"), listOf(Color(0xFF1C4E80), Color(0xFFE6A35A)), Color(0xFFFFE08A))
+                Season(SeasonKind.SUMMER, tr("Summer", "Sommer"), listOf(Color(0xFF1C4E80), Color(0xFFE6A35A)), Color(0xFFFFE08A))
             else ->
-                Season(Kind.AUTUMN, tr("Autumn", "Høst"), listOf(Color(0xFF3A1E12), Color(0xFF1A1010)), Color(0xFFE9B949))
+                Season(SeasonKind.AUTUMN, tr("Autumn", "Høst"), listOf(Color(0xFF3A1E12), Color(0xFF1A1010)), Color(0xFFE9B949))
         }
     }
 
