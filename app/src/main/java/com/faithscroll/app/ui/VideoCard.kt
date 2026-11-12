@@ -324,7 +324,7 @@ fun VideoCard(
         // No subtitles on screen. In the background, the words around where you're watching are
         // gathered (YouTube's captions if it has them, otherwise the phone listens), so
         // "What do they mean here?" can ask right away.
-        if (isActive && isYouTube && !suspended) {
+        if (isActive && (isYouTube || video.isTikTok) && !suspended) {
             var ytCaptions by remember(video.id) { mutableStateOf<Boolean?>(null) }
             var ytCues by remember(video.id) { mutableStateOf<List<com.faithscroll.app.data.Cue>>(emptyList()) }
             LaunchedEffect(video.id) {
@@ -467,20 +467,9 @@ fun VideoCard(
         ) { showVerses = false }
         chatAsk?.let { (at, url) -> ChatGptSheet(video, at, url, onOpenPage = { chatAsk = null; openPage(it) }) { chatAsk = null } }
 
-        // TikTok: "What do they mean here?" with the link, caption and moment (no transcript).
-        if (isActive && paused && video.isTikTok && !expanded) {
-            Text(
-                "✦ " + tr("What do they mean here?", "Hva mener de her?"),
-                color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.Center).offset(y = 82.dp).zIndex(5f)
-                    .shadow(8.dp, CircleShape).clip(CircleShape).background(Gold)
-                    .clickable { chatAsk = playback.position to tikTokAskUrl(video.asTikTok(), playback.position) }
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-            )
-        }
         // "What do they mean here?" – drawn last so it sits above the title, buttons and details,
         // just under the play button (clear of the text at the bottom, also on a small folded screen).
-        if (isActive && paused && isYouTube && !expanded && askBusy == null && (!playback.failed || usingEmbed)) {
+        if (isActive && paused && (isYouTube || video.isTikTok) && !expanded && askBusy == null && (!playback.failed || usingEmbed)) {
             Text(
                 "✦ " + tr("What do they mean here?", "Hva mener de her?"),
                 color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,

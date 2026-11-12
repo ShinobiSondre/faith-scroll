@@ -27,6 +27,7 @@ object Transcripts {
 
     /** Original captions (best track: manual before automatic, app language before others). */
     suspend fun original(videoId: String, urgent: Boolean = false): Transcript? = withContext(Dispatchers.IO) {
+        if (TikTokResolver.isTikTokId(videoId)) return@withContext null // no YouTube captions: the phone listens
         cache["o|$videoId"]?.let { return@withContext it }
         missing[videoId]?.let { if (System.currentTimeMillis() - it < 10 * 60_000) return@withContext null }
         val t0 = System.currentTimeMillis()

@@ -21,14 +21,16 @@ object AskPrompt {
 
     fun build(videoId: String, title: String, channel: String, atMs: Long, cues: List<Cue>?, norwegian: Boolean): String {
         val at = time(atMs)
-        val link = "https://www.youtube.com/watch?v=$videoId&t=${atMs / 1000}s"
+        val tiktok = TikTokResolver.isTikTokId(videoId)
+        val link = if (tiktok) TikTok(videoId, TikTokResolver.authors[videoId].orEmpty()).url else "https://www.youtube.com/watch?v=$videoId&t=${atMs / 1000}s"
+        val kind = if (tiktok) "TikTok" else "YouTube"
         val text = cues?.let { excerpt(it, atMs) }.orEmpty()
         return if (norwegian) buildString {
-            append("YouTube-video: $link («$title» av $channel). Pauset ved $at.\n")
+            append("$kind-video: $link («$title» av $channel). Pauset ved $at.\n")
             if (text.isNotBlank()) append("Det som blir sagt rundt dette øyeblikket (teksting med tidspunkt):\n$text\n\n")
             append("Hva mener de ved $at? Forklar kort på norsk, ut fra sammenhengen. Hvis de viser til eller siterer et bibelvers, skriv henvisningen (f.eks. Johannes 3,16).")
         } else buildString {
-            append("YouTube video: $link (\"$title\" by $channel). Paused at $at.\n")
+            append("$kind video: $link (\"$title\" by $channel). Paused at $at.\n")
             if (text.isNotBlank()) append("What is said around this moment (captions with timestamps):\n$text\n\n")
             append("What do they mean at $at? Explain briefly, using the context. If they refer to or quote a Bible verse, give the reference (e.g. John 3:16).")
         }

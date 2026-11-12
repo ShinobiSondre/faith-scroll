@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  * that page set, so those are sent along when playing.
  */
 object TikTokResolver {
-    data class Stream(val url: String, val headers: Map<String, String>, val durationMs: Long, val caption: String)
+    data class Stream(val url: String, val headers: Map<String, String>, val durationMs: Long, val caption: String, val lang: String = "")
 
     const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
     private val cache = ConcurrentHashMap<String, Pair<Long, Stream>>()
@@ -34,6 +34,26 @@ object TikTokResolver {
     fun languageOk(lang: String): Boolean {
         val no = com.faithscroll.app.util.Lang.no
         return if (no) lang == "no" || (com.faithscroll.app.util.Lang.alsoEnglish && lang == "en") else lang == "en"
+    }
+
+    /**
+     * Downloads the whole TikTok (they're short) to [file], for the phone to listen to it and make
+     * subtitles – so verses can be spotted and "What do they mean here?" gets what was said.
+     */
+    suspend fun download(id: String, file: java.io.File): java.io.File? = withContext(Dispatchers.IO) {
+        if (file.exists() && file.length() > 10_000) return@withContext file
+        val s = resolve(id) ?: return@withContext null
+        runCatching {
+            val req = Request.Builder().url(s.url).header("User-Agent", UA).apply { s.headers.forEach { (k, v) -> header(k, v) } }.build()
+            val part = java.io.File(file.parentFile, file.name + ".part")
+            OkHttpClient.Builder().readTimeout(30, TimeUnit.SECONDS).build().newCall(req).execute().use { r ->
+                if (!r.isSuccessful) error("HTTP ${r.code}")
+                part.outputStream().use { out -> r.body!!.byteStream().copyTo(out) }
+            }
+            part.renameTo(file)
+            Diag.log("asr", "$id: TikTok audio ${file.length() / 1024} KB")
+            file
+        }.onFailure { Diag.log("tiktok", "$id: download for subtitles failed – ${it.message}") }.getOrNull()
     }
 
     /** TikTok ids are long numbers; YouTube ids are 11 letters and digits. */
@@ -70,7 +90,7 @@ object TikTokResolver {
                 TikTokFinder.drop(id)
             }
             val cookies = synchronized(jar.store) { jar.store.joinToString("; ") { "${it.name}=${it.value}" } }
-            Stream(url, mapOf("Cookie" to cookies, "Referer" to "https://www.tiktok.com/"), v.optLong("duration") * 1000, item.optString("desc"))
+            Stream(url, mapOf("Cookie" to cookies, "Referer" to "https://www.tiktok.com/"), v.optLong("duration") * 1000, item.optString("desc"), lang)
         }.onFailure { Diag.log("tiktok", "$id: couldn't get the video file – ${it.message}") }
             .getOrNull()?.also { cache[id] = System.currentTimeMillis() to it }
     }

@@ -311,6 +311,11 @@ object Asr {
             val dur = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) / 1000 else Long.MAX_VALUE
             return AudioReader(ex, codec, dur, fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE), fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
         }
+        // TikTok: short, so the whole video is fetched (with its cookies) and listened to from the file.
+        if (TikTokResolver.isTikTokId(videoId)) {
+            val f = TikTokResolver.download(videoId, File(File(ctx.cacheDir, "asr").apply { mkdirs() }, "$videoId.m4a")) ?: return@withContext null
+            return@withContext runCatching { open { it.setDataSource(f.absolutePath) } }.onFailure { Diag.err("asr", "$videoId: TikTok audio", it) }.getOrNull()
+        }
         // Already downloaded? Use the file.
         File(File(ctx.cacheDir, "asr"), "$videoId.m4a").takeIf { it.exists() && it.length() > 10_000 }?.let { f ->
             return@withContext runCatching { open { it.setDataSource(f.absolutePath) } }.getOrNull()
@@ -448,6 +453,9 @@ object Asr {
      */
     private suspend fun engineFor(videoId: String): String {
         if (com.faithscroll.app.util.Lang.no && !com.faithscroll.app.util.Lang.alsoEnglish) return "no"
+        if (TikTokResolver.isTikTokId(videoId)) return when (TikTokResolver.resolve(videoId)?.lang) {
+            "no" -> "no"; "en" -> "en"; else -> if (com.faithscroll.app.util.Lang.no) "no" else "en"
+        }
         val info = WatchPage.info(videoId)
         val s = info?.let { WatchPage.spoken(it).ifBlank { LangFilter.spokenFromText(it.title + "\n" + it.description).orEmpty() } }.orEmpty()
         return when (s) { "no" -> "no"; "en" -> "en"; else -> if (com.faithscroll.app.util.Lang.no) "no" else "en" }
