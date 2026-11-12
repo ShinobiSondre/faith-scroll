@@ -27,7 +27,8 @@ object TikTokFinder {
         "christian-encouragement", "jesus-loves-you", "god-is-good", "faith-over-fear", "bible-verses-about-love",
         "powerful-prayer", "christian-testimony", "worship-songs"
     )
-    private val norwegian = listOf("bibelvers", "kristen", "jesus-elsker-deg", "bønn", "kristendom", "lovsang", "gud-er-god")
+    // Norwegian topic pages that exist and have videos (checked in a real browser).
+    private val norwegian = listOf("bibelvers", "jesus-norsk", "norsk-kristen")
 
     private const val TTL = 12 * 60 * 60 * 1000L
     private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
@@ -40,12 +41,21 @@ object TikTokFinder {
         "out[m[2]]={author:m[1],text:t.replace(/\\s+/g,' ').slice(0,300)};});" +
         "window.scrollBy(0,2500);return JSON.stringify(out);})()"
 
+    private val faith = Regex("(?i)(jesus|jesu\\b|kristus|christ|\\bgud\\b|\\bgod\\b|lord|herren|bibel|bible|scripture|skriften|psalm|salme|bønn|\\bbe for\\b|pray|prayer|faith|\\btro\\b|church|kirke|menighet|worship|lovsang|tilbe|gospel|evangel|holy|hellig|amen|blessed|velsign|spirit|ånden|heaven|himmel|cross|korset|verse|vers\\b|christian|kristen|devotion|andakt|testimony|vitnesbyrd|grace|nåde|salvation|frelse)")
+
+    /** The caption itself, without TikTok's "123 Likes, 4 Comments. TikTok video from …:" around it. */
+    private fun caption(t: String, keepTags: Boolean = false): String = t
+        .replace(Regex("^[\\d.,KMk\\s]+"), "")
+        .replace(Regex("(?i)^.*?(TikTok video from|TikTok-video fra)[^:]*:\\s*"), "")
+        .let { if (keepTags) it.replace("#", " ") else it.replace(Regex("#\\S+"), " ") }
+        .replace(Regex("\\s+"), " ").trim().trim('"', '«', '»')
+
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("tiktok_found", Context.MODE_PRIVATE)
 
     fun loadCached(ctx: Context) {
         if (found.value.isNotEmpty()) return
         found.value = runCatching {
-            val a = JSONArray(prefs(ctx).getString("list", "[]"))
+            val a = JSONArray(prefs(ctx).getString("list2", "[]"))
             (0 until a.length()).map { a.getJSONObject(it).let { o -> TikTok(o.getString("id"), o.optString("author")) } }
         }.getOrDefault(emptyList()).filter { !Seen.has(ctx, it.id) }
     }
@@ -56,7 +66,8 @@ object TikTokFinder {
         val last = prefs(a).getLong("at", 0L)
         val unseen = found.value.count { !Seen.has(a, it.id) }
         if (System.currentTimeMillis() - last < TTL && unseen >= 8) return
-        val slugs = (if (com.faithscroll.app.util.Lang.no) norwegian.shuffled().take(3) + english.shuffled().take(2) else english.shuffled().take(4))
+        val no = com.faithscroll.app.util.Lang.no
+        val slugs = if (no) norwegian + (if (com.faithscroll.app.util.Lang.alsoEnglish) english.shuffled().take(2) else emptyList()) else english.shuffled().take(4)
         val results = LinkedHashMap<String, TikTok>()
         val web = withWebView(a) ?: return
         try {
@@ -69,9 +80,13 @@ object TikTokFinder {
                     val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
                     o.keys().forEach { id ->
                         val it = o.getJSONObject(id)
-                        val text = it.optString("text")
-                        // Keep it to the app's languages (Norwegian / English) when the caption says enough.
-                        if (text.length < 25 || LangFilter.ok(text)) results.putIfAbsent(id, TikTok(id, it.optString("author")))
+                        val author = it.optString("author")
+                        val withTags = caption(it.optString("text"), keepTags = true)
+                        val caption = caption(it.optString("text"))
+                        // Only Christian videos (topic pages mix in other things), in the app's languages.
+                        val christian = faith.containsMatchIn(withTags)
+                        val langOk = caption.length < 25 || LangFilter.ok(caption)
+                        if (christian && langOk) results.putIfAbsent(id, TikTok(id, author))
                     }
                     got = o.length()
                     if (got >= 20) break
@@ -87,7 +102,7 @@ object TikTokFinder {
         val all = (fresh + found.value).distinctBy { it.id }.take(200)
         found.value = all
         prefs(a).edit().putLong("at", System.currentTimeMillis())
-            .putString("list", JSONArray().apply { all.forEach { put(JSONObject().put("id", it.id).put("author", it.author)) } }.toString()).apply()
+            .putString("list2", JSONArray().apply { all.forEach { put(JSONObject().put("id", it.id).put("author", it.author)) } }.toString()).apply()
         Diag.log("tiktok", "found ${fresh.size} new TikToks (${all.size} kept)")
     }
 
