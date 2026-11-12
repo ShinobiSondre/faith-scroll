@@ -36,9 +36,11 @@ data class Video(
         fun kindFor(title: String, fallback: String): String =
             if (fallback != KIND_SHORT && sermonWords.containsMatchIn(title)) KIND_SERMON else fallback
     }
-    val thumbnail: String get() = thumb.ifBlank { "https://i.ytimg.com/vi/$id/hqdefault.jpg" }
+    val thumbnail: String get() = thumb.ifBlank { if (link.contains("tiktok.com/")) "" else "https://i.ytimg.com/vi/$id/hqdefault.jpg" }
     val url: String get() = link.ifBlank { "https://www.youtube.com/watch?v=$id" }
     val mobileUrl: String get() = "https://m.youtube.com/watch?v=$id"
+    val isTikTok: Boolean get() = link.contains("tiktok.com/")
+    fun asTikTok(): TikTok = TikTok(id, channel.removePrefix("@").takeIf { it != "TikTok" }.orEmpty(), title.takeIf { !it.startsWith("TikTok · ") }.orEmpty(), thumb)
 }
 
 /** Testimonies for the swipe feed, sermons for the Watch tab. */

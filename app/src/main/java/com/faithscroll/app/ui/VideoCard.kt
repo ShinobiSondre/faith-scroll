@@ -111,6 +111,11 @@ fun VideoCard(
     immersive: Boolean = false, // full screen: nothing but the video while it plays; everything returns on pause
     onPausedChange: (Boolean) -> Unit = {}
 ) {
+    // Saved / history TikToks open in TikTok's player, with the same buttons.
+    if (video.isTikTok) {
+        TikTokCard(video.asTikTok(), reason, isActive && !suspended, bottomInset, saved, onSave, onEnded)
+        return
+    }
     val ctx = LocalContext.current
     var paused by remember(video.id) { mutableStateOf(false) }
     var controls by remember(video.id) { mutableStateOf(false) }
@@ -711,7 +716,7 @@ private fun VideoDetails(video: Video, onClose: () -> Unit, onGoToPage: () -> Un
 }
 
 /** Double-tap seeking: which side, how far so far, and until when another quick tap adds to it. */
-private class SeekTaps {
+internal class SeekTaps {
     var side by mutableIntStateOf(0)
     var total by mutableIntStateOf(0)
     var shown by mutableIntStateOf(0)
@@ -719,7 +724,7 @@ private class SeekTaps {
 }
 
 /** Keeps the screen on while any video is playing. */
-private object KeepAwake {
+internal object KeepAwake {
     private val holders = mutableSetOf<String>()
     fun hold(v: android.view.View, id: String) { holders += id; v.keepScreenOn = true }
     fun release(v: android.view.View, id: String) { holders -= id; v.keepScreenOn = holders.isNotEmpty() }

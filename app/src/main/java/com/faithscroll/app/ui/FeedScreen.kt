@@ -299,7 +299,10 @@ fun FeedScreen(
                         is FeedItem.TikTokItem -> TikTokCard(
                             tiktok = item.tiktok, reason = item.reason,
                             isActive = pager.settledPage == page && !suspended,
-                            bottomInset = bottomInset
+                            bottomInset = bottomInset,
+                            saved = state.isVideoSaved(item.tiktok.id),
+                            onSave = { state.toggleVideo(item.tiktok.asVideo()) },
+                            onEnded = { if (page + 1 < items.size) scope.launch { pager.animateScrollToPage(page + 1) } }
                         )
                     }
                 }

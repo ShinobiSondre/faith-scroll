@@ -38,7 +38,7 @@ object TikTokFinder {
         "var m=a.href.match(/@([^/?#]+)\\/video\\/(\\d{15,})/);if(!m)return;" +
         "var box=a.closest('[data-e2e]')||a.parentElement;var t=(a.getAttribute('title')||a.innerText||'')+' '+((box&&box.innerText)||'');" +
         "var img=a.querySelector('img');if(img&&img.alt)t+=' '+img.alt;" +
-        "out[m[2]]={author:m[1],text:t.replace(/\\s+/g,' ').slice(0,300)};});" +
+        "out[m[2]]={author:m[1],text:t.replace(/\\s+/g,' ').slice(0,300),thumb:img?(img.getAttribute('src')||''):''};});" +
         "window.scrollBy(0,2500);return JSON.stringify(out);})()"
 
     private val faith = Regex("(?i)(jesus|jesu\\b|kristus|christ|\\bgud\\b|\\bgod\\b|lord|herren|bibel|bible|scripture|skriften|psalm|salme|bønn|\\bbe for\\b|pray|prayer|faith|\\btro\\b|church|kirke|menighet|worship|lovsang|tilbe|gospel|evangel|holy|hellig|amen|blessed|velsign|spirit|ånden|heaven|himmel|cross|korset|verse|vers\\b|christian|kristen|devotion|andakt|testimony|vitnesbyrd|grace|nåde|salvation|frelse)")
@@ -56,7 +56,7 @@ object TikTokFinder {
         if (found.value.isNotEmpty()) return
         found.value = runCatching {
             val a = JSONArray(prefs(ctx).getString("list2", "[]"))
-            (0 until a.length()).map { a.getJSONObject(it).let { o -> TikTok(o.getString("id"), o.optString("author")) } }
+            (0 until a.length()).map { a.getJSONObject(it).let { o -> TikTok(o.getString("id"), o.optString("author"), o.optString("caption"), o.optString("thumb")) } }
         }.getOrDefault(emptyList()).filter { !Seen.has(ctx, it.id) }
     }
 
@@ -92,7 +92,7 @@ object TikTokFinder {
                         // Only Christian videos (topic pages mix in other things), in the app's languages.
                         val christian = faith.containsMatchIn(withTags)
                         val langOk = caption.length < 25 || LangFilter.ok(caption)
-                        if (christian && langOk) results.putIfAbsent(id, TikTok(id, author))
+                        if (christian && langOk) results.putIfAbsent(id, TikTok(id, author, caption.take(200), it.optString("thumb").takeIf { t -> t.startsWith("http") }.orEmpty()))
                     }
                     got = o.length()
                     if (got >= 20) break
@@ -111,7 +111,7 @@ object TikTokFinder {
         val all = (fresh + found.value).distinctBy { it.id }.take(200)
         found.value = all
         prefs(a).edit().putLong("at", System.currentTimeMillis())
-            .putString("list2", JSONArray().apply { all.forEach { put(JSONObject().put("id", it.id).put("author", it.author)) } }.toString()).apply()
+            .putString("list2", JSONArray().apply { all.forEach { put(JSONObject().put("id", it.id).put("author", it.author).put("caption", it.caption).put("thumb", it.thumb)) } }.toString()).apply()
         Diag.log("tiktok", "found ${fresh.size} new TikToks (${all.size} kept)")
     }
 
