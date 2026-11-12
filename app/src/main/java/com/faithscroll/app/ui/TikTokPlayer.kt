@@ -24,8 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -355,7 +354,7 @@ fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Vid
         "var ps=history.pushState;history.pushState=function(s,t,u){if(u&&/\\/video\\/\\d+/.test(String(u))){go(new URL(u,location.href).href);return;}return ps.apply(this,arguments);};})();"
     Column(Modifier.fillMaxSize().background(Ink).zIndex(20f).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { }) {
         androidx.compose.foundation.layout.Row(
-            Modifier.fillMaxWidth().statusBarsPaddingCompat().padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             androidx.compose.material3.IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "Tilbake"), tint = Color.White) }
@@ -420,4 +419,3 @@ fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Vid
     }
 }
 
-private fun Modifier.statusBarsPaddingCompat() = this.then(Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars))
