@@ -340,6 +340,51 @@ private fun DiagnosticsCard() {
             testing = false
         }
     }) { Text(if (testing) tr("Testing transcripts…", "Tester tekster …") else tr("Test transcripts", "Test tekster"), color = Gold) }
+    // Test TikTok: looks for TikToks right now and plays the first one it finds.
+    var tikStatus by remember { mutableStateOf<String?>(null) }
+    var tikPlay by remember { mutableStateOf<com.faithscroll.app.data.TikTok?>(null) }
+    var tikReport by remember { mutableStateOf<String?>(null) }
+    TextButton(enabled = tikStatus == null, onClick = {
+        tikStatus = tr("Starting…", "Starter …")
+        testScope.launch {
+            val a = ctx as? android.app.Activity
+            if (a != null) runCatching { com.faithscroll.app.data.TikTokFinder.refresh(a, force = true) { tikStatus = it } }
+                .onFailure { com.faithscroll.app.data.Diag.err("tiktok", "test failed", it) }
+            val first = com.faithscroll.app.data.TikTokFinder.found.value.firstOrNull()
+            val rep = com.faithscroll.app.data.TikTokFinder.report.joinToString("\n")
+            tikStatus = null
+            if (first != null) tikPlay = first
+            else tikReport = tr("No TikTok found.", "Fant ingen TikTok.") + "\n\n" + rep.ifBlank { tr("The pages didn't load.", "Sidene lastet ikke.") }
+        }
+    }) { Text(tikStatus?.let { tr("Looking: ", "Leter: ") + it } ?: tr("Test TikTok", "Test TikTok"), color = Gold, maxLines = 1) }
+    tikReport?.let { r ->
+        AlertDialog(
+            onDismissRequest = { tikReport = null }, containerColor = Plum,
+            title = { Text(tr("TikTok test", "TikTok-test"), color = Color.White) },
+            text = { Text(r, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp) },
+            confirmButton = { TextButton(onClick = { tikReport = null }) { Text("OK", color = Gold) } }
+        )
+    }
+    tikPlay?.let { t ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { tikPlay = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color.Black)) {
+                TikTokCard(t, tr("Test · ${com.faithscroll.app.data.TikTokFinder.found.value.size} found", "Test · ${com.faithscroll.app.data.TikTokFinder.found.value.size} funnet"), isActive = true, bottomInset = 24.dp)
+                TextButton(onClick = { tikPlay = null }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)) {
+                    Text(tr("Close", "Lukk"), color = Color.White)
+                }
+                TextButton(
+                    onClick = {
+                        val l = com.faithscroll.app.data.TikTokFinder.found.value
+                        tikPlay = l.getOrNull((l.indexOfFirst { it.id == t.id } + 1) % l.size.coerceAtLeast(1))
+                    },
+                    modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp)
+                ) { Text(tr("Next ›", "Neste ›"), color = Gold) }
+            }
+        }
+    }
     results?.let { r ->
         AlertDialog(
             onDismissRequest = { results = null }, containerColor = Plum,

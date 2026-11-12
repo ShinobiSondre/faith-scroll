@@ -61,17 +61,23 @@ object TikTokFinder {
     }
 
     /** Looks for new TikToks if the last search is more than 12 hours old (or few unseen are left). */
-    suspend fun refresh(a: Activity) {
+    /** What the last search found on each page (for the test button). */
+    val report = mutableListOf<String>()
+
+    suspend fun refresh(a: Activity, force: Boolean = false, onStatus: (String) -> Unit = {}) {
         loadCached(a)
         val last = prefs(a).getLong("at", 0L)
         val unseen = found.value.count { !Seen.has(a, it.id) }
-        if (System.currentTimeMillis() - last < TTL && unseen >= 8) return
+        if (!force && System.currentTimeMillis() - last < TTL && unseen >= 8) return
+        report.clear()
         val no = com.faithscroll.app.util.Lang.no
         val slugs = if (no) norwegian + (if (com.faithscroll.app.util.Lang.alsoEnglish) english.shuffled().take(2) else emptyList()) else english.shuffled().take(4)
         val results = LinkedHashMap<String, TikTok>()
         val web = withWebView(a) ?: return
         try {
             for (slug in slugs) {
+                onStatus("tiktok.com/discover/$slug …")
+                val before = results.size
                 web.loadUrl("https://www.tiktok.com/discover/" + android.net.Uri.encode(slug))
                 var got = 0
                 for (i in 0 until 12) {
@@ -91,13 +97,16 @@ object TikTokFinder {
                     got = o.length()
                     if (got >= 20) break
                 }
-                Diag.log("tiktok", "discover/$slug: $got videos")
+                Diag.log("tiktok", "discover/$slug: $got videos, ${results.size - before} Christian in the app's language")
+                report += "discover/$slug: $got " + com.faithscroll.app.util.tr("videos on the page, ${results.size - before} kept", "videoer på siden, ${results.size - before} beholdt")
             }
         } finally {
             (web.parent as? ViewGroup)?.let { h -> (h.parent as? ViewGroup)?.removeView(h) }
             web.destroy()
         }
         if (results.isEmpty()) return
+        // A test always shows something, even if you've seen it.
+        if (force) found.value = (results.values.toList() + found.value).distinctBy { it.id }
         val fresh = results.values.filter { !Seen.has(a, it.id) }.shuffled()
         val all = (fresh + found.value).distinctBy { it.id }.take(200)
         found.value = all
