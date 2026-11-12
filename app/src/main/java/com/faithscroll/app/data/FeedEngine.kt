@@ -43,9 +43,10 @@ class FeedEngine(
         val gap = Taste.videosBetweenMessages(ctx) + (if (rnd.nextInt(3) == 0) 1 else 0)
         if (sinceMessage >= gap) { sinceMessage = 0; return pickIllustration() }
         sinceMessage++
-        // TikToks you've added are mixed in with the videos.
-        val tiks = emptyList<TikTok>() // videos come only from YouTube
-        if (tiks.isNotEmpty() && rnd.nextDouble() < 0.25) {
+        // Inspiring TikToks (found automatically, or added by you) are mixed in with the videos.
+        val tiks = ((social()?.tiktoks.orEmpty()) + TikTokFinder.found.value)
+            .filter { it.id !in shownTikToks && !Seen.has(ctx, it.id) }.distinctBy { it.id }
+        if (tiks.isNotEmpty() && rnd.nextDouble() < 0.2) {
             val t = tiks.random(rnd); shownTikToks += t.id
             return FeedItem.TikTokItem(t, tr("From TikTok", "Fra TikTok"))
         }

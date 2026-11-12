@@ -191,7 +191,7 @@ fun FeedScreen(
                         if (dwell > 20_000) Discovery.reward(ctx, it.video.id, if (dwell > 60_000) 1f else 0.5f)
                     }
                     is FeedItem.PinItem -> { Taste.pinSeen(ctx, it.pin, dwell); Seen.mark(ctx, it.pin.id) }
-                    is FeedItem.TikTokItem -> Unit
+                    is FeedItem.TikTokItem -> if (dwell > 2000) Seen.mark(ctx, it.tiktok.id)
                     null -> Unit
                 }
                 lastPage = page

@@ -84,6 +84,7 @@ import com.faithscroll.app.ui.PlayerScreen
 import com.faithscroll.app.widget.VerseWidgetProvider
 import com.faithscroll.app.update.UpdateOverlay
 import com.faithscroll.app.update.Updater
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     companion object { const val EXTRA_REF = "verse_ref" }
@@ -237,6 +238,12 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
     var discovered by remember { mutableStateOf<List<Video>>(emptyList()) }
     LaunchedEffect(Unit) {
         discovered = com.faithscroll.app.data.Discovery.search(ctx)
+        // Inspiring Bible TikToks, looked for in the background (twice a day).
+        launch {
+            com.faithscroll.app.data.TikTokFinder.loadCached(ctx)
+            kotlinx.coroutines.delay(20_000)
+            (ctx as? android.app.Activity)?.let { runCatching { com.faithscroll.app.data.TikTokFinder.refresh(it) } }
+        }
         com.faithscroll.app.data.Discovery.maybeFindSubreddits(ctx)
         // Keep finding more while you scroll: when fewer than ~20 checked, unwatched videos are
         // waiting, run another round of searches (new queries each time).

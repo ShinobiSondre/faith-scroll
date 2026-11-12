@@ -1,0 +1,114 @@
+package com.faithscroll.app.data
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONTokener
+
+/**
+ * Finds inspiring Bible / Christian TikToks. TikTok has no open search, but its public topic pages
+ * (tiktok.com/discover/…) list videos once the page has run – so they're opened in a hidden browser
+ * in the background and the video links are read from the page. Results are kept for 12 hours.
+ */
+object TikTokFinder {
+    val found = MutableStateFlow<List<TikTok>>(emptyList())
+
+    private val english = listOf(
+        "bible-verse-of-the-day", "bible-verses-for-encouragement", "christian-motivation", "bible-verses-about-strength",
+        "christian-encouragement", "jesus-loves-you", "god-is-good", "faith-over-fear", "bible-verses-about-love",
+        "powerful-prayer", "christian-testimony", "worship-songs"
+    )
+    private val norwegian = listOf("bibelvers", "kristen", "jesus-elsker-deg", "bønn", "kristendom", "lovsang", "gud-er-god")
+
+    private const val TTL = 12 * 60 * 60 * 1000L
+    private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+
+    // Video links on the page, with the caption text around each one.
+    private const val READ = "(function(){var out={};document.querySelectorAll('a[href*=\"/video/\"]').forEach(function(a){" +
+        "var m=a.href.match(/@([^/?#]+)\\/video\\/(\\d{15,})/);if(!m)return;" +
+        "var box=a.closest('[data-e2e]')||a.parentElement;var t=(a.getAttribute('title')||a.innerText||'')+' '+((box&&box.innerText)||'');" +
+        "var img=a.querySelector('img');if(img&&img.alt)t+=' '+img.alt;" +
+        "out[m[2]]={author:m[1],text:t.replace(/\\s+/g,' ').slice(0,300)};});" +
+        "window.scrollBy(0,2500);return JSON.stringify(out);})()"
+
+    private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("tiktok_found", Context.MODE_PRIVATE)
+
+    fun loadCached(ctx: Context) {
+        if (found.value.isNotEmpty()) return
+        found.value = runCatching {
+            val a = JSONArray(prefs(ctx).getString("list", "[]"))
+            (0 until a.length()).map { a.getJSONObject(it).let { o -> TikTok(o.getString("id"), o.optString("author")) } }
+        }.getOrDefault(emptyList()).filter { !Seen.has(ctx, it.id) }
+    }
+
+    /** Looks for new TikToks if the last search is more than 12 hours old (or few unseen are left). */
+    suspend fun refresh(a: Activity) {
+        loadCached(a)
+        val last = prefs(a).getLong("at", 0L)
+        val unseen = found.value.count { !Seen.has(a, it.id) }
+        if (System.currentTimeMillis() - last < TTL && unseen >= 8) return
+        val slugs = (if (com.faithscroll.app.util.Lang.no) norwegian.shuffled().take(3) + english.shuffled().take(2) else english.shuffled().take(4))
+        val results = LinkedHashMap<String, TikTok>()
+        val web = withWebView(a) ?: return
+        try {
+            for (slug in slugs) {
+                web.loadUrl("https://www.tiktok.com/discover/" + android.net.Uri.encode(slug))
+                var got = 0
+                for (i in 0 until 12) {
+                    delay(1500)
+                    val raw = suspendCancellableCoroutine<String?> { c -> web.evaluateJavascript(READ) { c.resumeWith(Result.success(it)) } }
+                    val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
+                    o.keys().forEach { id ->
+                        val it = o.getJSONObject(id)
+                        val text = it.optString("text")
+                        // Keep it to the app's languages (Norwegian / English) when the caption says enough.
+                        if (text.length < 25 || LangFilter.ok(text)) results.putIfAbsent(id, TikTok(id, it.optString("author")))
+                    }
+                    got = o.length()
+                    if (got >= 20) break
+                }
+                Diag.log("tiktok", "discover/$slug: $got videos")
+            }
+        } finally {
+            (web.parent as? ViewGroup)?.let { h -> (h.parent as? ViewGroup)?.removeView(h) }
+            web.destroy()
+        }
+        if (results.isEmpty()) return
+        val fresh = results.values.filter { !Seen.has(a, it.id) }.shuffled()
+        val all = (fresh + found.value).distinctBy { it.id }.take(200)
+        found.value = all
+        prefs(a).edit().putLong("at", System.currentTimeMillis())
+            .putString("list", JSONArray().apply { all.forEach { put(JSONObject().put("id", it.id).put("author", it.author)) } }.toString()).apply()
+        Diag.log("tiktok", "found ${fresh.size} new TikToks (${all.size} kept)")
+    }
+
+    /** A browser that's part of the screen (so the page lays out and loads its videos) but pushed out of sight. */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun withWebView(a: Activity): WebView? {
+        val root = a.findViewById<ViewGroup>(android.R.id.content) ?: return null
+        val holder = object : FrameLayout(a) {
+            override fun dispatchTouchEvent(ev: android.view.MotionEvent?) = false
+            override fun onInterceptTouchEvent(ev: android.view.MotionEvent?) = false
+        }.apply { alpha = 0f; isClickable = false; isFocusable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
+        root.addView(holder, 0, FrameLayout.LayoutParams(1280, 2000))
+        holder.translationX = -5000f
+        return WebView(a).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.userAgentString = DESKTOP_UA
+            settings.mediaPlaybackRequiresUserGesture = true
+            settings.blockNetworkImage = true // only the links are needed
+            webViewClient = WebViewClient()
+            holder.addView(this, FrameLayout.LayoutParams(1280, 2000))
+        }
+    }
+}
