@@ -1,36 +1,36 @@
-"""Which way of embedding a TikTok actually plays? (headless Chromium, phone)"""
-import time
+"""TikTok player in a frame: its messages (time, state), and the cookie banner (what 'Allow all' stores)."""
+import time, json
 from playwright.sync_api import sync_playwright
-def note(t, m): print(f"::notice title={t}::{str(m).replace(chr(10),' ')[:600]}")
-IDS = ["7699185313272450335", "7706804780441685278", "7701465373933194527"]
-PARAMS = "autoplay=1&loop=1&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0"
-STATE = """(()=>{const v=document.querySelector('video');const t=document.body?document.body.innerText.slice(0,120):'';
-return {video:!!v, t:v?v.currentTime:-1, ready:v?v.readyState:-1, src:v?(v.currentSrc||'').slice(0,60):'', text:t}})()"""
-def frame_state(page):
-    out = []
-    for f in page.frames:
-        try: out.append(f.evaluate(STATE))
-        except Exception: pass
-    return out
+def note(t, m): print(f"::notice title={t}::{str(m).replace(chr(10),' ')[:900]}")
+VID = "7706804780441685278"
+SRC = f"https://www.tiktok.com/player/v1/{VID}?autoplay=1&loop=0&controls=0&progress_bar=1&play_button=0&volume_control=0&fullscreen_button=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0"
+PAGE = f"""<html><body style="margin:0;background:#000"><iframe id=p src="{SRC}" style="border:0;width:100vw;height:100vh" allow="autoplay"></iframe>
+<script>window.msgs=[];window.addEventListener('message',e=>{{try{{window.msgs.push(JSON.stringify(e.data).slice(0,160))}}catch(x){{}}}});</script></body></html>"""
 with sync_playwright() as p:
     br = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
-    for vid in IDS[:2]:
-        for name, mode, url in [
-            ("player top-level", "top", f"https://www.tiktok.com/player/v1/{vid}?{PARAMS}"),
-            ("embed/v2 top-level", "top", f"https://www.tiktok.com/embed/v2/{vid}"),
-            ("player in iframe @example.com", "iframe", f"https://www.tiktok.com/player/v1/{vid}?{PARAMS}"),
-            ("player in iframe @faithscroll.app", "iframe2", f"https://www.tiktok.com/player/v1/{vid}?{PARAMS}"),
-        ]:
-            ctx = br.new_context(**p.devices["Pixel 7"], locale="nb-NO"); page = ctx.new_page()
-            try:
-                if mode == "top": page.goto(url, wait_until="domcontentloaded", timeout=40000)
-                else:
-                    host = "https://example.com/" if mode == "iframe" else "https://faithscroll.app/"
-                    page.route(host, lambda r: r.fulfill(status=200, content_type="text/html",
-                        body=f'<html><body style="margin:0;background:#000"><iframe src="{url}" style="border:0;width:100vw;height:100vh" allow="autoplay; fullscreen"></iframe></body></html>'))
-                    page.goto(host, timeout=40000)
-                time.sleep(8)
-                note(f"{vid[-4:]} {name}", frame_state(page))
-            except Exception as e: note(f"{vid[-4:]} {name} error", e)
-            ctx.close()
+    ctx = br.new_context(**p.devices["Pixel 7"], locale="nb-NO"); page = ctx.new_page()
+    page.route("https://faithscroll.app/", lambda r: r.fulfill(status=200, content_type="text/html", body=PAGE))
+    page.goto("https://faithscroll.app/"); time.sleep(8)
+    msgs = page.evaluate("window.msgs")
+    kinds = {}
+    for m in msgs:
+        try: t = json.loads(m).get("type")
+        except Exception: t = m[:30]
+        kinds[t] = kinds.get(t, 0) + 1
+    note("message types", kinds)
+    note("samples", [m for m in msgs if "CurrentTime" in m or "State" in m][:4])
+    f = [fr for fr in page.frames if "tiktok.com" in fr.url][0]
+    banner = f.evaluate("""(()=>{const out=[];document.querySelectorAll('*').forEach(e=>{if(e.shadowRoot){out.push(e.tagName+':'+[...e.shadowRoot.querySelectorAll('button')].map(b=>b.innerText.trim()).join('|'))}});
+      const bs=[...document.querySelectorAll('button')].map(b=>b.innerText.trim()).filter(t=>/cookie|allow|tillat|godta|decline/i.test(t));return {shadow:out.slice(0,5),buttons:bs}})()""")
+    note("banner", banner)
+    before = {c["name"] for c in ctx.cookies("https://www.tiktok.com")}
+    clicked = f.evaluate("""(()=>{const all=[];document.querySelectorAll('*').forEach(e=>{if(e.shadowRoot)all.push(...e.shadowRoot.querySelectorAll('button'))});all.push(...document.querySelectorAll('button'));
+      const b=all.find(b=>/^(allow all|tillat alle|godta alle|accept all)$/i.test(b.innerText.trim()));if(b){b.click();return b.innerText}return null})()""")
+    time.sleep(2)
+    after = ctx.cookies("https://www.tiktok.com")
+    note("clicked", clicked)
+    note("new cookies", [(c["name"], c["value"][:200], c["domain"]) for c in after if c["name"] not in before])
+    # seek test
+    page.evaluate("document.getElementById('p').contentWindow.postMessage({type:'seekTo',value:20,'x-tiktok-player':true},'*')"); time.sleep(2)
+    note("after seekTo 20", [m for m in page.evaluate("window.msgs") if "CurrentTime" in m][-1:])
     br.close()
