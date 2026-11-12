@@ -127,7 +127,7 @@ fun SavedScreen(state: AppState, verses: List<Verse>, bottomInset: Dp, onOpenVid
                             .background(Color.Black.copy(alpha = 0.25f))
                             .padding(18.dp)
                     ) {
-                        Text("“${v.text}”", color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, lineHeight = 24.sp)
+                        Text(com.faithscroll.app.util.Quotes.wrap(v.text), color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, lineHeight = 24.sp)
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("— ${v.label}", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

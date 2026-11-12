@@ -72,7 +72,7 @@ object BibleNo {
         if (book < 39) return null
         val chs = modernBooks(ctx)?.optJSONArray(book.toString()) ?: return null
         val vs = chs.optJSONArray(chapter - 1) ?: return null
-        return (0 until vs.length()).map { vs.optString(it) }
+        return (0 until vs.length()).map { com.faithscroll.app.util.Quotes.normalize(vs.optString(it)) }
     }
 
     /** Where the text comes from, for the credits. */

@@ -162,6 +162,7 @@ fun PlayerScreen(start: Video, queue: List<Video>, state: AppState, onLeaveAt: (
                 onShared = { Taste.videoAction(ctx, v, Taste.Action.SHARE) },
                 bottomInset = 12.dp,
                 loop = false,
+                onEnded = { if (page + 1 < list.size) scope.launch { pager.animateScrollToPage(page + 1) } },
                 onRotate = { landscape = !landscape },
                 landscape = landscape,
                 immersive = true,

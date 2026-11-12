@@ -9,6 +9,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,6 +43,8 @@ class PlaybackState {
     var position by mutableLongStateOf(0L)
     var duration by mutableLongStateOf(0L)
     var buffering by mutableStateOf(true)
+    /** Goes up by one each time the video plays to its end. */
+    var ended by mutableIntStateOf(0)
 
     fun seekTo(ms: Long) { player?.seekTo(ms); position = ms }
 }
@@ -85,6 +88,7 @@ fun NativeVideo(
             override fun onPlaybackStateChanged(s: Int) {
                 state.buffering = s == Player.STATE_BUFFERING || s == Player.STATE_IDLE
                 if (s == Player.STATE_READY) state.ready = true
+                if (s == Player.STATE_ENDED) state.ended++
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) { state.playing = isPlaying }
             override fun onVideoSizeChanged(videoSize: VideoSize) {

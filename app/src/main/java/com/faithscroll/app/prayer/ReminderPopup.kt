@@ -171,7 +171,7 @@ fun ReminderPopup(onPray: () -> Unit, onSnooze: () -> Unit, onDismiss: () -> Uni
                             .background(Color.White.copy(alpha = 0.06f)).padding(14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("«${v.text}»", color = Color.White.copy(alpha = 0.9f), fontSize = 15.sp, lineHeight = 21.sp,
+                        Text(com.faithscroll.app.util.Quotes.wrap(v.text), color = Color.White.copy(alpha = 0.9f), fontSize = 15.sp, lineHeight = 21.sp,
                             fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, textAlign = TextAlign.Center, maxLines = 5)
                         Spacer(Modifier.height(4.dp))
                         Text(v.label, color = Gold, fontSize = 12.sp)

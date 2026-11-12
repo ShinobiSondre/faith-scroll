@@ -26,7 +26,7 @@ import java.io.File
 object Share {
 
     fun verse(ctx: Context, verse: Verse, colors: IntArray) {
-        val text = "“${verse.text}”\n— ${verse.label} (" + (if (verse.noBook >= 0) BibleNo.NAME else "KJV") + ")"
+        val text = Quotes.wrap(verse.text) + "\n— ${verse.label} (" + (if (verse.noBook >= 0) BibleNo.NAME else "KJV") + ")"
         val uri = runCatching { renderImage(ctx, verse, colors) }.getOrNull()
         val intent = Intent(Intent.ACTION_SEND).apply {
             if (uri != null) {
@@ -90,7 +90,7 @@ object Share {
             typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             setShadowLayer(8f, 0f, 3f, 0x66000000)
         }
-        val body = "“${verse.text}”"
+        val body = Quotes.wrap(verse.text)
         var size = 72f
         var layout: StaticLayout
         while (true) {

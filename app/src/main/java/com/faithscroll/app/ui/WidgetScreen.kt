@@ -139,6 +139,8 @@ fun WidgetScreen(
         Spacer(Modifier.height(16.dp))
         QualityCard()
         Spacer(Modifier.height(16.dp))
+        CastCard()
+        Spacer(Modifier.height(16.dp))
         YouTubeCard(onChanged = { sourcesChanged() })
 
         Spacer(Modifier.height(28.dp))
@@ -504,6 +506,23 @@ private fun LanguageCard() {
             color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
         )
     }
+}
+
+/** Cast to TV: Chromecast / Google TV, or the whole screen via screen mirroring. */
+@Composable
+private fun CastCard() {
+    var open by remember { mutableStateOf(false) }
+    val connected by com.faithscroll.app.cast.Cast.connectedTo.collectAsState()
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).clickable { open = true }.padding(18.dp)) {
+        Text("📺 " + tr("Cast to TV", "Cast til TV"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            connected?.let { tr("Connected to $it", "Koblet til $it") }
+                ?: tr("Play videos on a Chromecast / Google TV, or show the whole app (Bible, verses, videos) on any TV with screen mirroring.",
+                    "Spill videoer på Chromecast / Google TV, eller vis hele appen (Bibel, vers, videoer) på hvilken som helst TV med skjermdeling."),
+            color = if (connected != null) Gold else Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    if (open) com.faithscroll.app.cast.CastSheet(null, { 0L }) { open = false }
 }
 
 /** Video quality / data saver. */

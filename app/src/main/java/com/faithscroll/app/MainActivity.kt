@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
@@ -120,8 +121,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appCtx = applicationContext
             val state = remember { AppState(appCtx, streak) }
+            // A fresh start (not turning the phone or coming back): the day's opening screen.
+            var splash by remember { mutableStateOf(savedInstanceState == null && !com.faithscroll.app.ui.SplashGate.shown) }
             FaithTheme {
                 App(state, startRef.value, openFeed.intValue)
+                if (splash) com.faithscroll.app.ui.DaySplash { splash = false; com.faithscroll.app.ui.SplashGate.shown = true }
                 crashReport.value?.let { report ->
                     val clip = androidx.compose.ui.platform.LocalClipboardManager.current
                     androidx.compose.material3.AlertDialog(
@@ -253,7 +257,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
 
     val tabs = listOf(
         Triple(Icons.Filled.Home, tr("Feed", "Feed"), 0), Triple(Icons.Filled.PlayCircle, tr("Watch", "Se"), 1),
-        Triple(Icons.Filled.Bookmarks, tr("Saved", "Lagret"), 2), Triple(Icons.Filled.Person, tr("Me", "Meg"), 3)
+        Triple(Icons.Filled.Bookmarks, tr("Saved", "Lagret"), 2),
+        Triple(Icons.Filled.History, tr("History", "Historikk"), 4), Triple(Icons.Filled.Person, tr("Me", "Meg"), 3)
     )
 
     // Mostly videos: shorts, testimonies and sermons take turns.
@@ -334,6 +339,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                         WatchScreen(checkedLibrary, bottomInset, openVideo, onSearch = { searchOpen = true })
                     }
                     2 -> SavedScreen(state, verses, bottomInset, openVideo) { reading = it }
+                    4 -> com.faithscroll.app.ui.HistoryScreen(bottomInset, openVideo)
                     else -> WidgetScreen(
                         state, bottomInset, onSourcesChanged = { socialVersion++ }, onBeStill = { beStill = true },
                         onNeedNotifications = {
@@ -430,6 +436,6 @@ private fun NavItem(icon: ImageVector, label: String, selected: Boolean, modifie
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(icon, label, tint = if (selected) Gold else Color.White.copy(alpha = 0.7f), modifier = Modifier.size(26.dp))
-        Text(label, color = if (selected) Gold else Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+        Text(label, color = if (selected) Gold else Color.White.copy(alpha = 0.7f), fontSize = 11.sp, maxLines = 1, softWrap = false)
     }
 }

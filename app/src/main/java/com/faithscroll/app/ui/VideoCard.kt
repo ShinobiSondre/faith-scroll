@@ -37,7 +37,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -100,6 +103,7 @@ fun VideoCard(
     bottomInset: Dp,
     onExpand: (() -> Unit)? = null,
     loop: Boolean = true,
+    onEnded: (() -> Unit)? = null, // finished playing: e.g. go on to the next video
     onRotate: (() -> Unit)? = null,
     landscape: Boolean = false,
     preload: Boolean = false, // the next card: player ready & paused so it starts instantly
@@ -117,6 +121,12 @@ fun VideoCard(
     // Bible verses said so far in this video, and whether their list is open.
     var versesSaid by remember(video.id) { mutableStateOf<List<com.faithscroll.app.data.VerseRefs.Ref>>(emptyList()) }
     var showVerses by remember(video.id) { mutableStateOf(false) }
+    var showCast by remember(video.id) { mutableStateOf(false) }
+    val castingThis = com.faithscroll.app.cast.Cast.playing.collectAsState().value == video.id
+    // Playing on the TV: the phone pauses (and continues from the TV's spot when casting stops).
+    LaunchedEffect(castingThis) {
+        if (castingThis) paused = true
+    }
     val openPage = LocalOpenPage.current
     val isYouTube = video.direct.isBlank()
     LaunchedEffect(Unit) { CaptionSettings.load(ctx) }
@@ -137,11 +147,33 @@ fun VideoCard(
     var embedPos by remember(video.id) { mutableStateOf(0L) }
     var embedStart by remember(video.id) { mutableStateOf(0) }
     val cardScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Played to the end: on to the next one (the place is forgotten, so it starts from the top next time).
+    LaunchedEffect(playback.ended) {
+        if (playback.ended > 0 && isActive) { com.faithscroll.app.data.WatchHistory.finished(ctx, video.id); onEnded?.invoke() }
+    }
     // When the app's own player fails, continue in YouTube's player from the same second.
     LaunchedEffect(playback.failed) { if (playback.failed) { embedStart = (playback.position / 1000).toInt(); com.faithscroll.app.data.Diag.log("play", "${video.id}: own player failed at ${embedStart}s → YouTube player") } }
+    var resumed by remember(video.id) { mutableStateOf(false) }
     // Coming from / going to full screen: continue from the same second.
     LaunchedEffect(isActive, playback.ready, suspended) {
-        if (isActive && playback.ready && !suspended) com.faithscroll.app.data.PlaybackMemory.take(video.id)?.let { playback.seekTo(it) }
+        if (isActive && playback.ready && !suspended) {
+            // From full screen / the feed, or – a later day – where you stopped last time.
+            (com.faithscroll.app.data.PlaybackMemory.take(video.id) ?: com.faithscroll.app.data.WatchHistory.resumeAt(ctx, video.id).takeIf { !resumed })
+                ?.let { playback.seekTo(it) }
+            resumed = true
+        }
+    }
+    // Watch history: remember the spot every few seconds while it plays, and when you leave it.
+    val latestPos by androidx.compose.runtime.rememberUpdatedState(if (playback.failed) embedPos else playback.position)
+    if (isActive) LaunchedEffect(video.id, paused, suspended) {
+        while (!paused && !suspended) {
+            kotlinx.coroutines.delay(5_000)
+            com.faithscroll.app.data.WatchHistory.record(ctx, video, latestPos, playback.duration)
+        }
+        com.faithscroll.app.data.WatchHistory.record(ctx, video, latestPos, playback.duration, force = true)
+    }
+    if (isActive) DisposableEffect(video.id) {
+        onDispose { com.faithscroll.app.data.WatchHistory.record(ctx, video, latestPos, playback.duration, force = true) }
     }
     if (immersive) androidx.compose.runtime.DisposableEffect(video.id) {
         onDispose { com.faithscroll.app.data.PlaybackMemory.put(video.id, if (playback.failed) embedPos else playback.position) }
@@ -199,6 +231,7 @@ fun VideoCard(
                     captions = false,
                     onTimedText = { url -> cardScope.launch { com.faithscroll.app.data.Transcripts.captureTimedText(video.id, url) } },
                     onTime = { embedPos = it },
+                    onEndedEmbed = { if (isActive) { com.faithscroll.app.data.WatchHistory.finished(ctx, video.id); onEnded?.invoke() } },
                     videoId = video.id, paused = paused || suspended, muted = muted,
                     onPlaying = { embedPlaying = true }, onError = { embedFailed = true },
                     modifier = Modifier.fillMaxSize()
@@ -368,6 +401,10 @@ fun VideoCard(
             RailButton(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, if (saved) tr("Saved", "Lagret") else tr("Save", "Lagre"), saved, if (saved) Gold else Color.White, onSave)
             RailButton(Icons.Filled.Share, tr("Share", "Del"), false, Color.White) { onShared(); Share.video(ctx, video) }
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) { muted = !muted }
+            RailButton(
+                if (castingThis) Icons.Filled.CastConnected else Icons.Filled.Cast,
+                if (castingThis) tr("On TV", "På TV") else tr("TV", "TV"), castingThis, if (castingThis) Gold else Color.White
+            ) { showCast = true }
             // Bible verses they've mentioned so far.
             if (versesSaid.isNotEmpty()) Box {
                 RailButton(Icons.AutoMirrored.Filled.MenuBook, tr("Bible verses", "Bibelvers"), true, Gold) { paused = true; showVerses = true }
@@ -412,6 +449,12 @@ fun VideoCard(
                 onChannel = if (isYouTube) ({ expanded = false; paused = true; openChannel(video) }) else null)
         }
         asking?.let { at -> AskSheet(video, at) { asking = null } }
+        if (showCast) com.faithscroll.app.cast.CastSheet(video, { if (playback.failed) embedPos else playback.player?.currentPosition ?: playback.position }) { showCast = false }
+        if (castingThis) Text(
+            tr("Playing on the TV", "Spilles på TV-en"), color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.Center).padding(top = 120.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 14.dp, vertical = 7.dp)
+        )
         if (showVerses) VerseMentionsSheet(
             versesSaid.distinctBy { it.key + "@" + it.atMs / 30_000 },
             onSeek = { ms -> showVerses = false; playback.seekTo((ms - 2_000).coerceAtLeast(0)); paused = false }
@@ -523,7 +566,8 @@ fun YouTubePlayer(
     startSec: Int = 0,
     captions: Boolean = false, // show YouTube's captions, translated into the app language
     onTimedText: (String) -> Unit = {}, // the caption file YouTube's player downloaded
-    onTime: (Long) -> Unit = {}
+    onTime: (Long) -> Unit = {},
+    onEndedEmbed: () -> Unit = {}
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val lang = com.faithscroll.app.data.Transcripts.target()
@@ -549,7 +593,7 @@ fun YouTubePlayer(
                 if (!controls) setOnTouchListener { _, _ -> true } // feed: gestures handled by Compose
                 addJavascriptInterface(
                     PlayerBridge(
-                        onState = { s -> if (s == 1) post { onPlaying() } },
+                        onState = { s -> if (s == 1) post { onPlaying() }; if (s == 0) post { onEndedEmbed() } },
                         onError = { post { onError() } },
                         onTime = { ms -> post { onTime(ms) } }
                     ),

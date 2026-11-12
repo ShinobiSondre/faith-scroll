@@ -122,7 +122,7 @@ private fun VerseCard(r: VerseRefs.Ref, onSeek: ((Long) -> Unit)?) {
         Spacer(Modifier.height(8.dp))
         when {
             loading -> CircularProgressIndicator(color = Gold, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-            text != null -> Text("«${text}»".let { if (Lang.no) it else "“$text”" }, color = Color.White, fontSize = 16.sp, lineHeight = 24.sp, fontFamily = FontFamily.Serif)
+            text != null -> Text(if (r.from == 0) com.faithscroll.app.util.Quotes.normalize(text!!) else com.faithscroll.app.util.Quotes.wrap(text!!), color = Color.White, fontSize = 16.sp, lineHeight = 24.sp, fontFamily = FontFamily.Serif)
             else -> Text(tr("Couldn't load the verse text.", "Klarte ikke å hente verset."), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
         }
     }

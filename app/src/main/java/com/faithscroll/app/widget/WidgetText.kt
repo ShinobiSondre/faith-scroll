@@ -66,7 +66,7 @@ object WidgetText {
         val align = if (s.align == "center") Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
 
         val paint = TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply { color = textColor; typeface = typeface(s.font); shadow(this) }
-        val text = "“${verse.text}”"
+        val text = com.faithscroll.app.util.Quotes.wrap(verse.text)
         // Biggest size that fits (your size setting sets the upper limit).
         var size = 22f * s.size / 100f
         var layout: StaticLayout

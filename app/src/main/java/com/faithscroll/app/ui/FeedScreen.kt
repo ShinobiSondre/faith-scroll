@@ -129,7 +129,10 @@ fun FeedScreen(
     LaunchedEffect(videos.isNotEmpty()) {
         if (videos.isNotEmpty() && !restarted && pager.currentPage == 0) {
             restarted = true
-            items[0] = engine.next()
+            // Left a video part-way last time? Start right there, at the same second.
+            val last = com.faithscroll.app.data.WatchHistory.lastUnfinished(ctx)
+            items[0] = if (last != null && last.video.id !in com.faithscroll.app.data.LangFilter.blocked.value)
+                FeedItem.VideoItem(last.video, tr("Continue where you left off", "Fortsett der du slapp")) else engine.next()
             while (items.size > 1) items.removeAt(items.lastIndex)
         }
     }
@@ -271,6 +274,8 @@ fun FeedScreen(
                                 state.toggleVideo(item.video)
                             },
                             onExpand = { Taste.videoAction(ctx, item.video, Taste.Action.EXPAND); onOpenVideo(item.video) },
+                            loop = false,
+                            onEnded = { if (page + 1 < items.size) scope.launch { pager.animateScrollToPage(page + 1) } },
                             bottomInset = bottomInset
                         ) }
                         is FeedItem.PinItem -> {
@@ -552,7 +557,7 @@ private fun VerseCard(
             val len = verse.text.length
             val size = when { len > 260 -> 20.sp; len > 170 -> 23.sp; len > 100 -> 26.sp; else -> 30.sp }
             Text(
-                "“${verse.text}”",
+                com.faithscroll.app.util.Quotes.wrap(verse.text),
                 color = Color.White,
                 fontFamily = FontFamily.Serif,
                 fontSize = size,
