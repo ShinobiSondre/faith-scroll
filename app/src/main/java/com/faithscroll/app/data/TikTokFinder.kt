@@ -50,6 +50,13 @@ object TikTokFinder {
         .let { if (keepTags) it.replace("#", " ") else it.replace(Regex("#\\S+"), " ") }
         .replace(Regex("\\s+"), " ").trim().trim('"', '«', '»')
 
+    /** How much of the feed's videos are TikToks, 0–100 % (the rest YouTube). Set in the Me tab. */
+    fun share(ctx: Context): Int = ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE).getInt("tiktokShare", 50)
+    fun setShare(ctx: Context, pct: Int) = ctx.applicationContext.getSharedPreferences("faithscroll", Context.MODE_PRIVATE).edit().putInt("tiktokShare", pct.coerceIn(0, 100)).apply()
+
+    /** Unseen TikToks waiting. */
+    fun waiting(ctx: Context) = found.value.count { !Seen.has(ctx, it.id) }
+
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("tiktok_found", Context.MODE_PRIVATE)
 
     fun loadCached(ctx: Context) {
@@ -68,7 +75,10 @@ object TikTokFinder {
         loadCached(a)
         val last = prefs(a).getLong("at", 0L)
         val unseen = found.value.count { !Seen.has(a, it.id) }
-        if (!force && System.currentTimeMillis() - last < TTL && unseen >= 8) return
+        if (!force && share(a) == 0) return
+        // Search again when it's been a while – or sooner when few unseen ones are left.
+        val age = System.currentTimeMillis() - last
+        if (!force && (age < 30 * 60_000L || (age < TTL && unseen >= 25) || (unseen >= 8 && age < 60 * 60 * 1000L))) return
         report.clear()
         val no = com.faithscroll.app.util.Lang.no
         val slugs = if (no) norwegian + (if (com.faithscroll.app.util.Lang.alsoEnglish) english.shuffled().take(2) else emptyList()) else english.shuffled().take(4)

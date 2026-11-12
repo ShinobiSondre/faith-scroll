@@ -242,7 +242,11 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         launch {
             com.faithscroll.app.data.TikTokFinder.loadCached(ctx)
             kotlinx.coroutines.delay(20_000)
-            (ctx as? android.app.Activity)?.let { runCatching { com.faithscroll.app.data.TikTokFinder.refresh(it) } }
+            // Keep enough new TikToks ready for your mix (checked every 10 minutes).
+            while (true) {
+                (ctx as? android.app.Activity)?.let { runCatching { com.faithscroll.app.data.TikTokFinder.refresh(it) } }
+                kotlinx.coroutines.delay(10 * 60_000L)
+            }
         }
         com.faithscroll.app.data.Discovery.maybeFindSubreddits(ctx)
         // Keep finding more while you scroll: when fewer than ~20 checked, unwatched videos are

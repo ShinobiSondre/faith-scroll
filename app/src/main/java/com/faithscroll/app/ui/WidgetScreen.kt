@@ -139,6 +139,8 @@ fun WidgetScreen(
         Spacer(Modifier.height(16.dp))
         QualityCard()
         Spacer(Modifier.height(16.dp))
+        MixCard()
+        Spacer(Modifier.height(16.dp))
         SeasonColorsCard()
         Spacer(Modifier.height(16.dp))
         CastCard()
@@ -579,6 +581,35 @@ private fun SeasonColorsCard() {
             on = it; SeasonTheme.setEnabled(ctx, it)
             (ctx as? android.app.Activity)?.recreate()
         }, colors = SwitchDefaults.colors(checkedTrackColor = Gold, checkedThumbColor = Ink))
+    }
+}
+
+/** How the feed's videos are split between YouTube and TikTok. */
+@Composable
+private fun MixCard() {
+    val ctx = LocalContext.current
+    var pct by remember { mutableStateOf(com.faithscroll.app.data.TikTokFinder.share(ctx).toFloat()) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
+        Text(tr("Video mix", "Videomiks"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("▶ YouTube  ${100 - pct.toInt()} %", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text("TikTok  ${pct.toInt()} % ♪", color = Gold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+        androidx.compose.material3.Slider(
+            value = pct, onValueChange = { pct = (it / 10f).roundToInt() * 10f },
+            onValueChangeFinished = { com.faithscroll.app.data.TikTokFinder.setShare(ctx, pct.toInt()) },
+            valueRange = 0f..100f, steps = 9,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold, inactiveTrackColor = Color.White.copy(alpha = 0.25f))
+        )
+        Text(
+            when (pct.toInt()) {
+                0 -> tr("Only YouTube videos.", "Bare YouTube-videoer.")
+                100 -> tr("Only TikToks (YouTube when no new TikToks are left).", "Bare TikTok (YouTube når det ikke er flere nye TikToks).")
+                else -> tr("About ${pct.toInt()} of every 100 videos are TikToks.", "Omtrent ${pct.toInt()} av 100 videoer er TikToks.")
+            },
+            color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp
+        )
     }
 }
 
