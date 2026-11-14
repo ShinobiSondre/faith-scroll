@@ -83,13 +83,13 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
 
             // 1) TVs with YouTube: the video opens in the TV's YouTube app at the same second.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("TVs with YouTube (Samsung, LG, Android TV, Chromecast …)", "TV-er med YouTube (Samsung, LG, Android TV, Chromecast …)"),
+                Text(tr("TVs on your Wi-Fi", "TV-er på Wi-Fi-en"),
                     color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.weight(1f))
                 if (!tvSearching) Text(tr("Search again", "Søk igjen"), color = Gold, fontSize = 13.sp,
                     modifier = Modifier.clickable { scope.launch { Dial.search(ctx) } }.padding(6.dp))
             }
-            if (video != null && youTubeId == null) Text(
-                tr("TikToks can't open in the TV's YouTube app – use \"Show the whole app\" below.", "TikToks kan ikke åpnes i TV-ens YouTube-app – bruk «Vis hele appen» under."),
+            if (video != null && video.isTikTok) Text(
+                tr("TikToks can't be sent to the TV – use \"Show the whole app\" below.", "TikToks kan ikke sendes til TV-en – bruk «Vis hele appen» under."),
                 color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
             if (tvs.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 10.dp)) {
                 if (tvSearching) CircularProgressIndicator(color = Gold, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
@@ -101,11 +101,17 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
             tvs.forEach { tv ->
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.25f))
-                        .clickable(enabled = youTubeId != null) {
-                            val id = youTubeId ?: return@clickable
-                            tvStatus = tr("Starting YouTube on ${tv.name}…", "Starter YouTube på ${tv.name} …")
+                        .clickable(enabled = video != null && (youTubeId != null || tv.canPlayLink)) {
+                            val v = video ?: return@clickable
+                            tvStatus = tr("Starting on ${tv.name}…", "Starter på ${tv.name} …")
                             scope.launch {
-                                val err = Dial.play(tv, id, positionMs())
+                                // The stream link for the TV's own player: one file with picture and sound.
+                                val link: suspend () -> String? = {
+                                    if (v.isTikTok) null
+                                    else v.direct.ifBlank { null } ?: com.faithscroll.app.data.StreamResolver.resolve(v.id)?.muxed
+                                        ?.filter { it.height <= 720 }?.maxByOrNull { it.height }?.url
+                                }
+                                val err = Dial.play(tv, youTubeId, link, v.title, positionMs())
                                 tvStatus = err
                                 if (err == null) {
                                     android.widget.Toast.makeText(ctx, tr("Playing on ${tv.name}", "Spilles på ${tv.name}"), android.widget.Toast.LENGTH_SHORT).show()
@@ -119,7 +125,9 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(tv.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(if (playingOn == tv.name) tr("Playing now", "Spiller nå") else tr("Opens in the TV's YouTube app", "Åpnes i TV-ens YouTube-app"),
+                        Text(if (playingOn == tv.name) tr("Playing now", "Spiller nå")
+                            else if (tv.canYouTube && youTubeId != null) tr("Opens in the TV's YouTube app", "Åpnes i TV-ens YouTube-app")
+                            else tr("Plays in the TV's own player", "Spilles i TV-ens egen spiller"),
                             color = if (playingOn == tv.name) Gold else Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
                     }
                     if (playingOn == tv.name) Text(tr("Stop", "Stopp"), color = Gold, fontSize = 13.sp,
