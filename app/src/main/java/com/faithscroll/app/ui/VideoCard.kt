@@ -410,7 +410,7 @@ fun VideoCard(
             RailButton(
                 if (castingThis) Icons.Filled.CastConnected else Icons.Filled.Cast,
                 if (castingThis) tr("On TV", "På TV") else tr("TV", "TV"), castingThis, if (castingThis) Gold else Color.White
-            ) { showCast = true }
+            ) { paused = true; showCast = true }
             // Bible verses they've mentioned so far.
             if (versesSaid.isNotEmpty()) Box {
                 RailButton(Icons.AutoMirrored.Filled.MenuBook, tr("Bible verses", "Bibelvers"), true, Gold) { paused = true; showVerses = true }

@@ -44,6 +44,7 @@ import com.faithscroll.app.ui.Gold
 import com.faithscroll.app.ui.Ink
 import com.faithscroll.app.ui.Plum
 import com.faithscroll.app.util.tr
+import kotlinx.coroutines.launch
 
 /**
  * "Cast to TV": the TVs found on your Wi-Fi (tap one and the video continues there), and
@@ -61,6 +62,14 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
     val status by Cast.status.collectAsState()
     val castOk = androidx.compose.runtime.remember { Cast.available(ctx) }
     DisposableEffect(Unit) { Cast.startSearch(ctx); onDispose { Cast.stopSearch() } }
+    // TVs with the YouTube app (found the way YouTube's own cast button finds them).
+    val tvs by Dial.tvs.collectAsState()
+    val tvSearching by Dial.searching.collectAsState()
+    val playingOn by Dial.playingOn.collectAsState()
+    var tvStatus by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) { Dial.search(ctx) }
+    val youTubeId = video?.takeIf { it.direct.isBlank() && !it.isTikTok }?.id
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Plum) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 16.dp)) {
@@ -70,6 +79,54 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
                 Text(tr("Cast to TV", "Cast til TV"), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(14.dp))
+
+            // 1) TVs with YouTube: the video opens in the TV's YouTube app at the same second.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("TVs with YouTube (Samsung, LG, Android TV, Chromecast …)", "TV-er med YouTube (Samsung, LG, Android TV, Chromecast …)"),
+                    color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                if (!tvSearching) Text(tr("Search again", "Søk igjen"), color = Gold, fontSize = 13.sp,
+                    modifier = Modifier.clickable { scope.launch { Dial.search(ctx) } }.padding(6.dp))
+            }
+            if (video != null && youTubeId == null) Text(
+                tr("TikToks can't open in the TV's YouTube app – use \"Show the whole app\" below.", "TikToks kan ikke åpnes i TV-ens YouTube-app – bruk «Vis hele appen» under."),
+                color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+            if (tvs.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 10.dp)) {
+                if (tvSearching) CircularProgressIndicator(color = Gold, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(if (tvSearching) tr("Looking for TVs on your Wi-Fi…", "Leter etter TV-er på Wi-Fi-en …")
+                    else tr("No TV found. Is the TV on and on the same Wi-Fi?", "Fant ingen TV. Er TV-en på og på samme Wi-Fi?"),
+                    color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+            }
+            tvs.forEach { tv ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.25f))
+                        .clickable(enabled = youTubeId != null) {
+                            val id = youTubeId ?: return@clickable
+                            tvStatus = tr("Starting YouTube on ${tv.name}…", "Starter YouTube på ${tv.name} …")
+                            scope.launch {
+                                val err = Dial.play(tv, id, positionMs())
+                                tvStatus = err
+                                if (err == null) {
+                                    android.widget.Toast.makeText(ctx, tr("Playing on ${tv.name}", "Spilles på ${tv.name}"), android.widget.Toast.LENGTH_SHORT).show()
+                                    onDismiss()
+                                }
+                            }
+                        }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Tv, null, tint = Color.White)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(tv.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(if (playingOn == tv.name) tr("Playing now", "Spiller nå") else tr("Opens in the TV's YouTube app", "Åpnes i TV-ens YouTube-app"),
+                            color = if (playingOn == tv.name) Gold else Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                    }
+                    if (playingOn == tv.name) Text(tr("Stop", "Stopp"), color = Gold, fontSize = 13.sp,
+                        modifier = Modifier.clickable { scope.launch { Dial.stop(tv) } }.padding(6.dp))
+                }
+            }
+            tvStatus?.let { Text(it, color = Gold, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
+            Spacer(Modifier.height(16.dp))
 
             connected?.let { name ->
                 Text(tr("Connected to $name", "Koblet til $name"), color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -87,8 +144,8 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (castOk) {
-                Text(tr("TVs on your Wi-Fi (Chromecast, Google TV, Cast TVs)", "TV-er på Wi-Fi-en (Chromecast, Google TV, Cast-TV-er)"),
+            if (castOk && (devices.isNotEmpty() || connected != null)) {
+                Text(tr("Google Cast (other videos, e.g. from Reddit)", "Google Cast (andre videoer, f.eks. fra Reddit)"),
                     color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 if (devices.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 10.dp)) {
