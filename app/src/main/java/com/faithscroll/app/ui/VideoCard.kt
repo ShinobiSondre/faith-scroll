@@ -340,6 +340,11 @@ fun VideoCard(
             // shown as a gold button; tap it to read what the verse says.
             val heard by com.faithscroll.app.data.Asr.cues(video.id).collectAsState()
             val cues = if (ytCues.isNotEmpty()) ytCues else heard
+            // What's said is checked too: an unwanted topic, or no word about the faith → left out (the feed moves on).
+            LaunchedEffect(video.id, cues.size) {
+                if (cues.isNotEmpty() && kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.faithscroll.app.data.TopicFilter.checkSpeech(video.id, cues) })
+                    android.widget.Toast.makeText(ctx, tr("Skipped: not what you want in your feed", "Hoppet over: ikke noe du vil ha i feeden"), android.widget.Toast.LENGTH_SHORT).show()
+            }
             var refs by remember(video.id) { mutableStateOf<List<com.faithscroll.app.data.VerseRefs.Ref>>(emptyList()) }
             LaunchedEffect(cues) {
                 refs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.faithscroll.app.data.VerseRefs.inCues(cues) }

@@ -143,8 +143,13 @@ object LangFilter {
     fun isNews(title: String, channel: String): Boolean = newsWords.containsMatchIn(title) || newsChannels.containsMatchIn(channel)
 
     /** Channels that never appear in the app. */
-    private val blockedChannels = listOf("hermon")
-    fun isBlockedChannel(name: String): Boolean = blockedChannels.any { name.contains(it, ignoreCase = true) }
+    private val blockedChannels = listOf("hermon", "crappyscrapp", "crappy scrapp")
+    /** Built-in blocked channels plus the ones you've added (Me tab → hidden topics). */
+    fun isBlockedChannel(name: String): Boolean {
+        val n = name.replace(" ", "")
+        return blockedChannels.any { name.contains(it, ignoreCase = true) || n.contains(it.replace(" ", ""), ignoreCase = true) } ||
+            TopicFilter.blockedChannels().any { n.contains(it.replace(" ", ""), ignoreCase = true) }
+    }
 
     /** YouTube search language/country for discovery. */
     val searchLanguage: Pair<String, String> get() = if (Lang.no) "nb" to "NO" else "en" to "US"

@@ -50,5 +50,46 @@ object TopicFilter {
     }
 
     fun ok(text: String) = hit(text) == null
-    fun ok(v: Video) = hit(v.title + " " + v.channel) == null
+    fun ok(v: Video) = v.id !in rejected() && !LangFilter.isBlockedChannel(v.channel) && hit(v.title + " " + v.channel) == null
+
+    // ---- Channels you don't want ----
+    fun blockedChannels(): List<String> = app?.let { prefs(it).getString("blocked_channels", "")!! }.orEmpty()
+        .split(',', '\n').map { it.trim() }.filter { it.length >= 2 }
+    fun blockedChannelsText(ctx: Context): String = prefs(ctx).getString("blocked_channels", "")!!
+    fun setBlockedChannels(ctx: Context, s: String) { prefs(ctx).edit().putString("blocked_channels", s).apply(); version++ }
+
+    // ---- What's actually said (transcripts) ----
+
+    /** Words that show a video is about the faith (Norwegian and English, as speech recognition writes them). */
+    val faith = Regex("(?i)\\b(jesus|jesu|kristus|kristi|christ|gud|guds|god|lord|herren|herrens|bibel\\w*|bible|skriften|scripture|bønn\\w*|be til|pray\\w*|tro(en)?|faith|kirke\\w*|menighet\\w*|church|frelse\\w*|frelser|saved|salvation|nåde|grace|ånden|hellig\\w*|holy|spirit|evangeli\\w*|gospel|amen|halleluja\\w*|synd\\w*|sin|himmel\\w*|heaven|korset|cross|disippel\\w*|apostel\\w*|profet\\w*|salme\\w*|psalm|velsign\\w*|bless\\w*|lovsang|worship|tilbe\\w*|vitnesbyrd|testimony)\\b")
+
+    /** Videos found (from what's said) to be about an unwanted topic or not about the faith; kept on the phone. */
+    private val rejectedCache = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    @Volatile private var rejectedLoaded = false
+    fun rejected(): Set<String> {
+        val ctx = app ?: return emptySet()
+        if (!rejectedLoaded) { rejectedLoaded = true; rejectedCache += prefs(ctx).getStringSet("content_rejected", emptySet())!! }
+        return rejectedCache
+    }
+    private fun reject(id: String, why: String) {
+        val ctx = app ?: return
+        rejected(); rejectedCache += id
+        prefs(ctx).edit().putStringSet("content_rejected", rejectedCache.toSet()).apply()
+        Diag.log("content", "$id: left out – $why")
+        LangFilter.block(id, "content") // the feed swaps it out
+    }
+
+    /**
+     * Checks what's been said so far in a video (its subtitles / the phone's transcription):
+     * an unwanted topic → left out at once; a good stretch of speech with no word about God,
+     * Jesus, the Bible, prayer … → not a faith video, left out. Returns true if it was left out.
+     */
+    fun checkSpeech(id: String, cues: List<Cue>): Boolean {
+        if (cues.isEmpty() || id in rejected()) return false
+        val text = cues.joinToString(" ") { it.text }
+        hit(text)?.let { reject(id, "says something about '$it'"); return true }
+        val spokenMs = cues.maxOf { it.end } - cues.minOf { it.start }
+        if (spokenMs >= 100_000 && text.length >= 600 && !faith.containsMatchIn(text)) { reject(id, "${spokenMs / 1000} s of speech without anything about the faith"); return true }
+        return false
+    }
 }

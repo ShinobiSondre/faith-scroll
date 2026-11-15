@@ -591,6 +591,7 @@ private fun SeasonColorsCard() {
 private fun TopicsCard() {
     val ctx = LocalContext.current
     var extra by remember { mutableStateOf(com.faithscroll.app.data.TopicFilter.extraWords(ctx)) }
+    var channels by remember { mutableStateOf(com.faithscroll.app.data.TopicFilter.blockedChannelsText(ctx)) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).padding(18.dp)) {
         Text("🚫 " + tr("Hidden topics", "Skjulte temaer"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Text(tr("Videos, TikToks and pictures about these are left out of your feed, search and lists.",
@@ -613,6 +614,17 @@ private fun TopicsCard() {
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, cursorColor = Gold,
                 focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedLabelColor = Gold)
         )
+        androidx.compose.material3.OutlinedTextField(
+            value = channels, onValueChange = { channels = it; com.faithscroll.app.data.TopicFilter.setBlockedChannels(ctx, it) },
+            label = { Text(tr("Blocked channels (comma between)", "Blokkerte kanaler (komma mellom)")) },
+            placeholder = { Text("CrappyScrapp") },
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp), singleLine = false, maxLines = 3,
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, cursorColor = Gold,
+                focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedLabelColor = Gold)
+        )
+        Text(tr("What's said in videos is also listened to: an unwanted topic, or a video that isn't about the faith, is skipped and won't come back.",
+            "Det som blir sagt i videoene lyttes også til: et uønsket tema, eller en video som ikke handler om troen, hoppes over og kommer ikke igjen."),
+            color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 

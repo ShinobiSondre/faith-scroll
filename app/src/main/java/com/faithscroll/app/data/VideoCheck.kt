@@ -107,8 +107,11 @@ object VideoCheck {
         val info = WatchPage.info(v.id) ?: run { reject(v, "page unreadable (will retry)"); return null }
         // Topics you don't want (Me tab → hidden topics).
         TopicFilter.hit(v.title + "\n" + info.title + "\n" + info.description)?.let { return reject(v, "topic: $it") }
+        if (LangFilter.isBlockedChannel(v.channel) || LangFilter.isBlockedChannel(info.channel.orEmpty())) return reject(v, "blocked channel")
         val want = if (Lang.no) "no" else "en"
         val t = Transcripts.original(v.id)
+        // YouTube's captions (when it shares them): what's actually said is checked as well.
+        if (t != null && TopicFilter.checkSpeech(v.id, t.cues.filter { it.start < 300_000 })) return reject(v, "what's said")
         // Spoken language: YouTube's automatic captions are made from the audio, so their language is
         // the spoken one. Without them (common for Norwegian), judge the title and description.
         var spoken = WatchPage.spoken(info)
