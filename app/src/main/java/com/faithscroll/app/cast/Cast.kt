@@ -196,16 +196,30 @@ object Cast {
      * Android's own "Cast screen" settings.
      */
     fun mirror(context: Context): Boolean {
-        val tries = listOf(
-            context.packageManager.getLaunchIntentForPackage("com.samsung.android.smartmirroring"),
+        val pm = context.packageManager
+        val sv = "com.samsung.android.smartmirroring"
+        // Samsung's Smart View: its own "choose a TV" screen (the same one as in the quick panel).
+        val samsung = runCatching {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(sv, android.content.pm.PackageManager.GET_ACTIVITIES).activities.orEmpty()
+                .filter { it.exported }
+                .also { a -> Diag.log("cast", "Smart View screens: " + a.joinToString { it.name.substringAfterLast('.') }) }
+                .sortedBy { a -> listOf("Picker", "Capture", "Device", "Main", "Smart").indexOfFirst { a.name.contains(it, true) }.let { if (it < 0) 99 else it } }
+                .map { Intent().setClassName(sv, it.name) }
+        }.getOrDefault(emptyList())
+        val tries = samsung + listOf(
+            pm.getLaunchIntentForPackage(sv),
             Intent("android.settings.CAST_SETTINGS"),
             Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)
         )
         for (i in tries) {
             if (i == null) continue
             val ok = runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false)
-            if (ok) return true
+            if (ok) { Diag.log("cast", "opened the phone's casting: ${i.component?.className ?: i.action}"); return true }
         }
         return false
     }
+
+    /** True while the phone's screen is shown on a TV (Smart View / screen cast). */
+    val mirroring = MutableStateFlow(false)
 }

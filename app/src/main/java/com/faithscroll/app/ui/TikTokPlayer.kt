@@ -265,7 +265,7 @@ fun TikTokCard(
             RailButton(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, if (muted) tr("Muted", "Lydløs") else tr("Sound", "Lyd"), false, Color.White) {
                 muted = !muted; send(if (muted) "mute" else "unMute")
             }
-            RailButton(Icons.Filled.Cast, tr("TV", "TV"), false, Color.White) { paused = true; showCast = true }
+            RailButton(Icons.Filled.Cast, tr("TV", "TV"), false, Color.White) { if (!com.faithscroll.app.cast.Cast.mirror(ctx)) { paused = true; showCast = true } }
             val chat by com.faithscroll.app.data.ChatGptBridge.session.collectAsState()
             chat?.takeIf { it.videoId == tiktok.id }?.let { c -> RailButton(Icons.Filled.Forum, tr("Answer", "Svar"), true, Gold) { paused = true; chatAsk = c.atMs to c.url } }
         }

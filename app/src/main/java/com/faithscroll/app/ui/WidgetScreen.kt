@@ -648,13 +648,16 @@ private fun MixCard() {
 /** Cast to TV: Chromecast / Google TV, or the whole screen via screen mirroring. */
 @Composable
 private fun CastCard() {
+    val ctx = LocalContext.current
     var open by remember { mutableStateOf(false) }
+    val mirroring by com.faithscroll.app.cast.Cast.mirroring.collectAsState()
     val connected by com.faithscroll.app.cast.Cast.connectedTo.collectAsState()
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).clickable { open = true }.padding(18.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Plum).clickable { if (!com.faithscroll.app.cast.Cast.mirror(ctx)) open = true }.padding(18.dp)) {
         Text("📺 " + tr("Cast to TV", "Cast til TV"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Text(
-            connected?.let { tr("Connected to $it", "Koblet til $it") }
-                ?: tr("Play videos on a Chromecast / Google TV, or show the whole app (Bible, verses, videos) on any TV with screen mirroring.",
+            (if (mirroring) tr("Showing on the TV now.", "Vises på TV-en nå.") else null) ?: connected?.let { tr("Connected to $it", "Koblet til $it") }
+                ?: tr("Opens your phone's own screen casting (Smart View) – the whole app shows on the TV, turned sideways to fill it. ",
+                    "Åpner telefonens egen skjermdeling (Smart View) – hele appen vises på TV-en, snudd på tvers så den fyller skjermen. ") + tr("Play videos on a Chromecast / Google TV, or show the whole app (Bible, verses, videos) on any TV with screen mirroring.",
                     "Spill videoer på Chromecast / Google TV, eller vis hele appen (Bibel, vers, videoer) på hvilken som helst TV med skjermdeling."),
             color = if (connected != null) Gold else Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)
         )

@@ -163,6 +163,35 @@ class MainActivity : ComponentActivity() {
         if (isFinishing) com.faithscroll.app.data.CaptionGrabber.release()
     }
 
+    // The phone's screen shown on a TV (Smart View / screen cast): turn the app sideways so it fills
+    // the TV, keep the screen on, and go back to normal when it stops.
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) = checkMirroring()
+        override fun onDisplayRemoved(id: Int) = checkMirroring()
+        override fun onDisplayChanged(id: Int) = Unit
+    }
+    private fun checkMirroring() {
+        val dm = getSystemService(android.hardware.display.DisplayManager::class.java) ?: return
+        val on = dm.getDisplays(android.hardware.display.DisplayManager.DISPLAY_CATEGORY_PRESENTATION).isNotEmpty()
+        if (on == com.faithscroll.app.cast.Cast.mirroring.value) return
+        com.faithscroll.app.cast.Cast.mirroring.value = on
+        com.faithscroll.app.data.Diag.log("cast", if (on) "screen is shown on a TV" else "screen casting stopped")
+        requestedOrientation = if (on) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        if (on) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (on) android.widget.Toast.makeText(this, com.faithscroll.app.util.tr("Showing on the TV", "Vises på TV-en"), android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        getSystemService(android.hardware.display.DisplayManager::class.java)?.registerDisplayListener(displayListener, null)
+        checkMirroring()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        getSystemService(android.hardware.display.DisplayManager::class.java)?.unregisterDisplayListener(displayListener)
+    }
+
     override fun onResume() {
         super.onResume()
         Updater.onResume(this)

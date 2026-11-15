@@ -59,6 +59,9 @@ object Dial {
         val wifi = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val lock = wifi.createMulticastLock("faithscroll-tv").apply { setReferenceCounted(false); acquire() }
         val locations = linkedSetOf<String>()
+        val answers = mutableListOf<String>()
+        // Also ask the other way TVs announce themselves (mDNS), to see what's on the network.
+        mdns(ctx)
         try {
             MulticastSocket(null).use { sock ->
                 sock.reuseAddress = true
@@ -82,7 +85,11 @@ object Dial {
                     try { sock.receive(p) } catch (_: SocketTimeoutException) { continue }
                     val text = String(p.data, 0, p.length)
                     val loc = Regex("(?im)^LOCATION:\\s*(\\S+)").find(text)?.groupValues?.get(1) ?: continue
-                    if (locations.add(loc)) describe(loc)?.let { merge(it) }
+                    if (locations.add(loc)) {
+                        fun h(n: String) = Regex("(?im)^$n:\\s*(.*)$").find(text)?.groupValues?.get(1)?.trim().orEmpty()
+                        answers += "${p.address.hostAddress} st=${h("ST").substringAfterLast(':').ifBlank { h("ST") }} server=${h("SERVER").take(50)}"
+                        describe(loc)?.let { merge(it) }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -90,6 +97,7 @@ object Dial {
         } finally {
             lock.release()
             searching.value = false
+            Diag.log("cast", "SSDP answers (${answers.size}): " + answers.joinToString(" | "))
             Diag.log("cast", "TV search answered: " + seen.entries.joinToString(" | ") { "${it.key}: ${it.value}" })
             Diag.log("cast", "TVs: " + tvs.value.joinToString { "${it.name} (${it.host}${if (it.canYouTube) ", YouTube" else ""}${if (it.canPlayLink) ", play link" else ""})" })
         }
@@ -108,9 +116,28 @@ object Dial {
         tvs.value = list.filter { it.canYouTube || it.canPlayLink }
     }
 
+    /** Lists Google Cast / AirPlay / Samsung devices that announce themselves with mDNS (for the diagnostics). */
+    private fun mdns(ctx: Context) {
+        val nsd = ctx.applicationContext.getSystemService(Context.NSD_SERVICE) as? android.net.nsd.NsdManager ?: return
+        for (type in listOf("_googlecast._tcp", "_airplay._tcp", "_samsungmsf._tcp", "_androidtvremote2._tcp")) {
+            val l = object : android.net.nsd.NsdManager.DiscoveryListener {
+                override fun onDiscoveryStarted(t: String) {}
+                override fun onDiscoveryStopped(t: String) {}
+                override fun onStartDiscoveryFailed(t: String, e: Int) { Diag.log("cast", "mDNS $type failed to start ($e)") }
+                override fun onStopDiscoveryFailed(t: String, e: Int) {}
+                override fun onServiceFound(info: android.net.nsd.NsdServiceInfo) { Diag.log("cast", "mDNS $type: ${info.serviceName}") }
+                override fun onServiceLost(info: android.net.nsd.NsdServiceInfo) {}
+            }
+            runCatching {
+                nsd.discoverServices(type, android.net.nsd.NsdManager.PROTOCOL_DNS_SD, l)
+                Thread { Thread.sleep(8_000); runCatching { nsd.stopServiceDiscovery(l) } }.start()
+            }
+        }
+    }
+
     /** Reads a device description: its name, maker, and whether it has DIAL and/or a DLNA player. */
     private fun describe(location: String): Tv? = runCatching {
-        http.newCall(Request.Builder().url(location).build()).execute().use { r ->
+        http.newCall(Request.Builder().url(location).header("User-Agent", "Mozilla/5.0 (Linux; Android 14) DIAL/1.0").build()).execute().use { r ->
             val appUrl = r.header("Application-URL")
             val xml = r.body?.string().orEmpty()
             val host = android.net.Uri.parse(location).host.orEmpty()
@@ -127,7 +154,7 @@ object Dial {
             if (appUrl == null && avUrl == null && !maker.contains("samsung", true)) return@use null
             Tv(host, name, appUrl?.let { if (it.endsWith("/")) it else "$it/" }, avUrl, maker)
         }
-    }.getOrNull()
+    }.onFailure { Diag.log("cast", "couldn't read $location: ${it.message}") }.getOrNull()
 
     /**
      * Plays a video on [tv]. YouTube videos first try the TV's YouTube app; if the TV won't (or for
