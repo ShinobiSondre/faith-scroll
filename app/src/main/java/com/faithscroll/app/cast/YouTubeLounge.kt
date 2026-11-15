@@ -43,7 +43,11 @@ object YouTubeLounge {
             }
         }
         if (screenId.isNullOrBlank()) return "no screen id from the TV's YouTube app".also { Diag.log("cast", "YouTube on Cast: $it") }
-        return withContext(Dispatchers.IO) {
+        return playOnScreen(screenId, videoId, positionMs)
+    }
+
+    /** Sends [videoId] to a TV's YouTube app by its screen id (works over the internet, like a linked TV). */
+    suspend fun playOnScreen(screenId: String, videoId: String, positionMs: Long): String? = withContext(Dispatchers.IO) {
             runCatching {
                 // 2) A lounge token for that screen.
                 val tokenJson = http.newCall(Request.Builder().url("https://www.youtube.com/api/lounge/pairing/get_lounge_token_batch")
@@ -73,6 +77,38 @@ object YouTubeLounge {
                 Diag.log("cast", "YouTube on Cast: setPlaylist → HTTP $code")
                 if (code in 200..299) null else "YouTube answered $code"
             }.getOrElse { Diag.err("cast", "YouTube on Cast", it); it.message ?: "error" }
+        }
+
+    // ---- TVs linked with a code ("Link with TV code" in the TV's YouTube app), kept on the phone ----
+
+    data class Screen(val id: String, val name: String)
+
+    private fun prefs(ctx: android.content.Context) = ctx.applicationContext.getSharedPreferences("yt_screens", android.content.Context.MODE_PRIVATE)
+    fun screens(ctx: android.content.Context): List<Screen> = runCatching {
+        val a = JSONArray(prefs(ctx).getString("list", "[]"))
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> Screen(o.getString("id"), o.optString("name", "TV")) } }
+    }.getOrDefault(emptyList())
+    fun forget(ctx: android.content.Context, id: String) = save(ctx, screens(ctx).filter { it.id != id })
+    private fun save(ctx: android.content.Context, l: List<Screen>) =
+        prefs(ctx).edit().putString("list", JSONArray().apply { l.forEach { put(JSONObject().put("id", it.id).put("name", it.name)) } }.toString()).apply()
+
+    /** Links a TV with the code its YouTube app shows. Returns the TV, or an error text. */
+    suspend fun pair(ctx: android.content.Context, code: String): Pair<Screen?, String?> = withContext(Dispatchers.IO) {
+        val digits = code.filter { it.isDigit() }
+        if (digits.length < 10) return@withContext null to com.faithscroll.app.util.tr("Type all the digits shown on the TV.", "Skriv inn alle tallene som vises på TV-en.")
+        runCatching {
+            val body = http.newCall(Request.Builder().url("https://www.youtube.com/api/lounge/pairing/get_screen")
+                .post(FormBody.Builder().add("pairing_code", digits).build()).build()).execute().use { r ->
+                if (!r.isSuccessful) error("HTTP ${r.code}"); r.body!!.string()
+            }
+            val o = JSONObject(body).getJSONObject("screen")
+            val screen = Screen(o.getString("screenId"), o.optString("name").ifBlank { "TV" })
+            save(ctx, screens(ctx).filter { it.id != screen.id } + screen)
+            Diag.log("cast", "linked TV '${screen.name}' with a code")
+            screen to null
+        }.getOrElse {
+            Diag.err("cast", "linking TV", it)
+            null to com.faithscroll.app.util.tr("That code didn't work – check it, or get a new one on the TV.", "Den koden virket ikke – sjekk den, eller hent en ny på TV-en.")
         }
     }
 }

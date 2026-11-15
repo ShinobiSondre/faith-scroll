@@ -81,6 +81,73 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
             }
             Spacer(Modifier.height(14.dp))
 
+            // 0) TVs linked with a code: the TV's YouTube app plays the video, like a phone linked to it.
+            var linked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(YouTubeLounge.screens(ctx)) }
+            var codeOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            Text(tr("YouTube on your TV (linked with a code)", "YouTube på TV-en (koblet med kode)"), color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
+            linked.forEach { sc ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.25f))
+                        .clickable(enabled = youTubeId != null) {
+                            val id = youTubeId ?: return@clickable
+                            tvStatus = tr("Sending to ${sc.name}…", "Sender til ${sc.name} …")
+                            scope.launch {
+                                val err = YouTubeLounge.playOnScreen(sc.id, id, positionMs())
+                                tvStatus = err?.let { tr("Didn't work ($it). Is YouTube open on the TV?", "Virket ikke ($it). Er YouTube åpen på TV-en?") }
+                                if (err == null) { android.widget.Toast.makeText(ctx, tr("Playing on ${sc.name}", "Spilles på ${sc.name}"), android.widget.Toast.LENGTH_SHORT).show(); onDismiss() }
+                            }
+                        }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Tv, null, tint = Gold)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(sc.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(tr("Opens in the TV's YouTube app", "Åpnes i TV-ens YouTube-app"), color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                    }
+                    Text(tr("Remove", "Fjern"), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp,
+                        modifier = Modifier.clickable { YouTubeLounge.forget(ctx, sc.id); linked = YouTubeLounge.screens(ctx) }.padding(6.dp))
+                }
+            }
+            Text("+ " + tr("Link a TV with a code", "Koble til TV med kode"), color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { codeOpen = true }.padding(vertical = 8.dp))
+            if (codeOpen) {
+                var code by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+                var busy by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                var err by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { codeOpen = false }, containerColor = Plum,
+                    title = { Text(tr("Link your TV", "Koble til TV-en"), color = Color.White) },
+                    text = {
+                        Column {
+                            Text(tr("On the TV: open YouTube → Settings → \"Link with TV code\". Type the numbers shown there.",
+                                "På TV-en: åpne YouTube → Innstillinger → «Koble til med TV-kode». Skriv inn tallene som vises der."),
+                                color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                            Spacer(Modifier.height(10.dp))
+                            androidx.compose.material3.OutlinedTextField(
+                                value = code, onValueChange = { code = it.filter { c -> c.isDigit() || c == ' ' }.take(20) },
+                                placeholder = { Text("123 456 789 012") }, singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, cursorColor = Gold, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                            )
+                            err?.let { Text(it, color = Gold, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(enabled = !busy, onClick = {
+                            busy = true
+                            scope.launch {
+                                val (sc, e) = YouTubeLounge.pair(ctx, code)
+                                busy = false
+                                if (sc != null) { linked = YouTubeLounge.screens(ctx); codeOpen = false; tvStatus = tr("Linked: ${sc.name}", "Koblet til: ${sc.name}") } else err = e
+                            }
+                        }) { Text(if (busy) tr("Linking…", "Kobler til …") else tr("Link", "Koble til"), color = Gold) }
+                    },
+                    dismissButton = { androidx.compose.material3.TextButton(onClick = { codeOpen = false }) { Text(tr("Cancel", "Avbryt"), color = Color.White) } }
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+
             // 1) TVs with YouTube: the video opens in the TV's YouTube app at the same second.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(tr("TVs on your Wi-Fi", "TV-er på Wi-Fi-en"),
