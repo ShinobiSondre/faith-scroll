@@ -64,6 +64,7 @@ object WatchPage {
 
     /** The caption tracks listed on the video's page, or null if the page couldn't be read. */
     suspend fun info(videoId: String): Info? = withContext(Dispatchers.IO) {
+        if (TikTokResolver.isTikTokId(videoId)) return@withContext null // not a YouTube video
         cache[videoId]?.let { return@withContext it }
         val html = runCatching {
             http.newCall(

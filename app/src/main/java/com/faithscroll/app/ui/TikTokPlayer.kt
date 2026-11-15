@@ -450,6 +450,8 @@ fun TikTokChannelScreen(user: String, onOpenVideo: (com.faithscroll.app.data.Vid
             }
         }
         loading = false
+        // TikTok didn't give the list: show their own TikTok page here instead (tap a video → our player).
+        if (videos.isEmpty()) web = true
     }
     Column(Modifier.fillMaxSize().background(Ink).zIndex(20f).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { }) {
         androidx.compose.foundation.layout.Row(

@@ -153,8 +153,10 @@ object TikTokFinder {
         try {
             web.loadUrl("https://www.tiktok.com/@" + user)
             var still = 0
-            for (i in 0 until 24) {
-                delay(1200)
+            for (i in 0 until 30) {
+                delay(700)
+                // Nothing at all after ~9 s: TikTok isn't showing the list to the hidden browser – give up fast.
+                if (out.isEmpty() && i >= 13) break
                 val raw = suspendCancellableCoroutine<String?> { c -> web.evaluateJavascript(READ) { c.resumeWith(Result.success(it)) } }
                 val o = runCatching { JSONObject(JSONTokener(raw).nextValue() as String) }.getOrNull() ?: continue
                 val before = out.size

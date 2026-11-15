@@ -216,6 +216,7 @@ object Asr {
                                 .flatMap { (a, b, t) -> splitLine(start + a, start + b, collapseRepeats(t)) }
                         } else voskPiece(vosk!!, pcm, n, start)
                         live.done += i
+                        if (cues.isEmpty() && live.done.size == 1) Diag.log("asr", "$videoId: no speech heard at ${start / 1000}–${(start + PIECE) / 1000} s (read ${n} samples)")
                         if (cues.isNotEmpty()) {
                             val first = live.cues.value.isEmpty()
                             live.cues.value = (live.cues.value.filter { c -> c.start < start || c.start >= start + PIECE } + cues).sortedBy { it.start }

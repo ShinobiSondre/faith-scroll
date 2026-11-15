@@ -314,10 +314,13 @@ object StreamResolver {
         }
     }
 
+    private val tikTokPreloaded = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
     /** Downloads the first seconds of a video into the cache so it starts instantly later. */
     @OptIn(UnstableApi::class)
     suspend fun preload(ctx: Context, id: String) = withContext(Dispatchers.IO) {
         if (TikTokResolver.isTikTokId(id)) {
+            if (!tikTokPreloaded.add(id)) return@withContext // already done
             // Look the file up and download its first seconds into the cache (with TikTok's cookies),
             // under the same name the player uses – so it starts instantly when you swipe to it.
             val t = TikTokResolver.resolve(id) ?: return@withContext
