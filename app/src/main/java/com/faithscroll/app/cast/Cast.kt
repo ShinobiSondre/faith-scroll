@@ -105,6 +105,7 @@ object Cast {
         devices.value = router?.routes.orEmpty()
             .filter { !it.isDefault && it.isEnabled && it.matchesSelector(sel) }
             .map { Device(it.id, it.name, it.description.orEmpty()) }
+        if (devices.value.isNotEmpty()) Diag.log("cast", "Google Cast TVs: " + devices.value.joinToString { it.name })
     }
 
     /** Connect to [device] and play [video] there from [positionMs]. */
@@ -113,8 +114,15 @@ object Cast {
         val route = router?.routes?.firstOrNull { it.id == device.id } ?: return
         val hasVideo = video.id.isNotBlank() || video.direct.isNotBlank()
         pending = if (hasVideo) video to positionMs else null
+        // YouTube videos open in the TV's YouTube app (like the YouTube app does); others in Google's player.
+        val appId = if (isYouTube(video)) YouTubeLounge.APP_ID else CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID
         val session = ctx?.sessionManager?.currentCastSession
-        if (session != null && session.isConnected && connectedTo.value == device.name) { if (hasVideo) play(session, video, positionMs); return }
+        if (session != null && session.isConnected && connectedTo.value == device.name && session.applicationMetadata?.applicationId == appId) {
+            if (hasVideo) play(session, video, positionMs); return
+        }
+        if (session != null) ctx?.sessionManager?.endCurrentSession(true)
+        runCatching { ctx?.setReceiverApplicationId(appId) }.onFailure { Diag.err("cast", "receiver app", it) }
+        Diag.log("cast", "connecting to ${device.name} (${if (appId == YouTubeLounge.APP_ID) "YouTube app" else "media player"})")
         router?.selectRoute(route)
     }
 
@@ -136,7 +144,18 @@ object Cast {
         pending?.let { (v, pos) -> pending = null; play(s, v, pos) }
     }
 
+    private fun isYouTube(v: Video) = v.direct.isBlank() && !v.isTikTok && v.id.isNotBlank()
+
     private fun play(s: CastSession, video: Video, positionMs: Long) {
+        if (isYouTube(video) && s.applicationMetadata?.applicationId == YouTubeLounge.APP_ID) {
+            scope.launch {
+                status.value = com.faithscroll.app.util.tr("Starting on the TV…", "Starter på TV-en …")
+                val err = YouTubeLounge.play(s, video.id, positionMs)
+                if (err == null) { playing.value = video.id; status.value = null }
+                else status.value = com.faithscroll.app.util.tr("The TV's YouTube app didn't start the video ($err).", "TV-ens YouTube-app startet ikke videoen ($err).")
+            }
+            return
+        }
         scope.launch {
             status.value = com.faithscroll.app.util.tr("Starting on the TV…", "Starter på TV-en …")
             // The TV needs one file with both picture and sound (or an HLS stream).

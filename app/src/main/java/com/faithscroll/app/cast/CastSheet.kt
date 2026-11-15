@@ -153,8 +153,8 @@ fun CastSheet(video: Video?, positionMs: () -> Long, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (castOk && (devices.isNotEmpty() || connected != null)) {
-                Text(tr("Google Cast (other videos, e.g. from Reddit)", "Google Cast (andre videoer, f.eks. fra Reddit)"),
+            if (castOk) {
+                Text(tr("Google Cast (like the YouTube app)", "Google Cast (som i YouTube-appen)"),
                     color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 if (devices.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 10.dp)) {
