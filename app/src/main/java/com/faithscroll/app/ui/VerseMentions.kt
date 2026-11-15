@@ -114,7 +114,7 @@ private fun VerseCard(r: VerseRefs.Ref, onSeek: ((Long) -> Unit)?) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(VerseRefs.label(ctx, r, Lang.no), color = Gold, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (onSeek != null) Text(
-                "▶ " + tr("said at", "sagt ved") + " " + AskPrompt.time(r.atMs), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp,
+                "▶ " + AskPrompt.time(r.atMs), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp,
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.1f))
                     .clickable { onSeek(r.atMs) }.padding(horizontal = 10.dp, vertical = 5.dp)
             )

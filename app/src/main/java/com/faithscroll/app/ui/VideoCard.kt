@@ -332,8 +332,17 @@ fun VideoCard(
                 ytCaptions = t != null; ytCues = t?.cues.orEmpty()
             }
             val pos = if (playback.failed) embedPos else playback.position
+            // The phone listens around where you are first; if you stay on the video (8 s+), it goes on
+            // through the rest of it in the background – also while paused – so every verse is noted.
+            // Swiping to another video stops this one and starts there.
+            val openedAt = remember(video.id) { System.currentTimeMillis() }
             LaunchedEffect(video.id, pos / 5000, paused, ytCaptions) {
-                if (ytCaptions == false && !paused && pos >= 300) com.faithscroll.app.data.Asr.ensure(ctx, video.id, pos)
+                if (ytCaptions == false && pos >= 300) {
+                    val staying = System.currentTimeMillis() - openedAt >= 8_000
+                    val dur = playback.duration
+                    val ahead = if (staying && dur > 0) (dur - pos).coerceAtLeast(30_000) else 30_000
+                    com.faithscroll.app.data.Asr.ensure(ctx, video.id, pos, ahead = ahead)
+                }
             }
 
             // Bible verses they mention: listened for in the captions (or what the phone hears) and
@@ -351,7 +360,8 @@ fun VideoCard(
             }
             val said = refs.filter { it.atMs <= pos + 1_500 }
             val latest = said.lastOrNull()
-            androidx.compose.runtime.SideEffect { versesSaid = said }
+            // The list has every verse found so far in the whole video (also ones coming later on).
+            androidx.compose.runtime.SideEffect { versesSaid = refs }
             // Pops up for a moment when a verse is said; the "Bible verses" button on the right keeps them all.
             androidx.compose.animation.AnimatedVisibility(
                 visible = latest != null && pos - latest.atMs in 0..15_000 && !paused,
