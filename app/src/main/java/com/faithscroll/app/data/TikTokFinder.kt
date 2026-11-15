@@ -87,7 +87,9 @@ object TikTokFinder {
         if (!force && (age < 30 * 60_000L || (age < TTL && unseen >= 25) || (unseen >= 8 && age < 60 * 60 * 1000L))) return
         report.clear()
         val no = com.faithscroll.app.util.Lang.no
-        val slugs = if (no) norwegian + (if (com.faithscroll.app.util.Lang.alsoEnglish) english.shuffled().take(2) else emptyList()) else english.shuffled().take(4)
+        val langs = com.faithscroll.app.util.Lang.content
+        val slugs = (if ("no" in langs) norwegian else emptyList()) + (if ("en" in langs) english.shuffled().take(if (langs.size == 1) 4 else 2) else emptyList()) +
+            (if ("sv" in langs) listOf("bibelord", "kristen-tro").take(1) else emptyList()) + (if ("da" in langs) listOf("bibelvers-dansk").take(1) else emptyList())
         val results = LinkedHashMap<String, TikTok>()
         // Accounts you follow come first (a few each time, taking turns).
         val follows = TikTokFollows.all(a).shuffled().take(4)

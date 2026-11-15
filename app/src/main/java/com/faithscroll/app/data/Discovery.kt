@@ -53,6 +53,8 @@ object Discovery {
     )
 
     // YouTube Shorts searches (short, vertical clips) – in the app's language.
+    private val swedish = listOf("vittnesbörd jesus", "predikan", "kristen tro", "bön till gud", "jesus förändrade mitt liv", "lovsång", "andakt", "bibelstudium")
+    private val danish = listOf("vidnesbyrd jesus", "prædiken", "kristen tro", "bøn til gud", "jesus forandrede mit liv", "lovsang", "andagt", "bibelstudie")
     private val shortsEnglish = listOf(
         "christian #shorts", "jesus #shorts", "bible verse #shorts", "testimony #shorts", "prayer #shorts",
         "sermon clip #shorts", "worship #shorts", "god's love #shorts", "faith encouragement #shorts"
@@ -102,12 +104,16 @@ object Discovery {
         val queries = mutableListOf<String>()
         Taste.topThemes(ctx, 3).forEach { t -> byTheme[t]?.random(rnd)?.let(queries::add) }
         queries += general.shuffled(rnd).take(if (queries.isEmpty()) 4 else 2)
-        if (Lang.no && !Lang.alsoEnglish) { queries.clear(); queries += norwegian.shuffled(rnd).take(8) }
-        else if (Lang.no) queries += norwegian.shuffled(rnd).take(3)
+        // Searches in each language you picked.
+        val langs = Lang.content
+        if ("en" !in langs) queries.clear()
+        if ("no" in langs) queries += norwegian.shuffled(rnd).take(if (langs.size == 1) 8 else 3)
+        if ("sv" in langs) queries += swedish.shuffled(rnd).take(if (langs.size == 1) 8 else 3)
+        if ("da" in langs) queries += danish.shuffled(rnd).take(if (langs.size == 1) 8 else 3)
 
         // Shorts: a couple of Shorts searches each time, plus the Shorts tab of a few channels you follow or found.
-        queries += (if (Lang.no) shortsNorwegian else shortsEnglish).shuffled(rnd).take(2)
-        if (Lang.no && Lang.alsoEnglish) queries += shortsEnglish.random(rnd)
+        if ("no" in langs) queries += shortsNorwegian.shuffled(rnd).take(2)
+        if ("en" in langs) queries += shortsEnglish.shuffled(rnd).take(if ("no" in langs) 1 else 2)
         val shortChannels = (YouTubeSubs.favourites(ctx).map { it.id } + channels(ctx).map { it.first }).distinct().shuffled(rnd).take(3)
         // Channels that proved to be in your language: a deeper look (their full video list, not just the latest 15).
         val deepChannels = channels(ctx).map { it.first }.shuffled(rnd).take(2)

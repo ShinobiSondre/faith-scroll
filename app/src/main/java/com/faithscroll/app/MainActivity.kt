@@ -323,7 +323,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
             sermons.getOrNull(i)?.let(out::add)
         }
         // Norwegian only: the built-in channels are English, so the Norwegian finds go first.
-        (if (com.faithscroll.app.util.Lang.no && !com.faithscroll.app.util.Lang.alsoEnglish) discovered + out else out).distinctBy { it.id }
+        (if ("en" !in com.faithscroll.app.util.Lang.content) discovered + out else out).distinctBy { it.id }
     }
 
     androidx.compose.runtime.CompositionLocalProvider(

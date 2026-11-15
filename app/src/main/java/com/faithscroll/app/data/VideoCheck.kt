@@ -32,7 +32,7 @@ object VideoCheck {
     private var store: File? = null
     private const val KEEP = 24 * 60 * 60_000L
 
-    private fun mode() = if (!Lang.no) "en" else if (Lang.alsoEnglish) "no+en" else "no"
+    private fun mode() = Lang.content.sorted().joinToString("+")
     private var appCtx: Context? = null
 
     fun isOk(id: String) = results[id]?.let { it.ok && it.mode == mode() && fresh(it) } == true
@@ -124,12 +124,8 @@ object VideoCheck {
             how = "title/description"
         }
         if (spoken.isBlank()) return reject(v, "language unknown")
-        val ok = when {
-            spoken == want -> true // already in your language: no subtitles needed
-            Lang.no && Lang.alsoEnglish && spoken == "en" ->
-                true // the phone transcribes English speech and translates it to Norwegian
-            else -> false
-        }
+        // One of the languages you picked (Me tab → Language): Norsk, English, Svenska, Dansk – any mix.
+        val ok = Lang.wants(spoken)
         // Strict Norwegian: if YouTube's automatic captions exist they decide; a Norwegian guess from the
         // title is double-checked against the captions' own text when there are any.
         if (ok && spoken == "no" && how == "title/description" && t != null) {

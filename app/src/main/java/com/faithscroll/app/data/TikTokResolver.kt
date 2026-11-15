@@ -33,7 +33,7 @@ object TikTokResolver {
     /** Same rule as YouTube videos: Norwegian (plus English if you've chosen that), or English in the English app. */
     fun languageOk(lang: String): Boolean {
         val no = com.faithscroll.app.util.Lang.no
-        return if (no) lang == "no" || (com.faithscroll.app.util.Lang.alsoEnglish && lang == "en") else lang == "en"
+        return com.faithscroll.app.util.Lang.wants(lang)
     }
 
     /**

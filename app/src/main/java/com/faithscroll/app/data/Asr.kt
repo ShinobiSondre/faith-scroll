@@ -452,7 +452,7 @@ object Asr {
      * that's unclear the app's language wins.
      */
     private suspend fun engineFor(videoId: String): String {
-        if (com.faithscroll.app.util.Lang.no && !com.faithscroll.app.util.Lang.alsoEnglish) return "no"
+        if (com.faithscroll.app.util.Lang.onlyNorwegian) return "no"
         if (TikTokResolver.isTikTokId(videoId)) return when (TikTokResolver.resolve(videoId)?.lang) {
             "no" -> "no"; "en" -> "en"; else -> if (com.faithscroll.app.util.Lang.no) "no" else "en"
         }

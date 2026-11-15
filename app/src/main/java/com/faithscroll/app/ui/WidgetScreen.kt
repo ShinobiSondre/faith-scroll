@@ -529,6 +529,7 @@ private fun AiCard() {
 }
 
 /** App language: follows the phone, or English / Norsk. Restarts the screen to apply. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun LanguageCard() {
     val ctx = LocalContext.current
@@ -546,18 +547,27 @@ private fun LanguageCard() {
             Chip("English", mode == Lang.Mode.EN) { pick(Lang.Mode.EN) }
             Chip("Norsk", mode == Lang.Mode.NO) { pick(Lang.Mode.NO) }
         }
-        if (Lang.no) {
-            var also by remember { mutableStateOf(Lang.alsoEnglish) }
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Også engelske videoer", color = Color.White, fontSize = 14.sp)
-                    Text("Med norske undertekster. Av: bare videoer på norsk.", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+        // Video languages: pick one or several.
+        var langs by remember { mutableStateOf(Lang.content) }
+        var changed by remember { mutableStateOf(false) }
+        Text(tr("Videos in (pick one or more)", "Videoer på (velg ett eller flere)"), color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Lang.contentChoices.forEach { (code, name) ->
+                val on = code in langs
+                Chip((if (on) "✓ " else "") + name, on) {
+                    val next = if (on) langs - code else langs + code
+                    if (next.isNotEmpty()) { langs = next; Lang.setContent(ctx, next); changed = true }
                 }
-                androidx.compose.material3.Switch(checked = also, onCheckedChange = {
-                    also = it; Lang.setAlsoEnglish(ctx, it); com.faithscroll.app.data.VideoCheck.languageChanged(); (ctx as? android.app.Activity)?.recreate()
-                })
             }
         }
+        if (changed) Text(
+            tr("Apply – looks for videos again", "Bruk – leter etter videoer på nytt"), color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp).clickable {
+                com.faithscroll.app.data.VideoCheck.languageChanged(); (ctx as? android.app.Activity)?.recreate()
+            }.padding(vertical = 4.dp)
+        )
+        Text(tr("Speech is transcribed on the phone for Norwegian and English.", "Tale transkriberes på telefonen for norsk og engelsk."),
+            color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Text(
             tr("Bible verses: King James Version.", "Bibelvers: " + com.faithscroll.app.data.BibleNo.CREDITS),
             color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)

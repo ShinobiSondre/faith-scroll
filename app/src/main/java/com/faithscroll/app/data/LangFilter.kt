@@ -19,7 +19,7 @@ object LangFilter {
     }
     private val cache = ConcurrentHashMap<String, Boolean>()
 
-    private fun allowed(): Set<String> = if (Lang.no) setOf("en", "no", "nb", "nn", "da", "sv") else setOf("en")
+    private fun allowed(): Set<String> = Lang.content + (if ("no" in Lang.content) setOf("nb", "nn") else emptySet())
 
     /** Is this spoken language OK for the feed? Unknown counts as OK. */
     fun spokenOk(lang: String): Boolean {
@@ -55,7 +55,7 @@ object LangFilter {
 
     /** Blocking; call off the main thread. */
     fun ok(text: String): Boolean {
-        val key = (if (Lang.no) "no|" else "en|") + text
+        val key = Lang.content.sorted().joinToString("+") + "|" + text
         cache[key]?.let { return it }
         val result = check(text)
         cache[key] = result
@@ -82,7 +82,7 @@ object LangFilter {
         if (other > 2 && other * 3 > latin) return false
         val romanceHits = romance.findAll(text).count()
         if (romanceHits >= 2) { Diag.log("lang", "rejected (es/pt words): ${raw.take(60)}"); return false }
-        if (english.findAll(text).count() >= 2) return true
+        if ("en" in Lang.content && english.findAll(text).count() >= 2) return true
         if (latin < 12) return true // too short to tell; give it the benefit of the doubt
         // Second opinion: accept if any allowed language is a plausible reading (short titles fool detectors).
         val options = runCatching { Tasks.await(client.identifyPossibleLanguages(text), 2, TimeUnit.SECONDS) }.getOrNull()
