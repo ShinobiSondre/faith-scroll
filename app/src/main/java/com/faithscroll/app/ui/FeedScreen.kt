@@ -311,7 +311,8 @@ fun FeedScreen(
         }
     }
 
-    if (!twoPane) {
+    // The feed fills the whole screen, also unfolded (no "Up next" side panel).
+    if (true) {
         feed(Modifier.fillMaxSize())
     } else {
         // Unfolded / tablet: the feed plus a side panel with details and what's next.
