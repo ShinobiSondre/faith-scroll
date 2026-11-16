@@ -45,6 +45,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -338,7 +340,8 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
         Row(Modifier.fillMaxSize()) {
             if (sideNav) {
                 Column(
-                    Modifier.fillMaxHeight().width(84.dp).background(Color.Black)
+                    // On top of the content and never covered by it (the video used to draw over the labels).
+                    Modifier.zIndex(1f).fillMaxHeight().width(88.dp).background(Color.Black)
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
                     verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -347,7 +350,7 @@ private fun App(state: AppState, startRef: String?, openFeedSignal: Int) {
                     tabs.forEach { (icon, label, i) -> NavItem(icon, label, tab == i, Modifier.fillMaxWidth()) { goTab(i) } }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
             // The feed stays alive under the other tabs, so you come back to the exact same
             // card and moment in the video. It just pauses while you're elsewhere.
             key(tasteVersion) {
